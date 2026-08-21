@@ -5,5 +5,12 @@ fun blueberrySqlitePath(directory: String): String {
     return "$trimmed/blueberry.sqlite"
 }
 
-/** Deletes the SQLite file and WAL/SHM sidecars. Used by debug Clear storage. */
+internal val SQLITE_DATABASE_SUFFIXES = listOf("", "-wal", "-shm", "-journal")
+
+/** Deletes the SQLite file and WAL/SHM/journal sidecars. Used by debug Clear storage. */
 expect fun deleteSqliteDatabaseFiles(path: String)
+
+internal fun isInMemorySqlitePath(path: String): Boolean =
+    path.isEmpty() ||
+        path == ":memory:" ||
+        (path.startsWith("file:") && path.contains("mode=memory"))

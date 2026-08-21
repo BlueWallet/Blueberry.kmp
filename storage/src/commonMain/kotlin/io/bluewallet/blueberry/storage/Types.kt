@@ -141,6 +141,7 @@ interface BlocksRepository {
     fun insert(block: DownloadedBlock): Boolean
     fun insertIfMatched(block: DownloadedBlock): Boolean
     fun listNeedingParse(limit: Int): List<DownloadedBlock>
+    fun listNeedingParseHeights(limit: Int): List<Int>
 }
 
 data class StoredTx(

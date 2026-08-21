@@ -102,6 +102,10 @@ class BlocksAndTxsTest {
             listOf(10, 12),
             db.blocks.listNeedingParse(10).map { it.height },
         )
+        assertEquals(
+            listOf(10, 12),
+            db.blocks.listNeedingParseHeights(10),
+        )
 
         db.transactions.upsert(
             StoredTx("a".repeat(64), 12, 1, "cc".repeat(32), byteArrayOf(0xaa.toByte()), 100),
@@ -138,6 +142,20 @@ class BlocksAndTxsTest {
             TxSetFingerprint(0, 0, null),
             db.transactions.fingerprint(),
         )
+        db.close()
+    }
+
+    @Test
+    fun get_roundtrips_a_block_larger_than_android_cursor_window() {
+        val db = createSqliteDatabase(":memory:")
+        val blob = ByteArray(2_500_000) { i -> (i * 31).toByte() }
+        assertTrue(
+            db.blocks.insert(DownloadedBlock(99, "dd".repeat(32), blob)),
+        )
+        val got = db.blocks.get(99)!!
+        assertEquals(99, got.height)
+        assertEquals("dd".repeat(32), got.blockHashInternalHex)
+        assertContentEquals(blob, got.block)
         db.close()
     }
 

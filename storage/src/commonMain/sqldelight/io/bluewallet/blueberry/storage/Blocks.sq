@@ -21,8 +21,24 @@ SELECT 1 AS ok FROM blocks WHERE height = ?;
 get:
 SELECT height, block_hash_internal_hex, block FROM blocks WHERE height = ?;
 
+getMeta:
+SELECT height, block_hash_internal_hex, length(block) AS nbytes FROM blocks WHERE height = ?;
+
+getBlobChunk:
+SELECT CAST(substr(block, CAST(? AS INTEGER), CAST(? AS INTEGER)) AS BLOB) AS chunk
+FROM blocks
+WHERE height = ?;
+
 listNeedingParse:
 SELECT b.height AS height, b.block_hash_internal_hex AS block_hash_internal_hex, b.block AS block
+FROM blocks b
+LEFT JOIN parsed_blocks p ON p.height = b.height
+WHERE p.height IS NULL
+ORDER BY b.height ASC
+LIMIT ?;
+
+listNeedingParseHeights:
+SELECT b.height
 FROM blocks b
 LEFT JOIN parsed_blocks p ON p.height = b.height
 WHERE p.height IS NULL

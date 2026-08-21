@@ -77,11 +77,16 @@ fun App(databasePath: String) {
             SettingsScreen(
                 onClearStorage = {
                     scope.launch {
-                        withContext(Dispatchers.Default) { runtime?.stop() }
-                        opened.close()
-                        deleteSqliteDatabaseFiles(databasePath)
-                        showSettings = false
-                        session += 1
+                        try {
+                            withContext(Dispatchers.Default) { runtime?.stop() }
+                            opened.close()
+                            withContext(Dispatchers.Default) {
+                                deleteSqliteDatabaseFiles(databasePath)
+                            }
+                        } finally {
+                            showSettings = false
+                            session += 1
+                        }
                     }
                 },
                 onBack = { showSettings = false },

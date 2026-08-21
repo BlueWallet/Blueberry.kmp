@@ -4,6 +4,9 @@ import app.cash.sqldelight.db.SqlDriver
 import com.ionspin.kotlin.bignum.integer.BigInteger
 import io.bluewallet.headers.equalBytes
 
+/** Stay under Android CursorWindow's ~2 MiB row cap when reading stored blocks. */
+private const val BLOCK_BLOB_CHUNK = 512 * 1024
+
 fun createSqliteDatabase(path: String): Database {
     val driver = openSqliteDriver(path)
     try {
@@ -417,8 +420,32 @@ internal class SqliteDatabase(
         override fun has(height: Int): Boolean =
             storageDb.blocksQueries.has(height.toLong()).executeAsOneOrNull() != null
 
-        override fun get(height: Int): DownloadedBlock? =
-            storageDb.blocksQueries.get(height.toLong()).executeAsOneOrNull()?.let(::rowToDownloadedBlock)
+        override fun get(height: Int): DownloadedBlock? {
+            val meta = storageDb.blocksQueries.getMeta(height.toLong()).executeAsOneOrNull()
+                ?: return null
+            val total = meta.nbytes.toInt()
+            if (total < 0) return null
+            val blob = ByteArray(total)
+            var offset = 0
+            while (offset < total) {
+                val chunkLen = minOf(BLOCK_BLOB_CHUNK, total - offset)
+                val chunk = storageDb.blocksQueries.getBlobChunk(
+                    value = (offset + 1).toString(),
+                    value_ = chunkLen.toString(),
+                    height = height.toLong(),
+                ).executeAsOneOrNull() ?: return null
+                if (chunk.size > chunkLen) return null
+                chunk.copyInto(blob, destinationOffset = offset)
+                offset += chunk.size
+                if (chunk.isEmpty()) break
+            }
+            if (offset != total) return null
+            return DownloadedBlock(
+                height = meta.height.toInt(),
+                blockHashInternalHex = meta.block_hash_internal_hex,
+                block = blob,
+            )
+        }
 
         override fun insert(block: DownloadedBlock): Boolean {
             var inserted = false
@@ -453,6 +480,13 @@ internal class SqliteDatabase(
             return storageDb.blocksQueries.listNeedingParse(limit.toLong())
                 .executeAsList()
                 .map(::rowToDownloadedBlock)
+        }
+
+        override fun listNeedingParseHeights(limit: Int): List<Int> {
+            if (limit <= 0) return emptyList()
+            return storageDb.blocksQueries.listNeedingParseHeights(limit.toLong())
+                .executeAsList()
+                .map { it.toInt() }
         }
     }
 
@@ -545,6 +579,10 @@ internal class SqliteDatabase(
     }
 
     override fun close() {
+        try {
+            queryPragmaValue(driver, "wal_checkpoint(TRUNCATE)")
+        } catch (_: Throwable) {
+        }
         driver.close()
     }
 

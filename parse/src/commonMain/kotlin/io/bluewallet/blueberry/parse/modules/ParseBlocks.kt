@@ -176,30 +176,30 @@ fun createParseBlocksModule(
     suspend fun parseBatch() {
         onParseBatch?.invoke()
 
-        val listed = ctx.db.blocks.listNeedingParse(batchSize + failedHeights.size + 1)
-        val blocks = mutableListOf<io.bluewallet.blueberry.storage.DownloadedBlock>()
-        for (block in listed) {
-            if (failedHeights.contains(block.height)) continue
-            if (blocks.size >= batchSize) {
+        val listed = ctx.db.blocks.listNeedingParseHeights(batchSize + failedHeights.size + 1)
+        val heights = mutableListOf<Int>()
+        for (height in listed) {
+            if (failedHeights.contains(height)) continue
+            if (heights.size >= batchSize) {
                 needsRun.store(true)
                 break
             }
-            blocks.add(block)
+            heights.add(height)
         }
-        if (blocks.isEmpty()) {
+        if (heights.isEmpty()) {
             maybeGrowWatch()
             refreshNetDeltasAndEmit()
             return
         }
 
-        diagnosticLog("batch n=${blocks.size} from=${blocks.first().height} to=${blocks.last().height}")
+        diagnosticLog("batch n=${heights.size} from=${heights.first()} to=${heights.last()}")
 
         val scripts = wallet.scripts()
         val utxos = buildUtxoMap(storedToRows(ctx.db.transactions.list()), scripts)
         var sawWatchTx = false
-        for (i in blocks.indices) {
+        for (i in heights.indices) {
             if (isStopped() || !allowed.load()) return
-            val block = blocks[i]
+            val block = ctx.db.blocks.get(heights[i]) ?: continue
             yieldOnce()
             if (isStopped() || !allowed.load()) return
             val watchTxs = try {
@@ -259,7 +259,7 @@ fun createParseBlocksModule(
                 }
             }
             if (!allowed.load()) return
-            if (i + 1 < blocks.size) {
+            if (i + 1 < heights.size) {
                 if (blockGapMs > 0) delay(blockGapMs)
                 else yieldOnce()
                 if (isStopped() || !allowed.load()) return
