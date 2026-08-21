@@ -8,11 +8,14 @@ import io.bluewallet.blueberry.bus.ModuleStatusPayload
 import io.bluewallet.blueberry.bus.createMessageBus
 import io.bluewallet.blueberry.blocks.modules.BlocksDownloadOptions
 import io.bluewallet.blueberry.blocks.modules.createBlocksDownloadModule
+import io.bluewallet.blueberry.parse.modules.ParseBlocksOptions
+import io.bluewallet.blueberry.parse.modules.createParseBlocksModule
 import io.bluewallet.blueberry.filters.modules.FiltersDownloadOptions
 import io.bluewallet.blueberry.filters.modules.FiltersMatchingOptions
 import io.bluewallet.blueberry.filters.modules.createFiltersDownloadModule
 import io.bluewallet.blueberry.filters.modules.createFiltersMatchingModule
 import io.bluewallet.blueberry.headers.consensusForYear
+import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.headers.modules.ChainHeadersOptions
 import io.bluewallet.blueberry.headers.modules.createChainHeadersModule
 import io.bluewallet.blueberry.peers.modules.Module
@@ -47,6 +50,7 @@ class PeersRuntime(private val db: Database) {
     val filtersStore: FiltersProgressStore = createFiltersProgressStore()
     val matchingStore: MatchingProgressStore = createMatchingProgressStore()
     val blocksStore: BlocksMatchedStore = createBlocksMatchedStore()
+    val walletTxsStore: WalletTxsStore = createWalletTxsStore()
     private val net = createPlatformNet()
     private val discovery: Module = createPeersDiscoveryModule(
         ModuleContext(bus, db),
@@ -56,6 +60,7 @@ class PeersRuntime(private val db: Database) {
     private var filters: Module? = null
     private var matching: Module? = null
     private var blocks: Module? = null
+    private var parseBlocks: Module? = null
     private var syncIdle: Module? = null
     private var unbind: (() -> Unit)? = null
     @Volatile private var alive = true
@@ -68,6 +73,7 @@ class PeersRuntime(private val db: Database) {
         hydrateFilters(db, filtersStore)
         hydrateMatching(db, matchingStore)
         hydrateBlocks(db, blocksStore)
+        hydrateWallet(db, walletTxsStore, null, nowMillis())
     }
 
     suspend fun start() {
@@ -90,12 +96,37 @@ class PeersRuntime(private val db: Database) {
         val unbindFilters = bindFilterProgressEvents(bus, db, filtersStore)
         val unbindMatching = bindMatchingProgressEvents(bus, db, matchingStore)
         val unbindBlocks = bindBlocksProgressEvents(bus, db, blocksStore)
+        val sharedWallet = try {
+            withContext(Dispatchers.Default) { createWallet(db) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            bus.emit(
+                Event.ModuleStatus,
+                ModuleStatusPayload(
+                    module = "parse-blocks",
+                    status = ModuleStatus.ERROR,
+                    detail = e.message ?: e.toString(),
+                ),
+            )
+            bus.emit(
+                Event.ModuleStatus,
+                ModuleStatusPayload(
+                    module = "filters-matching",
+                    status = ModuleStatus.ERROR,
+                    detail = e.message ?: e.toString(),
+                ),
+            )
+            null
+        }
+        val unbindWallet = bindWalletTxsEvents(bus, db, walletTxsStore, sharedWallet)
         unbind = {
             unbindPeers()
             unbindHeaders()
             unbindFilters()
             unbindMatching()
             unbindBlocks()
+            unbindWallet()
         }
         if (!alive) {
             unbind?.invoke()
@@ -107,6 +138,7 @@ class PeersRuntime(private val db: Database) {
         hydrateFilters(db, filtersStore)
         hydrateMatching(db, matchingStore)
         hydrateBlocks(db, blocksStore)
+        hydrateWallet(db, walletTxsStore, sharedWallet, nowMillis())
         if (!alive) {
             unbind?.invoke()
             unbind = null
@@ -202,29 +234,49 @@ class PeersRuntime(private val db: Database) {
                 ),
             )
         }
-        try {
-            val matchingModule = createFiltersMatchingModule(
-                ModuleContext(bus, db),
-                FiltersMatchingOptions(
-                    wallet = withContext(Dispatchers.Default) { createWallet(db) },
-                ),
-            )
-            matching = matchingModule
-            matchingModule.start()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            bus.emit(
-                Event.ModuleStatus,
-                ModuleStatusPayload(
-                    module = "filters-matching",
-                    status = ModuleStatus.ERROR,
-                    detail = e.message ?: e.toString(),
-                ),
-            )
+        if (sharedWallet != null) {
+            try {
+                val parseModule = createParseBlocksModule(
+                    ModuleContext(bus, db),
+                    ParseBlocksOptions(wallet = sharedWallet),
+                )
+                parseBlocks = parseModule
+                parseModule.start()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                bus.emit(
+                    Event.ModuleStatus,
+                    ModuleStatusPayload(
+                        module = "parse-blocks",
+                        status = ModuleStatus.ERROR,
+                        detail = e.message ?: e.toString(),
+                    ),
+                )
+            }
+            try {
+                val matchingModule = createFiltersMatchingModule(
+                    ModuleContext(bus, db),
+                    FiltersMatchingOptions(wallet = sharedWallet),
+                )
+                matching = matchingModule
+                matchingModule.start()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                bus.emit(
+                    Event.ModuleStatus,
+                    ModuleStatusPayload(
+                        module = "filters-matching",
+                        status = ModuleStatus.ERROR,
+                        detail = e.message ?: e.toString(),
+                    ),
+                )
+            }
         }
         if (!alive) {
             matching?.stop()
+            parseBlocks?.stop()
             syncIdle?.stop()
             blocks?.stop()
             filters?.stop()
@@ -244,6 +296,8 @@ class PeersRuntime(private val db: Database) {
         started = false
         matching?.stop()
         matching = null
+        parseBlocks?.stop()
+        parseBlocks = null
         syncIdle?.stop()
         syncIdle = null
         blocks?.stop()

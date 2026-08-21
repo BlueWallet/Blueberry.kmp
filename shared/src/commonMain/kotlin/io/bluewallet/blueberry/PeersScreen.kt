@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,6 +26,7 @@ fun PeersScreen(
     filtersStore: FiltersProgressStore,
     matchingStore: MatchingProgressStore,
     blocksStore: BlocksMatchedStore,
+    walletTxsStore: WalletTxsStore,
     onOpenSettings: () -> Unit,
 ) {
     var counts by remember { mutableStateOf(store.get()) }
@@ -31,6 +34,7 @@ fun PeersScreen(
     var filters by remember { mutableStateOf(filtersStore.get()) }
     var matching by remember { mutableStateOf(matchingStore.get()) }
     var blocks by remember { mutableStateOf(blocksStore.get()) }
+    var walletTxs by remember { mutableStateOf(walletTxsStore.get()) }
     val uiScope = rememberCoroutineScope()
     DisposableEffect(store) {
         val off = store.subscribe {
@@ -59,6 +63,12 @@ fun PeersScreen(
     DisposableEffect(blocksStore) {
         val off = blocksStore.subscribe {
             uiScope.launch { blocks = blocksStore.get() }
+        }
+        onDispose { off() }
+    }
+    DisposableEffect(walletTxsStore) {
+        val off = walletTxsStore.subscribe {
+            uiScope.launch { walletTxs = walletTxsStore.get() }
         }
         onDispose { off() }
     }
@@ -96,6 +106,21 @@ fun PeersScreen(
         Text("${blocks.downloaded}/${blocks.matched}")
         if (blocks.percent < 100) {
             Text("ETA ${formatEta(blocks.etaMs)}")
+        }
+        Text("Balance")
+        Text(walletTxs.balanceBtcLabel)
+        Text("Transactions")
+        if (walletTxs.blocksTotal > walletTxs.blocksParsed) {
+            Text(formatParseProgress(walletTxs.blocksParsed, walletTxs.blocksTotal, walletTxs.etaMs))
+        }
+        if (walletTxs.txs.isEmpty() && walletTxs.blocksTotal <= walletTxs.blocksParsed) {
+            Text("—")
+        } else {
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                items(walletTxs.txs, key = { it.txid }) { tx ->
+                    Text("${tx.timeLabel}  ${tx.shortTxid}  ${tx.netDeltaLabel}")
+                }
+            }
         }
         Button(onClick = onOpenSettings) { Text("Settings") }
     }

@@ -62,6 +62,7 @@ kotlin {
             implementation(project(":filters"))
             implementation(project(":blocks"))
             implementation(project(":sync"))
+            implementation(project(":parse"))
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
@@ -80,7 +81,11 @@ kotlin {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.core)
         }
+        jvmTest.dependencies {
+            implementation(libs.secp256k1.jni.jvm)
+        }
         getByName("androidHostTest").dependencies {
+            implementation(libs.secp256k1.jni.jvm)
             implementation(libs.sqldelight.sqlite.driver)
             implementation(libs.sqlite.jdbc)
         }

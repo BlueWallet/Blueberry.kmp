@@ -368,6 +368,38 @@ class SyncIdleTest {
     }
 
     @Test
+    fun idle_to_catchup_blocks_when_progress_shows_download_behind_match() = runBlocking {
+        val bus = createMessageBus()
+        val db = createSqliteDatabase(":memory:")
+        seedCaughtUpDb(db)
+
+        val idles = mutableListOf<Long>()
+        val catchups = mutableListOf<SyncCatchupReason>()
+        bus.on(Event.SyncIdle) { idles.add(it.at) }
+        bus.on(Event.SyncCatchup) { catchups.add(it.reason) }
+
+        val mod = createSyncIdleModule(
+            ModuleContext(bus, db),
+            SyncIdleOptions(evalIntervalMs = 10_000, minAliveCompactFilters = 1),
+        )
+        mod.start()
+        enterIdle(bus)
+        waitFor { idles.size >= 1 }
+
+        bus.emit(Event.BlocksProgress, BlocksProgressPayload(nowMillis(), downloaded = 0, matched = 1))
+        waitFor { catchups.contains(SyncCatchupReason.BLOCKS) }
+        assertEquals(listOf(SyncCatchupReason.BLOCKS), catchups)
+
+        val at = nowMillis()
+        bus.emit(Event.BlocksProgress, BlocksProgressPayload(at, downloaded = 1, matched = 1))
+        bus.emit(Event.FiltersProgress, FiltersProgressPayload(at, 1, 1))
+        waitFor { idles.size >= 2 }
+
+        mod.stop()
+        db.close()
+    }
+
+    @Test
     fun birthday_wallet_idles_when_filters_cover_birthday_to_tip_only() = runBlocking {
         val bus = createMessageBus()
         val db = createSqliteDatabase(":memory:")

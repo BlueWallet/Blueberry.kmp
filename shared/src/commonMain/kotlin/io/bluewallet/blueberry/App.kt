@@ -95,6 +95,7 @@ fun App(databasePath: String) {
                 filtersStore = checkNotNull(runtime).filtersStore,
                 matchingStore = checkNotNull(runtime).matchingStore,
                 blocksStore = checkNotNull(runtime).blocksStore,
+                walletTxsStore = checkNotNull(runtime).walletTxsStore,
                 onOpenSettings = { showSettings = true },
             )
             is OnboardingGate.ExitInvalid -> InvalidSecretScreen(current.detail)

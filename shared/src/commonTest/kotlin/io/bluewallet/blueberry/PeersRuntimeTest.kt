@@ -8,6 +8,7 @@ import io.bluewallet.blueberry.bus.PeersUpdatedPayload
 import io.bluewallet.blueberry.bus.createMessageBus
 import io.bluewallet.blueberry.storage.PeerWrite
 import io.bluewallet.blueberry.storage.createSqliteDatabase
+import io.bluewallet.blueberry.wallet.saveWalletSecret
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,6 +32,25 @@ class PeersRuntimeTest {
 
         assertEquals(1, blockStarts)
         assertTrue(starts.indexOf("sync-idle") < starts.indexOf("peers-discovery"))
+        runtime.stop()
+        db.close()
+    }
+
+    @Test
+    fun starts_parse_blocks_when_wallet_secret_is_present() = runBlocking {
+        val db = createSqliteDatabase(":memory:")
+        saveWalletSecret(
+            db,
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        val runtime = PeersRuntime(db)
+        val starts = mutableListOf<String>()
+        runtime.bus.on(Event.ModuleStatus) {
+            if (it.status == ModuleStatus.STARTING) starts.add(it.module)
+        }
+        runtime.start()
+        assertTrue(starts.contains("parse-blocks"))
+        assertTrue(starts.indexOf("parse-blocks") < starts.indexOf("filters-matching"))
         runtime.stop()
         db.close()
     }
