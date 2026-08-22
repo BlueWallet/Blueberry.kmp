@@ -45,4 +45,21 @@ class HeadersProgressStoreTest {
         assertEquals("[██████████] 100%", progressBar(200, 10))
         assertEquals(10, progressBar(0).count { it == '░' || it == '█' })
     }
+
+    @Test
+    fun progressFillFraction_is_obvious_at_common_percents() {
+        assertEquals(0f, progressFillFraction(0))
+        assertEquals(0.15f, progressFillFraction(15))
+        assertEquals(0.5f, progressFillFraction(50))
+        assertEquals(1f, progressFillFraction(100))
+        assertEquals(0f, progressFillFraction(-4))
+        assertEquals(1f, progressFillFraction(140))
+    }
+
+    @Test
+    fun formatGrouped_inserts_thousands_separators() {
+        assertEquals("0", formatGrouped(0))
+        assertEquals("963,482", formatGrouped(963_482))
+        assertEquals("-12,345", formatGrouped(-12_345))
+    }
 }

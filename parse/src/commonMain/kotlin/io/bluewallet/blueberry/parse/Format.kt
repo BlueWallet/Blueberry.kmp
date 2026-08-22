@@ -36,14 +36,14 @@ data class BtcParts(
     val fracTrailing: String,
 )
 
-/** Split sats for trailing-zero styling; keeps ≥1 fractional digit bright. */
+/** Split sats for trailing-zero styling. All-zero frac peels the whole fraction. */
 fun splitBtc(sats: Long, plus: Boolean = false): BtcParts {
     val neg = sats < 0
     val abs = if (neg) -sats else sats
     val whole = (abs / 100_000_000L).toString()
     val frac = (abs % 100_000_000L).toString().padStart(8, '0')
     var end = 8
-    while (end > 1 && frac[end - 1] == '0') end--
+    while (end > 0 && frac[end - 1] == '0') end--
     val sign = when {
         neg -> "-"
         plus && sats > 0 -> "+"
@@ -55,6 +55,21 @@ fun splitBtc(sats: Long, plus: Boolean = false): BtcParts {
         fracSignificant = frac.substring(0, end),
         fracTrailing = frac.substring(end),
     )
+}
+
+data class BtcStyled(
+    val significant: String,
+    val trailing: String,
+)
+
+/** Significant span vs muted span (dot joins trailing when the fraction is all zeros). */
+fun styleBtc(sats: Long, plus: Boolean = false): BtcStyled {
+    val p = splitBtc(sats, plus)
+    return if (p.fracSignificant.isEmpty()) {
+        BtcStyled("${p.sign}${p.whole}", ".${p.fracTrailing} BTC")
+    } else {
+        BtcStyled("${p.sign}${p.whole}.${p.fracSignificant}", "${p.fracTrailing} BTC")
+    }
 }
 
 fun formatBtc(sats: Long): String {

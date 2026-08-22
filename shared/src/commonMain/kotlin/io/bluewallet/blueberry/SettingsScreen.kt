@@ -1,16 +1,23 @@
 package io.bluewallet.blueberry
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import io.bluewallet.blueberry.ui.BwColors
+import io.bluewallet.blueberry.ui.BwFontFamily
+import io.bluewallet.blueberry.ui.BwSpace
+import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.MetricCard
+import io.bluewallet.blueberry.ui.PillButton
 
 @Composable
 fun SettingsScreen(
@@ -20,18 +27,41 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .safeContentPadding()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .background(BwColors.Paper)
+            .safeDrawingPadding()
+            .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
+        verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
-        Text("Settings")
-        Button(onClick = onClearStorage) {
-            Text("Clear storage")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Settings",
+                color = BwColors.Ink,
+                fontFamily = BwFontFamily,
+                fontSize = BwType.HeroSize,
+                fontWeight = BwType.Hero,
+                modifier = Modifier.weight(1f),
+            )
+            PillButton(text = "Back", onClick = onBack)
         }
-        Text("Self-diagnostics")
+        MetricCard(
+            label = "Storage",
+            value = "Clear",
+            caption = "Deletes the local database and restarts onboarding",
+            modifier = Modifier.fillMaxWidth(),
+            trailing = {
+                PillButton(text = "Clear", onClick = onClearStorage)
+            },
+        )
+        Text(
+            text = "Self-diagnostics",
+            color = BwColors.InkSecondary,
+            fontFamily = BwFontFamily,
+            fontSize = BwType.LabelSize,
+            fontWeight = BwType.Label,
+        )
         ClickMeContent()
-        TextButton(onClick = onBack) {
-            Text("Back")
-        }
     }
 }

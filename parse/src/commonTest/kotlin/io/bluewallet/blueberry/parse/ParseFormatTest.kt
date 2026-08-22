@@ -16,24 +16,34 @@ class ParseFormatTest {
     }
 
     @Test
-    fun splitBtc_peels_trailing_zeros_and_keeps_one_fractional_digit() {
+    fun splitBtc_peels_trailing_zeros_and_grays_dot_when_all_frac_zeros() {
         val peeled = splitBtc(1000)
         assertEquals("00001", peeled.fracSignificant)
         assertEquals("000", peeled.fracTrailing)
 
         val whole = splitBtc(100_000_000)
         assertEquals("1", whole.whole)
-        assertEquals("0", whole.fracSignificant)
-        assertEquals("0000000", whole.fracTrailing)
+        assertEquals("", whole.fracSignificant)
+        assertEquals("00000000", whole.fracTrailing)
 
         val zero = splitBtc(0)
-        assertEquals("0", zero.fracSignificant)
-        assertEquals("0000000", zero.fracTrailing)
+        assertEquals("0", zero.whole)
+        assertEquals("", zero.fracSignificant)
+        assertEquals("00000000", zero.fracTrailing)
 
         assertEquals("", splitBtc(12_345_678).fracTrailing)
         assertEquals("+", splitBtc(100, plus = true).sign)
         assertEquals("", splitBtc(0, plus = true).sign)
         assertEquals("-", splitBtc(-50, plus = true).sign)
+    }
+
+    @Test
+    fun styleBtc_puts_dot_with_trailing_when_amount_is_all_zeros() {
+        assertEquals(BtcStyled("0", ".00000000 BTC"), styleBtc(0))
+        assertEquals(BtcStyled("1", ".00000000 BTC"), styleBtc(100_000_000))
+        assertEquals(BtcStyled("0.00001", "000 BTC"), styleBtc(1000))
+        assertEquals(BtcStyled("+0.000001", "00 BTC"), styleBtc(100, plus = true))
+        assertEquals(BtcStyled("-0.0000005", "0 BTC"), styleBtc(-50, plus = true))
     }
 
     @Test

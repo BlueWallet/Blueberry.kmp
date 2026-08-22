@@ -1,12 +1,19 @@
 package io.bluewallet.blueberry
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeContentPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -15,8 +22,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import io.bluewallet.blueberry.ui.BtcAmountText
+import io.bluewallet.blueberry.ui.BwColors
+import io.bluewallet.blueberry.ui.BwFontFamily
+import io.bluewallet.blueberry.ui.BwSpace
+import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.BwWordmark
+import io.bluewallet.blueberry.ui.MetricCard
+import io.bluewallet.blueberry.ui.ProgressMetricCard
+import io.bluewallet.blueberry.ui.TextAction
+import io.bluewallet.blueberry.ui.StatusDivider
+import io.bluewallet.blueberry.ui.StatusList
+import io.bluewallet.blueberry.ui.StatusRow
 import kotlinx.coroutines.launch
 
 @Composable
@@ -73,55 +92,146 @@ fun PeersScreen(
         onDispose { off() }
     }
     Column(
-        modifier = Modifier.fillMaxSize().safeContentPadding().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BwColors.Paper)
+            .safeDrawingPadding()
+            .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
+        verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
-        Text("Peers")
-        Text(formatPeerSockets(counts))
-        Text("${counts.known} known")
-        Text("Chain tip")
-        Text(progressBar(headers.percent, 10))
-        Text("${headers.downloaded}/${headers.total}")
-        Text("${headers.height} tip")
-        if (headers.percent < 100) {
-            Text("ETA ${formatEta(headers.etaMs)}")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BwWordmark()
+            Spacer(modifier = Modifier.weight(1f))
+            TextAction(text = "Settings", onClick = onOpenSettings)
         }
-        Text("Filters DL")
-        Text(progressBar(filters.percent, 10))
-        Text("${filters.downloaded}/${filters.total}")
-        if (filters.percent < 100) {
-            Text("ETA ${formatEta(filters.etaMs)}")
+        Text(
+            text = "Balance",
+            color = BwColors.InkSecondary,
+            fontFamily = BwFontFamily,
+            fontSize = BwType.LabelSize,
+            fontWeight = BwType.Label,
+        )
+        BtcAmountText(
+            sats = walletTxs.balanceSats,
+            color = BwColors.Ink,
+            fontSize = BwType.HeroSize,
+            fontWeight = BwType.Hero,
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+        ) {
+            ProgressMetricCard(
+                label = "Chain tip",
+                value = formatGrouped(headers.height),
+                caption = progressCaption(headers.downloaded, headers.total, headers.percent, headers.etaMs),
+                percent = headers.percent,
+                modifier = Modifier.weight(1f),
+            )
+            ProgressMetricCard(
+                label = "Filters DL",
+                value = "${filters.percent}%",
+                caption = progressCaption(filters.downloaded, filters.total, filters.percent, filters.etaMs),
+                percent = filters.percent,
+                modifier = Modifier.weight(1f),
+            )
         }
-        Text("Filters match")
-        Text(progressBar(matching.percent, 10))
-        Text("${matching.scanned}/${matching.total}")
-        if (matching.percent < 100) {
-            val eta =
-                if (matching.etaMs != null) formatEta(matching.etaMs)
-                else if (matching.total > 0 && matching.scanned < matching.total) "…"
-                else formatEta(null)
-            Text("ETA $eta")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+        ) {
+            ProgressMetricCard(
+                label = "Filters match",
+                value = "${matching.percent}%",
+                caption = progressCaption(matching.scanned, matching.total, matching.percent, matching.etaMs),
+                percent = matching.percent,
+                modifier = Modifier.weight(1f),
+            )
+            ProgressMetricCard(
+                label = "Blocks DL",
+                value = "${blocks.percent}%",
+                caption = progressCaption(blocks.downloaded, blocks.matched, blocks.percent, blocks.etaMs),
+                percent = blocks.percent,
+                modifier = Modifier.weight(1f),
+            )
         }
-        Text("Blocks DL")
-        Text(progressBar(blocks.percent, 10))
-        Text("${blocks.downloaded}/${blocks.matched}")
-        if (blocks.percent < 100) {
-            Text("ETA ${formatEta(blocks.etaMs)}")
-        }
-        Text("Balance")
-        Text(walletTxs.balanceBtcLabel)
-        Text("Transactions")
-        if (walletTxs.blocksTotal > walletTxs.blocksParsed) {
-            Text(formatParseProgress(walletTxs.blocksParsed, walletTxs.blocksTotal, walletTxs.etaMs))
-        }
-        if (walletTxs.txs.isEmpty() && walletTxs.blocksTotal <= walletTxs.blocksParsed) {
-            Text("—")
-        } else {
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                items(walletTxs.txs, key = { it.txid }) { tx ->
-                    Text("${tx.timeLabel}  ${tx.shortTxid}  ${tx.netDeltaLabel}")
+
+        Row(
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+        ) {
+            MetricCard(
+                label = "Peers",
+                value = formatGrouped(counts.known),
+                caption = "known",
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+            StatusList(modifier = Modifier.weight(1f)) {
+                Column {
+                    StatusRow(label = "probe", value = counts.probe.toString(), dotColor = BwColors.Accent)
+                    StatusDivider()
+                    StatusRow(label = "hdr", value = counts.hdr.toString(), dotColor = BwColors.Link)
+                    StatusDivider()
+                    StatusRow(label = "filt", value = counts.filt.toString(), dotColor = BwColors.Warning)
+                    StatusDivider()
+                    StatusRow(label = "blk", value = counts.blk.toString(), dotColor = BwColors.Success)
                 }
             }
         }
-        Button(onClick = onOpenSettings) { Text("Settings") }
+
+        Text(
+            text = "Transactions",
+            color = BwColors.InkSecondary,
+            fontFamily = BwFontFamily,
+            fontSize = BwType.LabelSize,
+            fontWeight = BwType.Label,
+        )
+        if (walletTxs.blocksTotal > walletTxs.blocksParsed) {
+            Text(
+                text = formatParseProgress(walletTxs.blocksParsed, walletTxs.blocksTotal, walletTxs.etaMs),
+                color = BwColors.InkMuted,
+                fontFamily = BwFontFamily,
+                fontSize = BwType.CaptionSize,
+            )
+        }
+        StatusList(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                if (walletTxs.txs.isEmpty()) {
+                    item {
+                        StatusRow(
+                            label = if (walletTxs.blocksTotal > walletTxs.blocksParsed) "Parsing…" else "No transactions",
+                            value = "—",
+                            valueColor = BwColors.InkMuted,
+                            dotColor = BwColors.InkMuted,
+                        )
+                    }
+                } else {
+                    items(walletTxs.txs.size, key = { walletTxs.txs[it].txid }) { index ->
+                        val tx = walletTxs.txs[index]
+                        val incoming = tx.netDeltaSats >= 0
+                        if (index > 0) StatusDivider()
+                        StatusRow(
+                            label = tx.timeLabel,
+                            secondary = tx.shortTxid,
+                            value = tx.netDeltaLabel,
+                            valueColor = if (incoming) BwColors.Success else BwColors.Danger,
+                            dotColor = if (incoming) BwColors.Success else BwColors.Danger,
+                            valueContent = {
+                                BtcAmountText(
+                                    sats = tx.netDeltaSats,
+                                    plus = true,
+                                    color = if (incoming) BwColors.Success else BwColors.Danger,
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+        }
     }
 }

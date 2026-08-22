@@ -1,6 +1,5 @@
 package io.bluewallet.blueberry
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -20,6 +19,7 @@ import io.bluewallet.blueberry.onboarding.persistCreatedWallet
 import io.bluewallet.blueberry.onboarding.persistImportedSecret
 import io.bluewallet.blueberry.onboarding.persistSyncYear
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.ui.BwTheme
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.inspectWalletSecret
 import kotlin.concurrent.Volatile
@@ -39,7 +39,7 @@ private class OpenedDatabase(path: String) {
 
 @Composable
 fun App(databasePath: String) {
-    MaterialTheme {
+    BwTheme {
         var session by remember { mutableStateOf(0) }
         var showSettings by remember { mutableStateOf(false) }
         val opened = remember(databasePath, session) { OpenedDatabase(databasePath) }
@@ -50,7 +50,7 @@ fun App(databasePath: String) {
         val openError = opened.result.exceptionOrNull()
         if (openError != null) {
             DatabaseOpenErrorScreen(openError.message ?: openError.toString())
-            return@MaterialTheme
+            return@BwTheme
         }
         checkNotNull(db)
         var gate by remember(databasePath, session) {
@@ -91,7 +91,7 @@ fun App(databasePath: String) {
                 },
                 onBack = { showSettings = false },
             )
-            return@MaterialTheme
+            return@BwTheme
         }
         when (val current = gate) {
             is OnboardingGate.Start -> PeersScreen(

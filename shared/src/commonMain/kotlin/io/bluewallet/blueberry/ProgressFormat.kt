@@ -25,3 +25,28 @@ fun progressBar(percent: Int, width: Int = 10): String {
     val cells = CharArray(width) { i -> if (i < filled) '█' else '░' }
     return "[${cells.concatToString()}] $clamped%"
 }
+
+/** 0f..1f width of a single horizontal progress line. */
+fun progressFillFraction(percent: Int): Float =
+    max(0, min(100, percent)) / 100f
+
+fun formatGrouped(n: Int): String {
+    val sign = if (n < 0) "-" else ""
+    val digits = kotlin.math.abs(n).toString()
+    val grouped = buildString {
+        digits.reversed().forEachIndexed { i, c ->
+            if (i > 0 && i % 3 == 0) append(',')
+            append(c)
+        }
+    }.reversed()
+    return sign + grouped
+}
+
+fun progressCaption(count: Int, total: Int, percent: Int, etaMs: Long?): String {
+    val counts = "${formatGrouped(count)}/${formatGrouped(total)}"
+    return when {
+        percent >= 100 -> counts
+        etaMs != null -> "$counts · ${formatEta(etaMs)}"
+        else -> counts
+    }
+}
