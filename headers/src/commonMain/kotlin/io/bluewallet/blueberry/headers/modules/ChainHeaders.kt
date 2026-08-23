@@ -607,6 +607,11 @@ fun createChainHeadersModule(
                 logError("chain-headers", "peer fail ${peerKey(winner.peer.host, winner.peer.port)}", err)
                 markPeerHardFailed(winner.peer)
                 waitForKick(500)
+            } catch (err: kotlinx.coroutines.CancellationException) {
+                throw err
+            } catch (err: Throwable) {
+                logError("chain-headers", "persist fail ${peerKey(winner.peer.host, winner.peer.port)}", err)
+                waitForKick(500)
             }
         }
     }

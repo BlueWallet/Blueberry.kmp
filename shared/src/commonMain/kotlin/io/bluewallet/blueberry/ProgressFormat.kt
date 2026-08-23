@@ -30,6 +30,10 @@ fun progressBar(percent: Int, width: Int = 10): String {
 fun progressFillFraction(percent: Int): Float =
     max(0, min(100, percent)) / 100f
 
+/** Empty work (0/0) is complete, not stuck at 0%. */
+fun progressPercent(done: Int, total: Int): Int =
+    if (total <= 0) 100 else min(100, (100 * done) / total)
+
 fun formatGrouped(n: Int): String {
     val sign = if (n < 0) "-" else ""
     val digits = kotlin.math.abs(n).toString()

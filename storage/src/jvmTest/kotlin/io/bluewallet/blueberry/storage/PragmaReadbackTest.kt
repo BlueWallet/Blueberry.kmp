@@ -19,6 +19,7 @@ class PragmaReadbackTest {
                 "synchronous=$synchronous",
             )
             assertEquals("10000", db.pragmaValue("wal_autocheckpoint"))
+            assertEquals("5000", db.pragmaValue("busy_timeout"))
         } finally {
             db.close()
         }

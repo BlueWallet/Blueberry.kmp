@@ -16,7 +16,10 @@ import io.bluewallet.blueberry.peers.modules.ModuleContext
 import io.bluewallet.blueberry.peers.net.HeaderBatchResult
 import io.bluewallet.blueberry.peers.net.HeaderFetchOptions
 import io.bluewallet.blueberry.headers.stubPlatformNet
+import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.DownloadedBlock
+import io.bluewallet.blueberry.storage.HeaderWrite
+import io.bluewallet.blueberry.storage.HeadersRepository
 import io.bluewallet.blueberry.storage.MatchedBlock
 import io.bluewallet.blueberry.storage.PeerWrite
 import io.bluewallet.blueberry.storage.StoredTx
@@ -85,6 +88,45 @@ class ChainHeadersTest {
             last?.first == 1 && last.second == 1
         }
         assertEquals(1 to 1, events.last())
+        mod.stop()
+        db.close()
+    }
+
+    @Test
+    fun persist_lock_retries_and_still_appends() = runBlocking {
+        val bus = createMessageBus()
+        val inner = createSqliteDatabase(":memory:")
+        var failNext = true
+        val db = object : Database by inner {
+            override val headers = object : HeadersRepository by inner.headers {
+                override fun append(headers: List<HeaderWrite>) {
+                    if (failNext) {
+                        failNext = false
+                        error("database is locked")
+                    }
+                    inner.headers.append(headers)
+                }
+            }
+        }
+        val nextHeader = decodeBlockHeader(hexToBytes(NEXT_HEADER_HEX))
+        val mod = createChainHeadersModule(
+            ModuleContext(bus, db),
+            ChainHeadersOptions(
+                net = stubPlatformNet(),
+                connectTimeoutMs = 200,
+                headersTimeoutMs = 200,
+                pollIntervalMs = 50,
+                fetchBatch = { _, _, _ ->
+                    HeaderBatchResult.Ok(CHECKPOINT_HEIGHT + 100, listOf(nextHeader))
+                },
+            ),
+        )
+        db.peers.upsert(PeerWrite("1.1.1.1", 8333, 0uL, true, false, null))
+        mod.start()
+        waitFor {
+            db.headers.tip()?.height == CHECKPOINT_HEIGHT + 1 && !failNext
+        }
+        assertEquals(CHECKPOINT_HEIGHT + 1, db.headers.tip()!!.height)
         mod.stop()
         db.close()
     }

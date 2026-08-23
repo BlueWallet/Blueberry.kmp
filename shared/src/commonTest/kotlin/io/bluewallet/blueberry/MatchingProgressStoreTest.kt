@@ -66,4 +66,14 @@ class MatchingProgressStoreTest {
         store.applyEvent(at = 1_002_000, scanned = 1200, total = 5000)
         assertEquals(38_000, store.get().etaMs)
     }
+
+    @Test
+    fun empty_queue_is_complete() {
+        val store = createMatchingProgressStore()
+        assertEquals(100, store.get().percent)
+        store.applyEvent(at = 1, scanned = 0, total = 0)
+        assertEquals(0, store.get().scanned)
+        assertEquals(0, store.get().total)
+        assertEquals(100, store.get().percent)
+    }
 }

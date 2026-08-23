@@ -12,7 +12,7 @@ class FiltersProgressStoreTest {
         assertEquals(0, store.get().total)
         assertNull(store.get().at)
         assertNull(store.get().etaMs)
-        assertEquals(0, store.get().percent)
+        assertEquals(100, store.get().percent)
 
         store.applyEvent(at = 1000, downloaded = 100, total = 1000)
         assertEquals(10, store.get().percent)
@@ -43,5 +43,14 @@ class FiltersProgressStoreTest {
 
         store.applyEvent(at = 1_001_000, downloaded = 1100, total = 5000)
         assertEquals(39_000, store.get().etaMs)
+    }
+
+    @Test
+    fun empty_queue_is_complete() {
+        val store = createFiltersProgressStore()
+        store.applyEvent(at = 1, downloaded = 0, total = 0)
+        assertEquals(0, store.get().downloaded)
+        assertEquals(0, store.get().total)
+        assertEquals(100, store.get().percent)
     }
 }

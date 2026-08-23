@@ -6,14 +6,13 @@ import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.storage.Database
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.math.min
 
 data class BlocksProgress(
     val downloaded: Int = 0,
     val matched: Int = 0,
     val at: Long? = null,
     val etaMs: Long? = null,
-    val percent: Int = 0,
+    val percent: Int = 100,
 )
 
 interface BlocksMatchedStore {
@@ -93,8 +92,7 @@ private class BlocksMatchedStoreImpl : BlocksMatchedStore {
                 downloaded,
                 matched,
             )
-            val nextPercent =
-                if (matched == 0) 100 else min(100, (100 * downloaded) / matched)
+            val nextPercent = progressPercent(downloaded, matched)
             val nextEta =
                 if (downloaded >= matched) 0L
                 else estimateEtaMs(nextSamples, matched)

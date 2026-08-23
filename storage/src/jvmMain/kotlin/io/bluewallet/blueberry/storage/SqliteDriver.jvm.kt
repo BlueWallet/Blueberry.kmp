@@ -10,10 +10,11 @@ internal actual fun openSqliteDriver(path: String): SqlDriver {
             setProperty("journal_mode", "WAL")
             setProperty("synchronous", "NORMAL")
             setProperty("wal_autocheckpoint", "10000")
+            setProperty("busy_timeout", "5000")
         }
         return JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, properties)
     }
     return JdbcSqliteDriver(
-        "jdbc:sqlite:$path?journal_mode=WAL&synchronous=NORMAL&wal_autocheckpoint=10000",
+        "jdbc:sqlite:$path?journal_mode=WAL&synchronous=NORMAL&wal_autocheckpoint=10000&busy_timeout=5000",
     )
 }

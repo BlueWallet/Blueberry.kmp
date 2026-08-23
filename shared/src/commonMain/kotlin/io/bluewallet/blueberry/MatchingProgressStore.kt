@@ -6,7 +6,6 @@ import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.storage.Database
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.math.min
 import kotlin.math.round
 
 data class MatchingProgress(
@@ -14,7 +13,7 @@ data class MatchingProgress(
     val total: Int = 0,
     val at: Long? = null,
     val etaMs: Long? = null,
-    val percent: Int = 0,
+    val percent: Int = 100,
 )
 
 interface MatchingProgressStore {
@@ -64,8 +63,7 @@ private class MatchingProgressStoreImpl : MatchingProgressStore {
     override fun applyEvent(at: Long, scanned: Int, total: Int) {
         while (true) {
             val cur = state.load()
-            val nextPercent =
-                if (total == 0) 0 else min(100, (100 * scanned) / total)
+            val nextPercent = progressPercent(scanned, total)
 
             val wasDone = cur.total > 0 && cur.scanned >= cur.total
             val isDone = total > 0 && scanned >= total

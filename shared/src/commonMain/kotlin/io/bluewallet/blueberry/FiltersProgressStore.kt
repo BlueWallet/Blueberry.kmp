@@ -13,7 +13,7 @@ data class FiltersProgress(
     val total: Int = 0,
     val at: Long? = null,
     val etaMs: Long? = null,
-    val percent: Int = 0,
+    val percent: Int = 100,
 )
 
 interface FiltersProgressStore {
@@ -93,8 +93,7 @@ private class FiltersProgressStoreImpl : FiltersProgressStore {
                 downloaded,
                 total,
             )
-            val nextPercent =
-                if (total == 0) 0 else min(100, (100 * downloaded) / total)
+            val nextPercent = progressPercent(downloaded, total)
             val nextEta =
                 if (total > 0 && downloaded >= total) 0L
                 else estimateEtaMs(nextSamples, total)

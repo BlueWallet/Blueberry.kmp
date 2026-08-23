@@ -22,7 +22,7 @@ class BlocksMatchedStoreTest {
         assertEquals(0, store.get().matched)
         assertNull(store.get().at)
         assertNull(store.get().etaMs)
-        assertEquals(0, store.get().percent)
+        assertEquals(100, store.get().percent)
 
         store.applyEvent(at = 1000, downloaded = 100, matched = 1000)
         assertEquals(10, store.get().percent)

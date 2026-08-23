@@ -57,6 +57,15 @@ class HeadersProgressStoreTest {
     }
 
     @Test
+    fun progressPercent_treats_empty_total_as_complete() {
+        assertEquals(100, progressPercent(0, 0))
+        assertEquals(0, progressPercent(0, 10))
+        assertEquals(50, progressPercent(5, 10))
+        assertEquals(100, progressPercent(10, 10))
+        assertEquals(100, progressPercent(12, 10))
+    }
+
+    @Test
     fun formatGrouped_inserts_thousands_separators() {
         assertEquals("0", formatGrouped(0))
         assertEquals("963,482", formatGrouped(963_482))
