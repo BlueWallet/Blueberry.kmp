@@ -34,6 +34,14 @@ fun progressFillFraction(percent: Int): Float =
 fun progressPercent(done: Int, total: Int): Int =
     if (total <= 0) 100 else min(100, (100 * done) / total)
 
+/** Mean of the four home-screen sync bars, each clamped to 0..100. */
+fun unifiedSyncPercent(chain: Int, filtersDl: Int, filtersMatch: Int, blocksDl: Int): Int {
+    fun clamp(n: Int) = max(0, min(100, n))
+    return round(
+        (clamp(chain) + clamp(filtersDl) + clamp(filtersMatch) + clamp(blocksDl)) / 4.0
+    ).toInt()
+}
+
 fun formatGrouped(n: Int): String {
     val sign = if (n < 0) "-" else ""
     val digits = kotlin.math.abs(n).toString()

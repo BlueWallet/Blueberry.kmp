@@ -66,6 +66,17 @@ class HeadersProgressStoreTest {
     }
 
     @Test
+    fun unifiedSyncPercent_is_rounded_average_of_the_four_bars() {
+        assertEquals(0, unifiedSyncPercent(0, 0, 0, 0))
+        assertEquals(25, unifiedSyncPercent(10, 20, 30, 40))
+        assertEquals(26, unifiedSyncPercent(10, 20, 30, 42))
+        assertEquals(100, unifiedSyncPercent(100, 100, 100, 100))
+        assertEquals(50, unifiedSyncPercent(0, 0, 100, 100))
+        assertEquals(0, unifiedSyncPercent(-10, 0, 0, 0))
+        assertEquals(100, unifiedSyncPercent(200, 100, 100, 100))
+    }
+
+    @Test
     fun formatGrouped_inserts_thousands_separators() {
         assertEquals("0", formatGrouped(0))
         assertEquals("963,482", formatGrouped(963_482))

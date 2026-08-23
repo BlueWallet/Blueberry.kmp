@@ -1,6 +1,13 @@
 package io.bluewallet.blueberry
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +21,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -24,12 +32,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
 import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.BwWordmark
+import io.bluewallet.blueberry.ui.HorizontalProgressBar
 import io.bluewallet.blueberry.ui.MetricCard
 import io.bluewallet.blueberry.ui.ProgressMetricCard
 import io.bluewallet.blueberry.ui.TextAction
@@ -56,7 +67,11 @@ fun PeersScreen(
     var matching by remember { mutableStateOf(matchingStore.get()) }
     var blocks by remember { mutableStateOf(blocksStore.get()) }
     var walletTxs by remember { mutableStateOf(walletTxsStore.get()) }
+    var detailedSync by remember { mutableStateOf(true) }
     val uiScope = rememberCoroutineScope()
+    val hideDetailedSync = Modifier
+        .clip(RoundedCornerShape(BwSpace.Radius))
+        .clickable { detailedSync = false }
     DisposableEffect(store) {
         val off = store.subscribe {
             uiScope.launch { counts = store.get() }
@@ -116,83 +131,108 @@ fun PeersScreen(
             fontSize = BwType.LabelSize,
             fontWeight = BwType.Label,
         )
-        BtcAmountText(
-            sats = walletTxs.balanceSats,
-            color = BwColors.Ink,
-            fontSize = BwType.HeroSize,
-            fontWeight = BwType.Hero,
-        )
-
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+            verticalArrangement = Arrangement.spacedBy(if (detailedSync) BwSpace.Gap else 2.dp),
         ) {
-            ProgressMetricCard(
-                label = "Chain tip",
-                value = formatGrouped(headers.height),
-                caption = progressCaption(headers.downloaded, headers.total, headers.percent, headers.etaMs),
-                percent = headers.percent,
-                modifier = Modifier.weight(1f),
+            BtcAmountText(
+                sats = walletTxs.balanceSats,
+                color = BwColors.Ink,
+                fontSize = BwType.HeroSize,
+                fontWeight = BwType.Hero,
             )
-            ProgressMetricCard(
-                label = "Filters DL",
-                value = "${filters.percent}%",
-                caption = progressCaption(filters.downloaded, filters.total, filters.percent, filters.etaMs),
-                percent = filters.percent,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        Row(
+            AnimatedContent(
+            targetState = detailedSync,
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-        ) {
-            ProgressMetricCard(
-                label = "Filters match",
-                value = "${matching.percent}%",
-                caption = progressCaption(matching.scanned, matching.total, matching.percent, matching.etaMs),
-                percent = matching.percent,
-                modifier = Modifier.weight(1f),
-            )
-            ProgressMetricCard(
-                label = "Blocks DL",
-                value = "${blocks.percent}%",
-                caption = progressCaption(blocks.downloaded, blocks.matched, blocks.percent, blocks.etaMs),
-                percent = blocks.percent,
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-        ) {
-            MetricCard(
-                label = "Peers",
-                value = formatGrouped(counts.known),
-                caption = "known",
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-            )
-            StatusList(modifier = Modifier.weight(1f)) {
-                Column {
-                    StatusRow(label = "probe", value = counts.probe.toString(), dotColor = BwColors.Accent)
-                    StatusDivider()
-                    StatusRow(label = "hdr", value = counts.hdr.toString(), dotColor = BwColors.Link)
-                    StatusDivider()
-                    StatusRow(label = "filt", value = counts.filt.toString(), dotColor = BwColors.Warning)
-                    StatusDivider()
-                    StatusRow(label = "blk", value = counts.blk.toString(), dotColor = BwColors.Success)
+            transitionSpec = {
+                (fadeIn() + expandVertically()) togetherWith (fadeOut() + shrinkVertically())
+            },
+            label = "home-sync",
+        ) { showDetails ->
+            if (showDetails) {
+                Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+                    ) {
+                        ProgressMetricCard(
+                            label = "Chain tip",
+                            value = formatGrouped(headers.height),
+                            caption = progressCaption(headers.downloaded, headers.total, headers.percent, headers.etaMs),
+                            percent = headers.percent,
+                            modifier = Modifier.weight(1f).then(hideDetailedSync),
+                        )
+                        ProgressMetricCard(
+                            label = "Filters DL",
+                            value = "${filters.percent}%",
+                            caption = progressCaption(filters.downloaded, filters.total, filters.percent, filters.etaMs),
+                            percent = filters.percent,
+                            modifier = Modifier.weight(1f).then(hideDetailedSync),
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+                    ) {
+                        ProgressMetricCard(
+                            label = "Filters match",
+                            value = "${matching.percent}%",
+                            caption = progressCaption(matching.scanned, matching.total, matching.percent, matching.etaMs),
+                            percent = matching.percent,
+                            modifier = Modifier.weight(1f).then(hideDetailedSync),
+                        )
+                        ProgressMetricCard(
+                            label = "Blocks DL",
+                            value = "${blocks.percent}%",
+                            caption = progressCaption(blocks.downloaded, blocks.matched, blocks.percent, blocks.etaMs),
+                            percent = blocks.percent,
+                            modifier = Modifier.weight(1f).then(hideDetailedSync),
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+                    ) {
+                        MetricCard(
+                            label = "Peers",
+                            value = formatGrouped(counts.known),
+                            caption = "known",
+                            modifier = Modifier.weight(1f).fillMaxHeight().then(hideDetailedSync),
+                        )
+                        StatusList(modifier = Modifier.weight(1f).then(hideDetailedSync)) {
+                            Column {
+                                StatusRow(label = "probe", value = counts.probe.toString(), dotColor = BwColors.Accent)
+                                StatusDivider()
+                                StatusRow(label = "hdr", value = counts.hdr.toString(), dotColor = BwColors.Link)
+                                StatusDivider()
+                                StatusRow(label = "filt", value = counts.filt.toString(), dotColor = BwColors.Warning)
+                                StatusDivider()
+                                StatusRow(label = "blk", value = counts.blk.toString(), dotColor = BwColors.Success)
+                            }
+                        }
+                    }
                 }
+            } else {
+                HorizontalProgressBar(
+                    percent = unifiedSyncPercent(
+                        headers.percent,
+                        filters.percent,
+                        matching.percent,
+                        blocks.percent,
+                    ),
+                    modifier = Modifier.clickable { detailedSync = true },
+                )
             }
         }
-
-        Text(
-            text = "Transactions",
-            color = BwColors.InkSecondary,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.LabelSize,
-            fontWeight = BwType.Label,
-        )
+            Text(
+                text = "Transactions",
+                color = BwColors.InkSecondary,
+                fontFamily = BwFontFamily,
+                fontSize = BwType.LabelSize,
+                fontWeight = BwType.Label,
+            )
+        }
         if (walletTxs.blocksTotal > walletTxs.blocksParsed) {
             Text(
                 text = formatParseProgress(walletTxs.blocksParsed, walletTxs.blocksTotal, walletTxs.etaMs),
