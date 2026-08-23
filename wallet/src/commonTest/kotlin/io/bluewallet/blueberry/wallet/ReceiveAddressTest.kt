@@ -89,6 +89,32 @@ class ReceiveAddressTest {
         assertEquals(AddressScriptType.P2PKH, addr.scriptType)
         assertEquals(legacy.address, addr.address)
     }
+
+    @Test
+    fun resolve_bip84_uses_first_unused_external() {
+        val w = deriveWatchWallet(ABANDON, WatchGaps(5, 2))
+        val addr = resolveReceiveAddress(w, usedExternal = listOf(0, 1, 3))!!
+        assertEquals(2, addr.index)
+        assertEquals(false, addr.change)
+    }
+
+    @Test
+    fun resolve_bip84_is_null_when_all_externals_used() {
+        val w = deriveWatchWallet(ABANDON, WatchGaps(2, 1))
+        assertNull(resolveReceiveAddress(w, usedExternal = listOf(0, 1)))
+    }
+
+    @Test
+    fun resolve_wif_defaults_to_native() {
+        val w = deriveWatchWallet(WIF_BECH32)
+        assertEquals(ADDR_BECH32, resolveReceiveAddress(w)!!.address)
+    }
+
+    @Test
+    fun resolve_imported_address_is_the_watch_address() {
+        val w = deriveWatchWallet(ADDR_BECH32)
+        assertEquals(ADDR_BECH32, resolveReceiveAddress(w)!!.address)
+    }
 }
 
 private fun byType(wallet: WatchWallet, scriptType: AddressScriptType): WatchAddress =

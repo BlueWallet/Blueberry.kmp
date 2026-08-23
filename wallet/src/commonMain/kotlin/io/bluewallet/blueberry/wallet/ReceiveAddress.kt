@@ -68,3 +68,16 @@ fun preferredWifReceiveAddress(
     }
     return native
 }
+
+/** Same rules as helix3 `snapshotReceiveAddress`: unused external, else WIF preferred, else imported. */
+fun resolveReceiveAddress(
+    wallet: WatchWallet,
+    usedExternal: List<Int> = emptyList(),
+    wifTxs: List<WifReceiveTxRow> = emptyList(),
+): WatchAddress? {
+    return when (wallet.kind) {
+        WatchWalletKind.BIP84 -> firstUnusedExternalAddress(wallet, usedExternal)
+        WatchWalletKind.WIF -> preferredWifReceiveAddress(wallet, wifTxs)
+        WatchWalletKind.ADDRESS -> wallet.addresses.firstOrNull()
+    }
+}

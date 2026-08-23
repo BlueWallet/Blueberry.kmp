@@ -81,8 +81,10 @@ fun createParseBlocksModule(
     val failedHeights = mutableSetOf<Int>()
 
     var unsubProgress: (() -> Unit)? = null
+    var unsubFilters: (() -> Unit)? = null
     var unsubIdle: (() -> Unit)? = null
     var unsubCatchup: (() -> Unit)? = null
+    var lastGaps = wallet.gaps()
     var loopJob: Job? = null
     var parentJob: Job? = null
 
@@ -145,7 +147,14 @@ fun createParseBlocksModule(
         if (snap.kind == WatchWalletKind.WIF || snap.kind == WatchWalletKind.ADDRESS) return false
         val used = usedWatchIndexes(ctx.db.transactions.list().map { it.tx }, snap)
         val result = growWatchGapsIfNeeded(loadWatchGaps(ctx.db), used.external, used.internal)
-        if (!result.grew) return false
+        if (!result.grew) {
+            wallet.syncFromDb()
+            val gaps = wallet.gaps()
+            if (gaps.external == lastGaps.external && gaps.internal == lastGaps.internal) return false
+            lastGaps = gaps
+            needsRun.store(true)
+            return true
+        }
         val fromHeight = compactFilterFrom(ctx.db) ?: ctx.db.transactions.minHeight()
         ctx.db.transaction {
             saveWatchGaps(ctx.db, result.gaps)
@@ -155,6 +164,7 @@ fun createParseBlocksModule(
             }
         }
         wallet.refresh()
+        lastGaps = wallet.gaps()
         val tip = ctx.db.headers.tip()
         val downloaded = ctx.db.filters.count()
         val filterFrom = compactFilterFrom(ctx.db)
@@ -324,15 +334,16 @@ fun createParseBlocksModule(
                 ModuleStatusPayload(module = "parse-blocks", status = ModuleStatus.STARTING),
             )
             wallet.refresh()
+            lastGaps = wallet.gaps()
 
-            unsubProgress = ctx.bus.on(Event.BlocksProgress) {
-                if (isStopped()) return@on
-                if (busy.load()) {
-                    needsRun.store(true)
-                    return@on
+            val onParseWake = {
+                if (!isStopped()) {
+                    if (busy.load()) needsRun.store(true)
+                    else kick()
                 }
-                kick()
             }
+            unsubProgress = ctx.bus.on(Event.BlocksProgress) { onParseWake() }
+            unsubFilters = ctx.bus.on(Event.FiltersProgress) { onParseWake() }
             unsubIdle = ctx.bus.on(Event.SyncIdle) {
                 if (isStopped()) return@on
                 allowed.store(true)
@@ -371,6 +382,8 @@ fun createParseBlocksModule(
             allowed.store(false)
             unsubProgress?.invoke()
             unsubProgress = null
+            unsubFilters?.invoke()
+            unsubFilters = null
             unsubIdle?.invoke()
             unsubIdle = null
             unsubCatchup?.invoke()

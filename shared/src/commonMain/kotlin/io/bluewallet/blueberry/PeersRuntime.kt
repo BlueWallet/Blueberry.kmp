@@ -25,6 +25,7 @@ import io.bluewallet.blueberry.peers.modules.createPeersDiscoveryModule
 import io.bluewallet.blueberry.peers.net.createPlatformNet
 import io.bluewallet.blueberry.sync.modules.createSyncIdleModule
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.createWallet
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +52,8 @@ class PeersRuntime(private val db: Database) {
     val matchingStore: MatchingProgressStore = createMatchingProgressStore()
     val blocksStore: BlocksMatchedStore = createBlocksMatchedStore()
     val walletTxsStore: WalletTxsStore = createWalletTxsStore()
+    @Volatile var wallet: Wallet? = null
+        private set
     private val net = createPlatformNet()
     private val discovery: Module = createPeersDiscoveryModule(
         ModuleContext(bus, db),
@@ -97,7 +100,7 @@ class PeersRuntime(private val db: Database) {
         val unbindMatching = bindMatchingProgressEvents(bus, db, matchingStore)
         val unbindBlocks = bindBlocksProgressEvents(bus, db, blocksStore)
         val sharedWallet = try {
-            withContext(Dispatchers.Default) { createWallet(db) }
+            withContext(Dispatchers.Default) { createWallet(db) }.also { wallet = it }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
@@ -309,5 +312,6 @@ class PeersRuntime(private val db: Database) {
         discovery.stop()
         unbind?.invoke()
         unbind = null
+        wallet = null
     }
 }

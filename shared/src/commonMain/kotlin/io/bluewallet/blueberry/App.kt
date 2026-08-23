@@ -42,6 +42,7 @@ fun App(databasePath: String) {
     BwTheme {
         var session by remember { mutableStateOf(0) }
         var showSettings by remember { mutableStateOf(false) }
+        var showReceive by remember { mutableStateOf(false) }
         val opened = remember(databasePath, session) { OpenedDatabase(databasePath) }
         DisposableEffect(opened) {
             onDispose { opened.close() }
@@ -73,6 +74,14 @@ fun App(databasePath: String) {
                 runtime?.stop()
             }
         }
+        if (showReceive && runtime != null) {
+            ReceiveScreen(
+                runtime = runtime,
+                db = db,
+                onBack = { showReceive = false },
+            )
+            return@BwTheme
+        }
         if (showSettings) {
             SettingsScreen(
                 onClearStorage = {
@@ -102,6 +111,7 @@ fun App(databasePath: String) {
                 blocksStore = checkNotNull(runtime).blocksStore,
                 walletTxsStore = checkNotNull(runtime).walletTxsStore,
                 onOpenSettings = { showSettings = true },
+                onOpenReceive = { showReceive = true },
             )
             is OnboardingGate.ExitInvalid -> InvalidSecretScreen(current.detail)
             is OnboardingGate.Onboard -> OnboardingApp(

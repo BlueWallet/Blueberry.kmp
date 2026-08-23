@@ -56,6 +56,35 @@ class PeersRuntimeTest {
     }
 
     @Test
+    fun current_receive_address_reads_secret_before_start() {
+        val db = createSqliteDatabase(":memory:")
+        saveWalletSecret(
+            db,
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        val runtime = PeersRuntime(db)
+        assertEquals("bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", currentReceiveAddress(runtime, db))
+        runtime.stop()
+        db.close()
+    }
+
+    @Test
+    fun start_exposes_wallet_when_secret_is_present() = runBlocking {
+        val db = createSqliteDatabase(":memory:")
+        saveWalletSecret(
+            db,
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        val runtime = PeersRuntime(db)
+        runtime.start()
+        val first = runtime.wallet!!.snapshot().addresses.first { !it.change && it.index == 0 }
+        assertEquals("bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", first.address)
+        assertEquals(first.address, currentReceiveAddress(runtime, db))
+        runtime.stop()
+        db.close()
+    }
+
+    @Test
     fun bindPeerSocketEvents_hydrates_and_applies() {
         val bus = createMessageBus()
         val db = createSqliteDatabase(":memory:")

@@ -36,6 +36,7 @@ import io.bluewallet.blueberry.ui.TextAction
 import io.bluewallet.blueberry.ui.StatusDivider
 import io.bluewallet.blueberry.ui.StatusList
 import io.bluewallet.blueberry.ui.StatusRow
+import io.bluewallet.blueberry.ui.PillButton
 import kotlinx.coroutines.launch
 
 @Composable
@@ -47,6 +48,7 @@ fun PeersScreen(
     blocksStore: BlocksMatchedStore,
     walletTxsStore: WalletTxsStore,
     onOpenSettings: () -> Unit,
+    onOpenReceive: () -> Unit,
 ) {
     var counts by remember { mutableStateOf(store.get()) }
     var headers by remember { mutableStateOf(headersStore.get()) }
@@ -232,6 +234,21 @@ fun PeersScreen(
                     }
                 }
             }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+        ) {
+            PillButton(
+                text = "Receive",
+                onClick = onOpenReceive,
+                modifier = Modifier.weight(1f),
+            )
+            PillButton(
+                text = "Send",
+                onClick = {},
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }

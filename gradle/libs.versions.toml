@@ -24,6 +24,7 @@ kotlin = "2.4.10"
 sqldelight = "2.3.2"
 kotlinx-coroutines = "1.11.0"
 material3 = "1.11.0-alpha07"
+qrose = "1.1.2"
 sqlite-jdbc = "3.53.2.1"
 
 [libraries]
@@ -60,6 +61,7 @@ sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", ver
 sqldelight-native-driver = { module = "app.cash.sqldelight:native-driver", version.ref = "sqldelight" }
 sqldelight-sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
+qrose = { module = "io.github.alexzhirkevich:qrose", version.ref = "qrose" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
