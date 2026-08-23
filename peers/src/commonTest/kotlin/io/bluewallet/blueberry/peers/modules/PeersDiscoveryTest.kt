@@ -48,7 +48,7 @@ class PeersDiscoveryTest {
             PeersDiscoveryOptions(
                 net = stubPlatformNet(),
                 resolveSeeds = { emptyList() },
-                probe = { _, _ ->
+                probe = { _, _, _ ->
                     gate.await()
                     ProbeResult.Err("skip")
                 },
@@ -77,7 +77,7 @@ class PeersDiscoveryTest {
             PeersDiscoveryOptions(
                 net = stubPlatformNet(),
                 resolveSeeds = { emptyList() },
-                probe = { _, _ ->
+                probe = { _, _, _ ->
                     entered.complete(Unit)
                     withContext(NonCancellable) { delay(80) }
                     finishedProbe = true
@@ -109,7 +109,7 @@ class PeersDiscoveryTest {
                     withContext(NonCancellable) { delay(5_000) }
                     emptyList()
                 },
-                probe = { _, _ -> ProbeResult.Err("skip") },
+                probe = { _, _, _ -> ProbeResult.Err("skip") },
                 concurrency = 1,
                 idleDelayMs = 50,
                 minAliveCompactFilters = 0,
@@ -142,7 +142,7 @@ class PeersDiscoveryTest {
                         PeerCandidate("10.0.0.2", 8333, 0uL),
                     )
                 },
-                probe = { _, _ -> ProbeResult.Err("skip") },
+                probe = { _, _, _ -> ProbeResult.Err("skip") },
                 concurrency = 1,
                 idleDelayMs = 50,
                 minAliveCompactFilters = 0,
@@ -173,7 +173,7 @@ class PeersDiscoveryTest {
                     dnsCalls++
                     listOf(PeerCandidate("should.not.appear", 8333, 0uL))
                 },
-                probe = { host, _ ->
+                probe = { host, _, _ ->
                     if (host == "8.8.8.8") {
                         ProbeResult.Ok(
                             peers = listOf(PeerCandidate("9.9.9.9", 8333, 1033uL)),
@@ -218,7 +218,7 @@ class PeersDiscoveryTest {
                     dnsCalls++
                     listOf(PeerCandidate("10.0.0.9", 8333, 0uL))
                 },
-                probe = { _, _ -> ProbeResult.Err("skip") },
+                probe = { _, _, _ -> ProbeResult.Err("skip") },
                 concurrency = 1,
                 idleDelayMs = 20,
                 minAliveCompactFilters = 2,
@@ -249,7 +249,7 @@ class PeersDiscoveryTest {
                     dnsCalls++
                     listOf(PeerCandidate("1.1.1.1", 8333, 0uL))
                 },
-                probe = { _, _ -> ProbeResult.Err("skip") },
+                probe = { _, _, _ -> ProbeResult.Err("skip") },
                 concurrency = 1,
                 idleDelayMs = 20,
                 minAliveCompactFilters = 2,
@@ -278,7 +278,7 @@ class PeersDiscoveryTest {
             PeersDiscoveryOptions(
                 net = stubPlatformNet(),
                 resolveSeeds = hangingSeeds(),
-                probe = { host, _ ->
+                probe = { host, _, _ ->
                     if (host == "5.5.5.5") probed = true
                     ProbeResult.Err("skip")
                 },
@@ -307,7 +307,7 @@ class PeersDiscoveryTest {
             PeersDiscoveryOptions(
                 net = stubPlatformNet(),
                 resolveSeeds = { emptyList() },
-                probe = { host, _ ->
+                probe = { host, _, _ ->
                     probed.add(host)
                     ProbeResult.Err("skip")
                 },
@@ -339,7 +339,7 @@ class PeersDiscoveryTest {
             PeersDiscoveryOptions(
                 net = stubPlatformNet(),
                 resolveSeeds = { emptyList() },
-                probe = { host, _ ->
+                probe = { host, _, _ ->
                     probed.add(host)
                     ProbeResult.Err("skip")
                 },
@@ -371,7 +371,7 @@ class PeersDiscoveryTest {
                     dnsCalls++
                     listOf(PeerCandidate("10.0.0.9", 8333, 0uL))
                 },
-                probe = { _, _ -> ProbeResult.Err("skip") },
+                probe = { _, _, _ -> ProbeResult.Err("skip") },
                 concurrency = 1,
                 idleDelayMs = 20,
                 minAliveCompactFilters = 2,
@@ -399,7 +399,7 @@ class PeersDiscoveryTest {
             PeersDiscoveryOptions(
                 net = stubPlatformNet(),
                 resolveSeeds = hangingSeeds(),
-                probe = { host, _ ->
+                probe = { host, _, _ ->
                     if (host == "2.2.2.2") probedNever = true
                     ProbeResult.Err("skip")
                 },
@@ -459,7 +459,7 @@ class PeersDiscoveryTest {
             PeersDiscoveryOptions(
                 net = stubPlatformNet(),
                 resolveSeeds = { emptyList() },
-                probe = { _, _ -> ProbeResult.Err("down") },
+                probe = { _, _, _ -> ProbeResult.Err("down") },
                 concurrency = 1,
                 idleDelayMs = 50,
                 now = { 12345 },
@@ -485,7 +485,7 @@ class PeersDiscoveryTest {
             PeersDiscoveryOptions(
                 net = stubPlatformNet(),
                 resolveSeeds = { emptyList() },
-                probe = { _, _ ->
+                probe = { _, _, _ ->
                     probes++
                     ProbeResult.Err("down")
                 },
@@ -521,7 +521,7 @@ class PeersDiscoveryTest {
             PeersDiscoveryOptions(
                 net = stubPlatformNet(),
                 resolveSeeds = { emptyList() },
-                probe = { _, _ ->
+                probe = { _, _, _ ->
                     gate.await()
                     ProbeResult.Err("down")
                 },
@@ -556,7 +556,7 @@ class PeersDiscoveryTest {
             PeersDiscoveryOptions(
                 net = stubPlatformNet(),
                 resolveSeeds = { emptyList() },
-                probe = { _, _ ->
+                probe = { _, _, _ ->
                     probes++
                     ProbeResult.Err("no")
                 },
@@ -592,7 +592,7 @@ class PeersDiscoveryTest {
             PeersDiscoveryOptions(
                 net = stubPlatformNet(),
                 resolveSeeds = { emptyList() },
-                probe = { _, _ ->
+                probe = { _, _, _ ->
                     probes++
                     ProbeResult.Err("offline")
                 },
@@ -622,7 +622,7 @@ class PeersDiscoveryTest {
             PeersDiscoveryOptions(
                 net = stubPlatformNet(),
                 resolveSeeds = { emptyList() },
-                probe = { _, _ ->
+                probe = { _, _, _ ->
                     probes++
                     ProbeResult.Err("no")
                 },
@@ -640,6 +640,156 @@ class PeersDiscoveryTest {
         db.peers.markAlive("1.1.1.1", 8333, false)
         bus.emit(Event.PeersUpdated, io.bluewallet.blueberry.bus.PeersUpdatedPayload(at = 0))
         waitFor { probes > atIdle }
+        mod.stop()
+        db.close()
+    }
+
+    @Test
+    fun only_one_crawl_probe_at_a_time_interval_gates_the_next() = runBlocking {
+        val bus = createMessageBus()
+        val db = createSqliteDatabase(":memory:")
+        db.peers.upsert(peer("1.1.1.1", alive = true))
+        db.peers.upsert(peer("2.2.2.2"))
+
+        var t = 0L
+        val flags = mutableListOf<Boolean>()
+        val flagsLock = Any()
+        fun snapshotFlags() = synchronized(flagsLock) { flags.toList() }
+        val mod = createPeersDiscoveryModule(
+            ModuleContext(bus, db),
+            PeersDiscoveryOptions(
+                net = stubPlatformNet(),
+                resolveSeeds = { emptyList() },
+                now = { t },
+                crawlIntervalMs = 15_000,
+                probeTimeoutMs = 0,
+                concurrency = 2,
+                idleDelayMs = 20,
+                minAliveCompactFilters = 0,
+                probe = { _, _, options ->
+                    synchronized(flagsLock) { flags.add(options.wantAddr) }
+                    ProbeResult.Err("skip")
+                },
+            ),
+        )
+
+        mod.start()
+        waitFor { snapshotFlags().size >= 2 }
+        assertEquals(1, snapshotFlags().count { it })
+        waitFor { snapshotFlags().size >= 3 }
+        assertEquals(1, snapshotFlags().count { it })
+        t = 15_000
+        waitFor { snapshotFlags().count { it } >= 2 }
+        mod.stop()
+        db.close()
+    }
+
+    @Test
+    fun stop_then_start_can_crawl_again() = runBlocking {
+        val bus = createMessageBus()
+        val db = createSqliteDatabase(":memory:")
+        db.peers.upsert(peer("1.1.1.1", alive = true))
+
+        val flags = mutableListOf<Boolean>()
+        val flagsLock = Any()
+        fun snapshotFlags() = synchronized(flagsLock) { flags.toList() }
+        val mod = createPeersDiscoveryModule(
+            ModuleContext(bus, db),
+            PeersDiscoveryOptions(
+                net = stubPlatformNet(),
+                resolveSeeds = { emptyList() },
+                now = { 0 },
+                crawlIntervalMs = 15_000,
+                probeTimeoutMs = 0,
+                concurrency = 1,
+                idleDelayMs = 20,
+                minAliveCompactFilters = 0,
+                probe = { _, _, options ->
+                    synchronized(flagsLock) { flags.add(options.wantAddr) }
+                    ProbeResult.Err("skip")
+                },
+            ),
+        )
+
+        mod.start()
+        waitFor { snapshotFlags().contains(true) }
+        mod.stop()
+        synchronized(flagsLock) { flags.clear() }
+        mod.start()
+        waitFor { snapshotFlags().contains(true) }
+        mod.stop()
+        db.close()
+    }
+
+    @Test
+    fun crawl_upserts_candidates_from_wantAddr_probe() = runBlocking {
+        val bus = createMessageBus()
+        val db = createSqliteDatabase(":memory:")
+        db.peers.upsert(peer("8.8.8.8", alive = true))
+
+        val mod = createPeersDiscoveryModule(
+            ModuleContext(bus, db),
+            PeersDiscoveryOptions(
+                net = stubPlatformNet(),
+                resolveSeeds = { emptyList() },
+                concurrency = 1,
+                idleDelayMs = 50,
+                minAliveCompactFilters = 0,
+                crawlIntervalMs = 15_000,
+                probe = { _, _, options ->
+                    if (options.wantAddr) {
+                        ProbeResult.Ok(
+                            peers = listOf(PeerCandidate("9.9.9.9", 8333, 1033uL)),
+                            services = 64uL,
+                        )
+                    } else {
+                        ProbeResult.Err("skip")
+                    }
+                },
+            ),
+        )
+
+        mod.start()
+        waitFor { db.peers.list().any { it.host == "9.9.9.9" } }
+        mod.stop()
+        db.close()
+    }
+
+    @Test
+    fun sync_idle_does_not_start_a_crawl() = runBlocking {
+        val bus = createMessageBus()
+        val db = createSqliteDatabase(":memory:")
+        db.peers.upsert(peer("1.1.1.1", alive = true))
+
+        var t = 0L
+        val flags = mutableListOf<Boolean>()
+        val flagsLock = Any()
+        fun snapshotFlags() = synchronized(flagsLock) { flags.toList() }
+        val mod = createPeersDiscoveryModule(
+            ModuleContext(bus, db),
+            PeersDiscoveryOptions(
+                net = stubPlatformNet(),
+                resolveSeeds = { emptyList() },
+                now = { t },
+                concurrency = 1,
+                idleDelayMs = 20,
+                probeTimeoutMs = 0,
+                minAliveCompactFilters = 0,
+                crawlIntervalMs = 15_000,
+                probe = { _, _, options ->
+                    synchronized(flagsLock) { flags.add(options.wantAddr) }
+                    ProbeResult.Ok(emptyList(), 0uL)
+                },
+            ),
+        )
+        mod.start()
+        waitFor { snapshotFlags().contains(true) }
+        val beforeIdle = snapshotFlags().size
+        bus.emit(Event.SyncIdle, SyncIdlePayload(at = 0))
+        delay(20)
+        t = 15_000
+        delay(80)
+        assertEquals(emptyList(), snapshotFlags().drop(beforeIdle).filter { it })
         mod.stop()
         db.close()
     }
