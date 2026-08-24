@@ -14,8 +14,10 @@ import androidx.compose.ui.viewinterop.UIKitView
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwType
+import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.plus
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.usePinned
 import platform.AVFoundation.AVAuthorizationStatusAuthorized
@@ -166,18 +168,10 @@ private class IosFrameDelegate(
             val stride = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0u).toInt()
             val base = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0u) ?: return
             val gray = ByteArray(width * height)
-            val src = base.reinterpret<kotlinx.cinterop.ByteVar>()
-            if (stride == width) {
-                gray.usePinned { pinned ->
-                    memcpy(pinned.addressOf(0), src, (width * height).toULong())
-                }
-            } else {
+            val src = base.reinterpret<ByteVar>()
+            gray.usePinned { pinned ->
                 for (row in 0 until height) {
-                    val dstOff = row * width
-                    val srcOff = row * stride
-                    for (col in 0 until width) {
-                        gray[dstOff + col] = src[srcOff + col]
-                    }
+                    memcpy(pinned.addressOf(row * width), src + row * stride, width.toULong())
                 }
             }
             onGrayFrame(width, height, gray)
