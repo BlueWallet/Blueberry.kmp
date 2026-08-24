@@ -24,6 +24,7 @@ import io.bluewallet.blueberry.peers.modules.PeersDiscoveryOptions
 import io.bluewallet.blueberry.peers.modules.createPeersDiscoveryModule
 import io.bluewallet.blueberry.peers.net.createPlatformNet
 import io.bluewallet.blueberry.sync.modules.createSyncIdleModule
+import io.bluewallet.blueberry.broadcast.createBroadcastModule
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.createWallet
@@ -52,6 +53,7 @@ class PeersRuntime(private val db: Database) {
     val matchingStore: MatchingProgressStore = createMatchingProgressStore()
     val blocksStore: BlocksMatchedStore = createBlocksMatchedStore()
     val walletTxsStore: WalletTxsStore = createWalletTxsStore()
+    val broadcastStore: BroadcastStore = createBroadcastStore()
     @Volatile var wallet: Wallet? = null
         private set
     private val net = createPlatformNet()
@@ -65,6 +67,7 @@ class PeersRuntime(private val db: Database) {
     private var blocks: Module? = null
     private var parseBlocks: Module? = null
     private var syncIdle: Module? = null
+    private var broadcast: Module? = null
     private var unbind: (() -> Unit)? = null
     @Volatile private var alive = true
     private var started = false
@@ -123,6 +126,7 @@ class PeersRuntime(private val db: Database) {
             null
         }
         val unbindWallet = bindWalletTxsEvents(bus, db, walletTxsStore, sharedWallet)
+        val unbindBroadcast = bindBroadcastEvents(bus, broadcastStore)
         unbind = {
             unbindPeers()
             unbindHeaders()
@@ -130,6 +134,7 @@ class PeersRuntime(private val db: Database) {
             unbindMatching()
             unbindBlocks()
             unbindWallet()
+            unbindBroadcast()
         }
         if (!alive) {
             unbind?.invoke()
@@ -277,7 +282,24 @@ class PeersRuntime(private val db: Database) {
                 )
             }
         }
+        try {
+            val broadcastModule = createBroadcastModule(ModuleContext(bus, db))
+            broadcast = broadcastModule
+            broadcastModule.start()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            bus.emit(
+                Event.ModuleStatus,
+                ModuleStatusPayload(
+                    module = "broadcast",
+                    status = ModuleStatus.ERROR,
+                    detail = e.message ?: e.toString(),
+                ),
+            )
+        }
         if (!alive) {
+            broadcast?.stop()
             matching?.stop()
             parseBlocks?.stop()
             syncIdle?.stop()
@@ -297,6 +319,8 @@ class PeersRuntime(private val db: Database) {
     private fun stopLocked() {
         alive = false
         started = false
+        broadcast?.stop()
+        broadcast = null
         matching?.stop()
         matching = null
         parseBlocks?.stop()

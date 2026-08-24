@@ -8,16 +8,27 @@ import io.bluewallet.blueberry.bus.SyncIdlePayload
 import io.bluewallet.blueberry.bus.WalletTxsPayload
 import io.bluewallet.blueberry.bus.createMessageBus
 import io.bluewallet.blueberry.parse.formatBtc
+import fr.acinq.bitcoin.OutPoint
+import fr.acinq.bitcoin.Satoshi
+import fr.acinq.bitcoin.Transaction
+import fr.acinq.bitcoin.TxHash
+import fr.acinq.bitcoin.TxIn
+import fr.acinq.bitcoin.TxOut
 import io.bluewallet.blueberry.storage.DownloadedBlock
 import io.bluewallet.blueberry.storage.HeaderWrite
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.storage.createSqliteDatabase
+import io.bluewallet.blueberry.wallet.AddressScriptType
+import io.bluewallet.blueberry.wallet.createWallet
+import io.bluewallet.blueberry.wallet.deriveWatchWallet
+import io.bluewallet.blueberry.wallet.saveWalletSecret
 import io.bluewallet.headers.BlockHeader
 import io.bluewallet.headers.encodeBlockHeader
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class WalletTxsHydrateTest {
     private fun headerAt(timestamp: Long): ByteArray = encodeBlockHeader(
@@ -99,6 +110,21 @@ class WalletTxsHydrateTest {
         val snap = snapshotFromDb(db, nowMs, nowMs)
         assertEquals("1h ago".padEnd(16), snap.txs[0].timeLabel)
         assertEquals(emptyList(), snap.utxos)
+        assertNull(snap.txs[0].paymentLabel)
+        db.close()
+    }
+
+    @Test
+    fun snapshot_includes_payment_label_by_txid() {
+        val db = createSqliteDatabase(":memory:")
+        db.transactions.upsert(
+            StoredTx("ab".repeat(32), 1, 0, "11".repeat(32), byteArrayOf(0x00), 1),
+        )
+        db.txPaymentLabels.upsert(
+            io.bluewallet.blueberry.storage.TxPaymentLabelRow("ab".repeat(32), "groceries"),
+        )
+        val snap = snapshotFromDb(db, 1, 1)
+        assertEquals("groceries", snap.txs[0].paymentLabel)
         db.close()
     }
 
@@ -155,5 +181,50 @@ class WalletTxsHydrateTest {
         assertEquals("1/2 blocks parsed", formatParseProgress(1, 2, null))
         assertEquals("1/2 blocks parsed (ETA 2s)", formatParseProgress(1, 2, 1500))
         assertEquals(formatBtc(0), emptyWalletTxsSnapshot.balanceBtcLabel)
+    }
+
+    @Test
+    fun hydrate_with_wallet_builds_utxos_after_init_hydrate_without_wallet() {
+        val db = createSqliteDatabase(":memory:")
+        val wif = "L4ccWrPMmFDZw4kzAKFqJNxgHANjdy6b7YKNXMwB4xac4FLF3Tov"
+        saveWalletSecret(db, wif)
+        val wallet = createWallet(db)
+        val recv = deriveWatchWallet(wif).addresses.first { it.scriptType == AddressScriptType.P2PKH }
+        val prevHash = ByteArray(32).also { it[0] = 42 }
+        val fund = Transaction(
+            2L,
+            listOf(TxIn(OutPoint(TxHash(prevHash), 0L), 0xffffffffL)),
+            listOf(TxOut(Satoshi(9_664L), recv.scriptPubKey)),
+            0L,
+        )
+        db.transactions.upsert(
+            StoredTx(fund.txid.toString(), 800_000, 0, "aa".repeat(32), Transaction.write(fund), 9_664L),
+        )
+        val store = createWalletTxsStore()
+        hydrateWallet(db, store, null, 1)
+        assertEquals(1, store.get().txs.size)
+        assertEquals(emptyList(), store.get().utxos)
+
+        hydrateWallet(db, store, wallet, 2)
+        assertTrue(store.get().utxos.isNotEmpty(), "second hydrate with wallet must not skip UTXO rebuild")
+        assertEquals(9_664L, store.get().utxos[0].valueSats)
+        db.close()
+    }
+
+    @Test
+    fun hydrate_with_wallet_skips_rebuild_when_utxos_are_legitimately_empty() {
+        val db = createSqliteDatabase(":memory:")
+        saveWalletSecret(db, "L4ccWrPMmFDZw4kzAKFqJNxgHANjdy6b7YKNXMwB4xac4FLF3Tov")
+        val wallet = createWallet(db)
+        val store = createWalletTxsStore()
+        hydrateWallet(db, store, null, 1)
+        assertEquals(false, store.get().utxosReady)
+        hydrateWallet(db, store, wallet, 2)
+        assertEquals(true, store.get().utxosReady)
+        assertEquals(emptyList(), store.get().utxos)
+        assertEquals(2L, store.get().at)
+        hydrateWallet(db, store, wallet, 3)
+        assertEquals(2L, store.get().at)
+        db.close()
     }
 }

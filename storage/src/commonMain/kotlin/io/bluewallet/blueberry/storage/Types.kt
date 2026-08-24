@@ -124,6 +124,14 @@ interface UtxoNamesRepository {
     fun list(): List<UtxoNameRow>
 }
 
+data class TxPaymentLabelRow(val txid: String, val label: String)
+
+interface TxPaymentLabelsRepository {
+    fun get(txid: String): TxPaymentLabelRow?
+    fun upsert(row: TxPaymentLabelRow)
+    fun list(): List<TxPaymentLabelRow>
+}
+
 data class MatchedBlock(val height: Int, val blockHashInternalHex: String)
 data class DownloadedBlock(val height: Int, val blockHashInternalHex: String, val block: ByteArray)
 
@@ -185,6 +193,7 @@ interface Database {
     val transactions: TransactionsRepository
     val keyValue: KeyValueRepository
     val utxoNames: UtxoNamesRepository
+    val txPaymentLabels: TxPaymentLabelsRepository
     fun transaction(fn: () -> Unit)
     fun rewindAfter(ancestorHeight: Int)
     fun wipeFiltersFrom(height: Int, options: WipeFiltersFromOptions? = null)

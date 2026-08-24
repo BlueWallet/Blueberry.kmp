@@ -66,6 +66,11 @@ CREATE TABLE utxo_names (
   name TEXT NOT NULL
 );
 
+CREATE TABLE tx_payment_labels (
+  txid TEXT PRIMARY KEY,
+  label TEXT NOT NULL
+);
+
 CREATE INDEX headers_hash_internal_hex
   ON headers(hash_internal_hex);
 CREATE INDEX filters_height_hash

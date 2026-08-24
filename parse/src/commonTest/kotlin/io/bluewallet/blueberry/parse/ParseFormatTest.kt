@@ -74,4 +74,14 @@ class ParseFormatTest {
         assertEquals("", utxoValueBar(1, 0))
         assertEquals("▏" + "░".repeat(29), utxoValueBar(1, 1_000_000))
     }
+
+    @Test
+    fun utxoValuePercent_scales_to_100_and_keeps_dust_visible() {
+        assertEquals(100, utxoValuePercent(100, 100))
+        assertEquals(50, utxoValuePercent(50, 100))
+        assertEquals(33, utxoValuePercent(1, 3))
+        assertEquals(0, utxoValuePercent(0, 100))
+        assertEquals(0, utxoValuePercent(1, 0))
+        assertEquals(1, utxoValuePercent(1, 1_000_000))
+    }
 }

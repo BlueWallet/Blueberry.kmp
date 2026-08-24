@@ -48,6 +48,18 @@ internal class SqliteDatabase(
                 .map { UtxoNameRow(it.outpoint, it.name) }
     }
 
+    override val txPaymentLabels = object : TxPaymentLabelsRepository {
+        override fun get(txid: String): TxPaymentLabelRow? =
+            storageDb.txPaymentLabelsQueries.get(txid).executeAsOneOrNull()
+                ?.let { TxPaymentLabelRow(it.txid, it.label) }
+        override fun upsert(row: TxPaymentLabelRow) {
+            storageDb.txPaymentLabelsQueries.upsert(row.txid, row.label)
+        }
+        override fun list(): List<TxPaymentLabelRow> =
+            storageDb.txPaymentLabelsQueries.list().executeAsList()
+                .map { TxPaymentLabelRow(it.txid, it.label) }
+    }
+
     override val peers = object : PeersRepository {
         override fun upsert(peer: PeerWrite) {
             val now = currentTimeMillis()

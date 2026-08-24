@@ -29,6 +29,13 @@ fun utxoValueBar(value: Long, maxValue: Long, width: Int = 30): String {
     return head + "░".repeat(maxOf(0, width - used))
 }
 
+/** 0..100 relative fill; any positive dust stays at least 1%. */
+fun utxoValuePercent(value: Long, maxValue: Long): Int {
+    if (value <= 0L || maxValue <= 0L) return 0
+    if (value >= maxValue) return 100
+    return ((value * 100.0) / maxValue).toInt().coerceIn(1, 99)
+}
+
 data class BtcParts(
     val sign: String,
     val whole: String,

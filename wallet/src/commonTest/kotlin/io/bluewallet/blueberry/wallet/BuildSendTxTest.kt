@@ -61,6 +61,9 @@ class BuildSendTxTest {
         assertTrue(tx.txOut.any { it.publicKeyScript.toByteArray().contentEquals(internalScript) })
         val destOut = tx.txOut.first { it.publicKeyScript.toByteArray().contentEquals(externalScript) }
         assertEquals(amountSats, destOut.amount.toLong())
+        assertEquals(tx.txid.toString(), result.txid)
+        val changeIndex = tx.txOut.indexOfFirst { it.publicKeyScript.toByteArray().contentEquals(internalScript) }
+        assertEquals(listOf(changeIndex), result.changeVouts)
     }
 
     @Test
@@ -93,9 +96,11 @@ class BuildSendTxTest {
         )
 
         assertEquals(0L, result.changeSats)
+        assertEquals(emptyList(), result.changeVouts)
         assertEquals(ceil(feeRate * result.vsize).toLong(), result.feeSats)
 
         val tx = parseSigned(result.txHex)
+        assertEquals(tx.txid.toString(), result.txid)
         assertEquals(1, tx.txIn.size)
         assertEquals(1, tx.txOut.size)
         val externalScript = outputScriptOf(BLUE_EXTERNAL_1)
@@ -178,6 +183,9 @@ class BuildSendTxTest {
             assertTrue(amounts.contains(amountSats))
             assertEquals(utxo.valueSats - amountSats - result.feeSats, result.changeSats)
             assertEquals(ceil(feeRate * result.vsize).toLong(), result.feeSats)
+            assertEquals(1, result.changeVouts.size)
+            assertEquals(result.changeSats, tx.txOut[result.changeVouts[0]].amount.toLong())
+            assertTrue(tx.txOut[result.changeVouts[0]].amount.toLong() != amountSats)
         }
     }
 
@@ -247,6 +255,8 @@ class BuildSendTxTest {
         val psbtResult = result as PsbtSendResult
         assertTrue(psbtResult.psbtHex.startsWith("70736274ff"))
         assertTrue(psbtResult.changeSats > 0L)
+        assertEquals(listOf(1), psbtResult.changeVouts)
+        assertTrue(psbtResult.txid.isNotEmpty())
 
         val direct = buildUnsignedSendPsbt(zpubParams)
         assertEquals(direct.psbtHex, psbtResult.psbtHex)
@@ -285,6 +295,7 @@ class BuildSendTxTest {
 
         val psbtResult = result as PsbtSendResult
         assertEquals(0L, psbtResult.changeSats)
+        assertEquals(emptyList(), psbtResult.changeVouts)
 
         val psbt = (Psbt.read(hexToBytes(psbtResult.psbtHex)).right ?: error("failed to parse psbt"))
         assertEquals(1, psbt.global.tx.txIn.size)

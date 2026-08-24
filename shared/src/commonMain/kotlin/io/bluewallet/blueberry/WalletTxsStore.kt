@@ -52,6 +52,7 @@ data class WalletTxsSnapshot(
     val etaMs: Long? = null,
     val txs: List<WalletTxRow> = emptyList(),
     val utxos: List<WalletUtxoRow> = emptyList(),
+    val utxosReady: Boolean = false,
 )
 
 interface WalletTxsStore {
@@ -147,6 +148,7 @@ fun snapshotFromDb(
     val stored = db.transactions.list()
     val balanceSats = stored.fold(0L) { s, t -> s + t.netDeltaSats }
     val timeLabels = mutableMapOf<Int, String>()
+    val labelByTxid = db.txPaymentLabels.list().associate { it.txid to it.label }
 
     var utxos = emptyList<WalletUtxoRow>()
     if (wallet != null) {
@@ -198,10 +200,11 @@ fun snapshotFromDb(
                 timeLabel = timeLabelForHeight(db, tx.height, nowMs, timeLabels),
                 netDeltaSats = tx.netDeltaSats,
                 netDeltaLabel = formatNetDelta(tx.netDeltaSats),
-                paymentLabel = null,
+                paymentLabel = labelByTxid[tx.txid],
             )
         },
         utxos = utxos,
+        utxosReady = wallet != null,
     )
 }
 
@@ -349,7 +352,9 @@ fun hydrateWallet(
 ) {
     val parsed = db.parsedBlocks.count()
     val total = db.blocks.count()
-    if (txSetUnchanged(db, store.get())) {
+    val snap = store.get()
+    val missingUtxos = wallet != null && !snap.utxosReady
+    if (txSetUnchanged(db, snap) && !missingUtxos) {
         store.setBlockCounts(parsed, total, at)
         return
     }

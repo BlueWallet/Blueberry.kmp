@@ -13,6 +13,16 @@ internal fun applySchema(driver: SqlDriver) {
     if (!exists) {
         StorageDb.Schema.create(driver)
     }
+    driver.execute(
+        identifier = null,
+        sql = """
+            CREATE TABLE IF NOT EXISTS tx_payment_labels (
+              txid TEXT PRIMARY KEY,
+              label TEXT NOT NULL
+            )
+        """.trimIndent(),
+        parameters = 0,
+    )
 }
 
 internal expect fun applyPragmas(driver: SqlDriver)

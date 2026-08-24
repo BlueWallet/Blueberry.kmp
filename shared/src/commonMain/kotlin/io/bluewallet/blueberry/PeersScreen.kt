@@ -60,6 +60,7 @@ fun PeersScreen(
     walletTxsStore: WalletTxsStore,
     onOpenSettings: () -> Unit,
     onOpenReceive: () -> Unit,
+    onOpenSend: () -> Unit,
 ) {
     var counts by remember { mutableStateOf(store.get()) }
     var headers by remember { mutableStateOf(headersStore.get()) }
@@ -259,7 +260,7 @@ fun PeersScreen(
                         if (index > 0) StatusDivider()
                         StatusRow(
                             label = tx.timeLabel,
-                            secondary = tx.shortTxid,
+                            secondary = tx.paymentLabel?.let { "${tx.shortTxid}  $it" } ?: tx.shortTxid,
                             value = tx.netDeltaLabel,
                             valueColor = if (incoming) BwColors.Success else BwColors.Danger,
                             dotColor = if (incoming) BwColors.Success else BwColors.Danger,
@@ -286,7 +287,7 @@ fun PeersScreen(
             )
             PillButton(
                 text = "Send",
-                onClick = {},
+                onClick = onOpenSend,
                 modifier = Modifier.weight(1f),
             )
         }

@@ -24,6 +24,7 @@ class SchemaTest {
                     "parsed_blocks",
                     "peers",
                     "transactions",
+                    "tx_payment_labels",
                     "utxo_names",
                 ),
                 tableNames(driver),
@@ -63,6 +64,7 @@ class SchemaTest {
             )
             assertEquals(listOf("key", "value"), columnNames(driver, "key_value"))
             assertEquals(listOf("outpoint", "name"), columnNames(driver, "utxo_names"))
+            assertEquals(listOf("txid", "label"), columnNames(driver, "tx_payment_labels"))
             assertEquals(
                 listOf("height", "block_hash_internal_hex"),
                 indexColumns(driver, "filters_height_hash"),
@@ -75,6 +77,34 @@ class SchemaTest {
                 listOf("alive", "used_for_blocks"),
                 indexColumns(driver, "peers_alive_used"),
             )
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun applySchema_adds_tx_payment_labels_to_existing_db() {
+        val driver = openSqliteDriver(":memory:")
+        try {
+            driver.execute(
+                identifier = null,
+                sql = """
+                    CREATE TABLE peers (
+                      host TEXT NOT NULL,
+                      port INTEGER NOT NULL,
+                      services INTEGER NOT NULL DEFAULT 0,
+                      alive INTEGER NOT NULL DEFAULT 0,
+                      used_for_blocks INTEGER NOT NULL DEFAULT 0,
+                      last_probed_at INTEGER,
+                      created_at INTEGER NOT NULL,
+                      updated_at INTEGER NOT NULL,
+                      PRIMARY KEY (host, port)
+                    )
+                """.trimIndent(),
+                parameters = 0,
+            )
+            applySchema(driver)
+            assertEquals(listOf("txid", "label"), columnNames(driver, "tx_payment_labels"))
         } finally {
             driver.close()
         }
@@ -183,6 +213,12 @@ private val helix3TableSql = mapOf(
         CREATE TABLE utxo_names (
           outpoint TEXT PRIMARY KEY,
           name TEXT NOT NULL
+        )
+    """.trimIndent(),
+    "tx_payment_labels" to """
+        CREATE TABLE tx_payment_labels (
+          txid TEXT PRIMARY KEY,
+          label TEXT NOT NULL
         )
     """.trimIndent(),
 )

@@ -51,33 +51,41 @@ data class BuildSendTxParams(
 data class BuildSendTxResult(
     val kind: String = "signed",
     val txHex: String,
+    val txid: String,
     val feeSats: Long,
     val vsize: Int,
     val changeSats: Long,
+    val changeVouts: List<Int>,
 )
 
 data class BuildSendPsbtResult(
     val kind: String = "psbt",
     val psbtHex: String,
+    val txid: String,
     val feeSats: Long,
     val vsize: Int,
     val changeSats: Long,
+    val changeVouts: List<Int>,
 )
 
 sealed class BuildSendResult
 
 data class SignedSendResult(
     val txHex: String,
+    val txid: String,
     val feeSats: Long,
     val vsize: Int,
     val changeSats: Long,
+    val changeVouts: List<Int>,
 ) : BuildSendResult()
 
 data class PsbtSendResult(
     val psbtHex: String,
+    val txid: String,
     val feeSats: Long,
     val vsize: Int,
     val changeSats: Long,
+    val changeVouts: List<Int>,
 ) : BuildSendResult()
 
 // Matches the legacy-sized dust threshold BlueWallet/helix3 use: (inputsDust + outputDust) * 3 sat/vB.
@@ -255,7 +263,27 @@ private data class DraftSendTx(
     val vsize: Int,
     val feeSats: Long,
     val changeSats: Long,
+    val changeVouts: List<Int>,
 )
+
+internal fun changeOutputVouts(
+    tx: Transaction,
+    changeAddress: String,
+    toAddress: String,
+    paymentAmount: SendAmount,
+): List<Int> {
+    if (paymentAmount is SendAmount.Max) return emptyList()
+    val amount = (paymentAmount as SendAmount.Exact).sats
+    val changeScript = outputScriptFromAddress(changeAddress)
+    val destIsChange = addressesEqual(toAddress, changeAddress)
+    val vouts = mutableListOf<Int>()
+    tx.txOut.forEachIndexed { index, out ->
+        if (!out.publicKeyScript.toByteArray().contentEquals(changeScript)) return@forEachIndexed
+        if (destIsChange && out.amount.toLong() == amount) return@forEachIndexed
+        vouts.add(index)
+    }
+    return vouts
+}
 
 /**
  * Shared draft transaction builder for signed sends and unsigned PSBTs. All caller UTXOs are spent
@@ -415,6 +443,7 @@ private fun buildDraftSendTx(params: BuildSendTxParams): DraftSendTx {
         vsize = selectedVsize,
         feeSats = feeSats,
         changeSats = changeSats,
+        changeVouts = changeOutputVouts(unsignedTx, params.changeAddress, params.toAddress, params.amountSats),
     )
 }
 
@@ -467,9 +496,11 @@ fun buildSignedSendTx(params: BuildSendTxParams): BuildSendTxResult {
 
     return BuildSendTxResult(
         txHex = hexFromBytes(Transaction.write(signedTx)),
+        txid = signedTx.txid.toString(),
         feeSats = draft.feeSats,
         vsize = ceilDiv4(signedTx.weight()),
         changeSats = draft.changeSats,
+        changeVouts = draft.changeVouts,
     )
 }
 
@@ -522,9 +553,11 @@ fun buildUnsignedSendPsbt(params: BuildSendTxParams): BuildSendPsbtResult {
 
     return BuildSendPsbtResult(
         psbtHex = hexFromBytes(Psbt.write(psbt).toByteArray()),
+        txid = draft.unsignedTx.txid.toString(),
         feeSats = draft.feeSats,
         vsize = draft.vsize,
         changeSats = draft.changeSats,
+        changeVouts = draft.changeVouts,
     )
 }
 
@@ -538,9 +571,11 @@ fun buildSend(params: BuildSendTxParams): BuildSendResult {
         val result = buildSignedSendTx(params)
         return SignedSendResult(
             txHex = result.txHex,
+            txid = result.txid,
             feeSats = result.feeSats,
             vsize = result.vsize,
             changeSats = result.changeSats,
+            changeVouts = result.changeVouts,
         )
     }
 
@@ -554,8 +589,10 @@ fun buildSend(params: BuildSendTxParams): BuildSendResult {
     val result = buildUnsignedSendPsbt(effectiveParams)
     return PsbtSendResult(
         psbtHex = result.psbtHex,
+        txid = result.txid,
         feeSats = result.feeSats,
         vsize = result.vsize,
         changeSats = result.changeSats,
+        changeVouts = result.changeVouts,
     )
 }
