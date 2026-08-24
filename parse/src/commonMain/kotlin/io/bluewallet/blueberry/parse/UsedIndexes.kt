@@ -22,8 +22,8 @@ fun usedWatchIndexes(
         scriptToIndex[scriptHex(addr.scriptPubKey)] = addr.change to addr.index
     }
 
-    val externalUsed = sortedSetOf<Int>()
-    val internalUsed = sortedSetOf<Int>()
+    val externalUsed = mutableSetOf<Int>()
+    val internalUsed = mutableSetOf<Int>()
 
     fun markUsed(change: Boolean, index: Int) {
         if (change) internalUsed.add(index) else externalUsed.add(index)
@@ -57,8 +57,8 @@ fun usedWatchIndexes(
     }
 
     return UsedWatchIndexes(
-        external = externalUsed.toList(),
-        internal = internalUsed.toList(),
+        external = externalUsed.sorted(),
+        internal = internalUsed.sorted(),
     )
 }
 

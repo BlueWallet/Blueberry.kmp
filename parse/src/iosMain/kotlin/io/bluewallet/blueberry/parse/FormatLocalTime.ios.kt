@@ -10,8 +10,11 @@ import platform.Foundation.NSDate
 
 private fun pad2(n: Int): String = n.toString().padStart(2, '0')
 
+/** Seconds from Unix epoch to Apple's 2001-01-01 reference date. */
+private const val APPLE_EPOCH_OFFSET = 978307200.0
+
 internal actual fun formatLocalYmdHm(unixSeconds: Long): String {
-    val date = NSDate.dateWithTimeIntervalSince1970(unixSeconds.toDouble())
+    val date = NSDate(timeIntervalSinceReferenceDate = unixSeconds.toDouble() - APPLE_EPOCH_OFFSET)
     val cal = NSCalendar.currentCalendar
     val units = NSCalendarUnitYear or NSCalendarUnitMonth or NSCalendarUnitDay or
         NSCalendarUnitHour or NSCalendarUnitMinute
