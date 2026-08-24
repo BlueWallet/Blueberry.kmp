@@ -6,6 +6,8 @@ import io.bluewallet.bip324.Networks
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.echalote.Echalote
 import io.bluewallet.headers.MAINNET_HEADER_CONSENSUS
+import qr.ImageTooSmallException
+import qr.QRDecoder
 import kotlin.random.Random
 
 fun vendorLibraryStatus(): List<String> = listOf(
@@ -34,6 +36,14 @@ fun vendorLibraryStatus(): List<String> = listOf(
             "storage: kv ok"
         } finally {
             db.close()
+        }
+    },
+    vendorStatusLine("qr") {
+        try {
+            QRDecoder.decode(10, 10, ByteArray(400) { 255.toByte() })
+            throw Exception("expected too-small")
+        } catch (_: ImageTooSmallException) {
+            "qr: ImageTooSmallException"
         }
     },
 )

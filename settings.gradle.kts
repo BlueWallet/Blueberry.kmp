@@ -75,6 +75,7 @@ includeVendorBuild("bip324.kmp", "io.bluewallet:bip324", ":bip324")
 includeVendorBuild("bip157.kmp", "io.bluewallet:bip157", ":bip157")
 includeVendorBuild("bip158.kmp", "io.bluewallet:bip158", ":bip158")
 includeVendorBuild("echalote.kmp", "io.bluewallet:echalote", ":echalote")
+includeVendorBuild("qr.kmp", "io.bluewallet:qr", ":qr")
 
 include(":androidApp")
 include(":desktopApp")

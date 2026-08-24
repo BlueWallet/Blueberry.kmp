@@ -52,6 +52,15 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.compose.uiTooling)
+            implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.core.ktx)
+            implementation(libs.androidx.camera.camera2)
+            implementation(libs.androidx.camera.lifecycle)
+            implementation(libs.androidx.camera.view)
+        }
+        jvmMain.dependencies {
+            implementation(libs.webcam.capture)
+            implementation(libs.slf4j.nop)
         }
         commonMain.dependencies {
             implementation(project(":storage"))
@@ -78,6 +87,8 @@ kotlin {
             implementation(libs.bip157)
             implementation(libs.bip158)
             implementation(libs.echalote)
+            implementation(libs.qr)
+            implementation(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

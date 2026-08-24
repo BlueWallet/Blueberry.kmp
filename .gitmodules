@@ -13,3 +13,6 @@
 [submodule "vendor/echalote.kmp"]
 	path = vendor/echalote.kmp
 	url = https://github.com/GladosBlueWallet/echalote.kmp.git
+[submodule "vendor/qr.kmp"]
+	path = vendor/qr.kmp
+	url = https://github.com/GladosBlueWallet/qr.kmp.git

@@ -19,8 +19,9 @@ class VendorLibrariesTest {
             ),
             lines.take(5),
         )
-        assertEquals(6, lines.size)
+        assertEquals(7, lines.size)
         assertTrue(lines[5].startsWith("storage:"), lines[5])
+        assertEquals("qr: ImageTooSmallException", lines[6])
     }
 
     @Test

@@ -78,6 +78,7 @@ fun SendScreen(
     var feeRate by remember { mutableStateOf("") }
     var feeError by remember { mutableStateOf<String?>(null) }
     var cancelArmedForId by remember { mutableStateOf<String?>(null) }
+    var scanning by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     DisposableEffect(runtime.walletTxsStore) {
         val off = runtime.walletTxsStore.subscribe { scope.launch { snap = runtime.walletTxsStore.get() } }
@@ -110,6 +111,10 @@ fun SendScreen(
         }
         if (renameKey != null) {
             renameKey = null
+            return
+        }
+        if (scanning) {
+            scanning = false
             return
         }
         when (step) {
@@ -170,26 +175,38 @@ fun SendScreen(
                     if (selectedKeys.isNotEmpty()) step = SendStep.Details
                 },
             )
-            SendStep.Details -> DetailsStep(
-                selectedSum = selectedSum,
-                address = address,
-                amount = amount,
-                label = label,
-                invalid = invalidField,
-                onAddress = { address = it; if (invalidField == SendField.Address) invalidField = null },
-                onAmount = { amount = it; if (invalidField == SendField.Amount) invalidField = null },
-                onLabel = { label = it; if (invalidField == SendField.Label) invalidField = null },
-                onContinue = {
-                    when (val result = validateSendDetails(address, amount, label, selectedSum)) {
-                        is SendDetailsValidation.Ok -> {
-                            details = result.details
-                            invalidField = null
-                            step = SendStep.FeeRate
+            SendStep.Details -> if (scanning) {
+                QrScanOverlay(
+                    modifier = Modifier.weight(1f),
+                    onResult = { payload ->
+                        address = payload
+                        if (invalidField == SendField.Address) invalidField = null
+                        scanning = false
+                    },
+                )
+            } else {
+                DetailsStep(
+                    selectedSum = selectedSum,
+                    address = address,
+                    amount = amount,
+                    label = label,
+                    invalid = invalidField,
+                    onAddress = { address = it; if (invalidField == SendField.Address) invalidField = null },
+                    onAmount = { amount = it; if (invalidField == SendField.Amount) invalidField = null },
+                    onLabel = { label = it; if (invalidField == SendField.Label) invalidField = null },
+                    onScan = { scanning = true },
+                    onContinue = {
+                        when (val result = validateSendDetails(address, amount, label, selectedSum)) {
+                            is SendDetailsValidation.Ok -> {
+                                details = result.details
+                                invalidField = null
+                                step = SendStep.FeeRate
+                            }
+                            is SendDetailsValidation.Invalid -> invalidField = result.field
                         }
-                        is SendDetailsValidation.Invalid -> invalidField = result.field
-                    }
-                },
-            )
+                    },
+                )
+            }
             SendStep.FeeRate -> FeeRateStep(
                 feeRate = feeRate,
                 error = feeError,
@@ -360,6 +377,7 @@ private fun DetailsStep(
     onAddress: (String) -> Unit,
     onAmount: (String) -> Unit,
     onLabel: (String) -> Unit,
+    onScan: () -> Unit,
     onContinue: () -> Unit,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
@@ -374,6 +392,15 @@ private fun DetailsStep(
         isError = invalid == SendField.Address,
         label = { Text("Address") },
         placeholder = { Text("bc1…") },
+        trailingIcon = {
+            Text(
+                text = "Scan",
+                color = BwColors.Link,
+                fontFamily = BwFontFamily,
+                fontSize = BwType.CaptionSize,
+                modifier = Modifier.clickable(onClick = onScan),
+            )
+        },
     )
     OutlinedTextField(
         value = amount,
