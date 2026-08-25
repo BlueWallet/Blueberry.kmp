@@ -12,6 +12,7 @@ import io.bluewallet.blueberry.boot.OnboardingGate
 import io.bluewallet.blueberry.boot.deleteSqliteDatabaseFiles
 import io.bluewallet.blueberry.boot.inspectSyncFromYear
 import io.bluewallet.blueberry.boot.resolveOnboardingGate
+import io.bluewallet.blueberry.boot.saveHomeDetailedSync
 import io.bluewallet.blueberry.onboarding.DatabaseOpenErrorScreen
 import io.bluewallet.blueberry.onboarding.InvalidSecretScreen
 import io.bluewallet.blueberry.onboarding.OnboardingApp
@@ -113,6 +114,7 @@ fun App(databasePath: String) {
         }
         when (val current = gate) {
             is OnboardingGate.Start -> PeersScreen(
+                db = db,
                 store = checkNotNull(runtime).store,
                 headersStore = checkNotNull(runtime).headersStore,
                 filtersStore = checkNotNull(runtime).filtersStore,
@@ -122,6 +124,9 @@ fun App(databasePath: String) {
                 onOpenSettings = { showSettings = true },
                 onOpenReceive = { showReceive = true },
                 onOpenSend = { showSend = true },
+                onDetailedSyncChange = { value ->
+                    scope.launch(Dispatchers.Default) { saveHomeDetailedSync(db, value) }
+                },
             )
             is OnboardingGate.ExitInvalid -> InvalidSecretScreen(current.detail)
             is OnboardingGate.Onboard -> OnboardingApp(

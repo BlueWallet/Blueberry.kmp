@@ -34,6 +34,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import io.bluewallet.blueberry.boot.loadHomeDetailedSync
+import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
@@ -52,6 +54,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun PeersScreen(
+    db: Database,
     store: PeerSocketsStore,
     headersStore: HeadersProgressStore,
     filtersStore: FiltersProgressStore,
@@ -61,6 +64,7 @@ fun PeersScreen(
     onOpenSettings: () -> Unit,
     onOpenReceive: () -> Unit,
     onOpenSend: () -> Unit,
+    onDetailedSyncChange: (Boolean) -> Unit,
 ) {
     var counts by remember { mutableStateOf(store.get()) }
     var headers by remember { mutableStateOf(headersStore.get()) }
@@ -68,11 +72,15 @@ fun PeersScreen(
     var matching by remember { mutableStateOf(matchingStore.get()) }
     var blocks by remember { mutableStateOf(blocksStore.get()) }
     var walletTxs by remember { mutableStateOf(walletTxsStore.get()) }
-    var detailedSync by remember { mutableStateOf(true) }
+    var detailedSync by remember(db) { mutableStateOf(loadHomeDetailedSync(db)) }
     val uiScope = rememberCoroutineScope()
+    fun setDetailedSync(value: Boolean) {
+        detailedSync = value
+        onDetailedSyncChange(value)
+    }
     val hideDetailedSync = Modifier
         .clip(RoundedCornerShape(BwSpace.Radius))
-        .clickable { detailedSync = false }
+        .clickable { setDetailedSync(false) }
     DisposableEffect(store) {
         val off = store.subscribe {
             uiScope.launch { counts = store.get() }
@@ -222,7 +230,7 @@ fun PeersScreen(
                         matching.percent,
                         blocks.percent,
                     ),
-                    modifier = Modifier.clickable { detailedSync = true },
+                    modifier = Modifier.clickable { setDetailedSync(true) },
                 )
             }
         }
