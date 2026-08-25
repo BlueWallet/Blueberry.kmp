@@ -21,7 +21,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import io.bluewallet.blueberry.QrScanOverlay
 import io.bluewallet.blueberry.boot.listCheckpointYears
+import io.bluewallet.blueberry.ui.BwColors
+import io.bluewallet.blueberry.ui.BwFontFamily
+import io.bluewallet.blueberry.ui.BwType
 
 @Composable
 fun OnboardingApp(
@@ -34,6 +38,7 @@ fun OnboardingApp(
     var state by remember(startAtYearStep) {
         mutableStateOf(initialOnboardingState(startAtYearStep))
     }
+    var scanning by remember { mutableStateOf(false) }
 
     fun dispatch(event: OnboardingEvent) {
         val reduction = reduceOnboarding(state, event)
@@ -102,25 +107,52 @@ fun OnboardingApp(
             }
             OnboardingStep.Import -> {
                 Text("Import")
-                Text("Enter BIP39 seed, account zpub, WIF private key, or address")
-                OutlinedTextField(
-                    value = state.importValue,
-                    onValueChange = { dispatch(OnboardingEvent.ImportChanged(it)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !state.busy,
-                    singleLine = true,
-                    placeholder = { Text("seed words, zpub, WIF, or address…") },
-                )
-                Text(state.error ?: "")
+                if (scanning) {
+                    QrScanOverlay(
+                        modifier = Modifier.weight(1f),
+                        onResult = { payload ->
+                            dispatch(OnboardingEvent.ImportChanged(payload))
+                            scanning = false
+                        },
+                    )
+                } else {
+                    Text("Enter BIP39 seed, account zpub, WIF private key, or address")
+                    OutlinedTextField(
+                        value = state.importValue,
+                        onValueChange = { dispatch(OnboardingEvent.ImportChanged(it)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !state.busy,
+                        singleLine = true,
+                        placeholder = { Text("seed words, zpub, WIF, or address…") },
+                        trailingIcon = {
+                            Text(
+                                text = "Scan",
+                                color = BwColors.Link,
+                                fontFamily = BwFontFamily,
+                                fontSize = BwType.CaptionSize,
+                                modifier = Modifier.clickable(
+                                    enabled = !state.busy,
+                                    onClick = { scanning = true },
+                                ),
+                            )
+                        },
+                    )
+                    Text(state.error ?: "")
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(
-                        onClick = { dispatch(OnboardingEvent.Back) },
+                        onClick = {
+                            if (scanning) scanning = false
+                            else dispatch(OnboardingEvent.Back)
+                        },
                         enabled = !state.busy,
                     ) { Text("Back") }
-                    Button(
-                        onClick = { dispatch(OnboardingEvent.SubmitImport) },
-                        enabled = !state.busy,
-                    ) { Text("Continue") }
+                    if (!scanning) {
+                        Button(
+                            onClick = { dispatch(OnboardingEvent.SubmitImport) },
+                            enabled = !state.busy,
+                        ) { Text("Continue") }
+                    }
                 }
             }
             OnboardingStep.Create -> {
