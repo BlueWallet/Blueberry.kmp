@@ -10,47 +10,49 @@ import qr.ImageTooSmallException
 import qr.QRDecoder
 import kotlin.random.Random
 
-fun vendorLibraryStatus(): List<String> = listOf(
-    vendorStatusLine("headers") {
-        "headers: checkpoint ${MAINNET_HEADER_CONSENSUS.checkpoint.height}"
-    },
-    vendorStatusLine("bip324") {
-        "bip324: mainnet port ${Networks.mainnet.defaultPort}"
-    },
-    vendorStatusLine("bip157") {
-        "bip157: NODE_COMPACT_FILTERS $NODE_COMPACT_FILTERS"
-    },
-    vendorStatusLine("bip158") {
-        "bip158: hex 00 size ${hexToBytes("00").size}"
-    },
-    vendorStatusLine("echalote") {
-        "echalote: meek ${Echalote.DEFAULT_MEEK_URL}"
-    },
-    vendorStatusLine("storage") {
-        val db = createSqliteDatabase(":memory:")
-        try {
-            val value = Random.nextInt().toString()
-            db.keyValue.set("click", value)
-            val got = db.keyValue.get("click")
-            if (got != value) throw Exception("mismatch")
-            "storage: kv ok"
-        } finally {
-            db.close()
-        }
-    },
-    vendorStatusLine("qr") {
-        try {
-            QRDecoder.decode(10, 10, ByteArray(400) { 255.toByte() })
-            throw Exception("expected too-small")
-        } catch (_: ImageTooSmallException) {
-            "qr: ImageTooSmallException"
-        }
-    },
-)
+fun vendorLibraryStatus(): List<String> {
+    val errors = listOfNotNull(
+        vendorStatusLine("headers") {
+            MAINNET_HEADER_CONSENSUS.checkpoint.height
+        },
+        vendorStatusLine("bip324") {
+            Networks.mainnet.defaultPort
+        },
+        vendorStatusLine("bip157") {
+            NODE_COMPACT_FILTERS
+        },
+        vendorStatusLine("bip158") {
+            hexToBytes("00")
+        },
+        vendorStatusLine("echalote") {
+            Echalote.DEFAULT_MEEK_URL
+        },
+        vendorStatusLine("storage") {
+            val db = createSqliteDatabase(":memory:")
+            try {
+                val value = Random.nextInt().toString()
+                db.keyValue.set("click", value)
+                val got = db.keyValue.get("click")
+                if (got != value) throw Exception("mismatch")
+            } finally {
+                db.close()
+            }
+        },
+        vendorStatusLine("qr") {
+            try {
+                QRDecoder.decode(10, 10, ByteArray(400) { 255.toByte() })
+                throw Exception("expected too-small")
+            } catch (_: ImageTooSmallException) {
+            }
+        },
+    )
+    return if (errors.isEmpty()) listOf("ok") else errors
+}
 
-internal fun vendorStatusLine(name: String, block: () -> String): String =
+internal fun vendorStatusLine(name: String, block: () -> Unit): String? =
     try {
         block()
+        null
     } catch (error: Exception) {
-        "$name: error ${error.message}"
+        "$name: ${error.message ?: error.toString()}"
     }

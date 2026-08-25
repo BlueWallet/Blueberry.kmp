@@ -21,6 +21,7 @@ import io.bluewallet.blueberry.ui.PillButton
 
 @Composable
 fun SettingsScreen(
+    databaseSize: String,
     onClearStorage: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -48,19 +49,12 @@ fun SettingsScreen(
         }
         MetricCard(
             label = "Storage",
-            value = "Clear",
+            value = databaseSize,
             caption = "Deletes the local database and restarts onboarding",
             modifier = Modifier.fillMaxWidth(),
             trailing = {
                 PillButton(text = "Clear", onClick = onClearStorage)
             },
-        )
-        Text(
-            text = "Self-diagnostics",
-            color = BwColors.InkSecondary,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.LabelSize,
-            fontWeight = BwType.Label,
         )
         ClickMeContent()
     }

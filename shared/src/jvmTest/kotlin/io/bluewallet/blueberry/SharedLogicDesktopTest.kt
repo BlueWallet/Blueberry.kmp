@@ -12,6 +12,6 @@ class SharedLogicDesktopTest {
 
     @Test
     fun vendorLibraryStatus_storage_kv_is_ok() {
-        assertEquals("storage: kv ok", vendorLibraryStatus()[5])
+        assertEquals(listOf("ok"), vendorLibraryStatus())
     }
 }

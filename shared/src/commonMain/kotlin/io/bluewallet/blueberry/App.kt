@@ -10,6 +10,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
 import io.bluewallet.blueberry.boot.OnboardingGate
 import io.bluewallet.blueberry.boot.deleteSqliteDatabaseFiles
+import io.bluewallet.blueberry.boot.formatDatabaseGigabytes
+import io.bluewallet.blueberry.boot.sqliteDatabaseBytes
 import io.bluewallet.blueberry.boot.inspectSyncFromYear
 import io.bluewallet.blueberry.boot.resolveOnboardingGate
 import io.bluewallet.blueberry.boot.saveHomeDetailedSync
@@ -94,6 +96,9 @@ fun App(databasePath: String) {
         }
         if (showSettings) {
             SettingsScreen(
+                databaseSize = remember(databasePath, session) {
+                    formatDatabaseGigabytes(sqliteDatabaseBytes(databasePath))
+                },
                 onClearStorage = {
                     scope.launch {
                         try {

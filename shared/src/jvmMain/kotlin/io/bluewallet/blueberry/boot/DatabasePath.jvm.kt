@@ -2,6 +2,11 @@ package io.bluewallet.blueberry.boot
 
 import java.io.File
 
+internal actual fun existingFileBytes(path: String): Long {
+    val file = File(path)
+    return if (file.isFile) file.length() else 0L
+}
+
 actual fun deleteSqliteDatabaseFiles(path: String) {
     if (isInMemorySqlitePath(path)) return
     val main = File(path)

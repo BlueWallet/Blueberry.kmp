@@ -14,6 +14,19 @@ import kotlin.test.assertTrue
 
 class ClearStorageTest {
     @Test
+    fun sqliteDatabaseBytes_sums_db_and_sidecars() {
+        val path = tempSqlitePath()
+        File(path).writeBytes(ByteArray(1000))
+        File("$path-wal").writeBytes(ByteArray(200))
+        File("$path-shm").writeBytes(ByteArray(30))
+        File("$path-journal").writeBytes(ByteArray(4))
+
+        assertEquals(1234L, sqliteDatabaseBytes(path))
+
+        deleteSqliteDatabaseFiles(path)
+    }
+
+    @Test
     fun deleteSqliteDatabaseFiles_removes_db_and_sidecars() {
         val path = tempSqlitePath()
         File(path).writeText("db")
