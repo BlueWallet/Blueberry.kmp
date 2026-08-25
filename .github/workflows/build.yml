@@ -1,0 +1,193 @@
+name: Build
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android API 37
+        run: sdkmanager "platforms;android-37.0"
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.konan
+          key: ${{ runner.os }}-konan-${{ hashFiles('**/gradle/libs.versions.toml', '**/gradle-wrapper.properties') }}
+
+      - name: Assemble debug APK
+        run: ./gradlew :androidApp:assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-debug
+          path: androidApp/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+          archive: false
+
+  desktop:
+    name: desktop-${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-latest
+            gradle: :desktopApp:packageDeb
+            artifact-name: desktop-linux
+            artifact-path: desktopApp/build/compose/binaries/main/deb/*.deb
+          - name: macos
+            os: macos-latest
+            gradle: :desktopApp:packageDmg
+            artifact-name: desktop-macos
+            artifact-path: desktopApp/build/compose/binaries/main/dmg/*.dmg
+          - name: windows
+            os: windows-latest
+            gradle: :desktopApp:packageMsi
+            artifact-name: desktop-windows
+            artifact-path: desktopApp/build/compose/binaries/main/msi/*.msi
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android API 37
+        run: sdkmanager "platforms;android-37.0"
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.konan
+          key: ${{ runner.os }}-konan-${{ hashFiles('**/gradle/libs.versions.toml', '**/gradle-wrapper.properties') }}
+
+      - name: Install fakeroot
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y fakeroot
+
+      - name: Add WiX to PATH
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $candidates = @(
+            "${env:ProgramFiles(x86)}\WiX Toolset v3.14\bin",
+            "${env:ProgramFiles}\WiX Toolset v3.14\bin"
+          )
+          $wixBin = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $wixBin) {
+            choco install wixtoolset --yes --no-progress
+            $wixBin = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $wixBin) { throw "WiX bin not found" }
+          Add-Content -Path $env:GITHUB_PATH -Value $wixBin
+          Write-Host "Using WiX at $wixBin"
+
+      - name: Package ${{ matrix.name }}
+        shell: bash
+        run: ./gradlew ${{ matrix.gradle }} --no-daemon
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+          if-no-files-found: error
+          retention-days: 14
+          archive: false
+
+  ios:
+    name: ios-simulator
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android API 37
+        run: sdkmanager "platforms;android-37.0"
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.konan
+          key: ${{ runner.os }}-konan-${{ hashFiles('**/gradle/libs.versions.toml', '**/gradle-wrapper.properties') }}
+
+      - name: Build iOS simulator app
+        run: |
+          xcodebuild \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath iosApp/build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=- \
+            build
+
+      - name: Check simulator app
+        run: test -d iosApp/build/DerivedData/Build/Products/Debug-iphonesimulator/Blueberry.app
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ios-simulator
+          path: iosApp/build/DerivedData/Build/Products/Debug-iphonesimulator/Blueberry.app
+          if-no-files-found: error
+          retention-days: 14
