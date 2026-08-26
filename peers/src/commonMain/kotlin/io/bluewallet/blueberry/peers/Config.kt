@@ -7,6 +7,8 @@ object Config {
     const val peerConcurrency: Int = 30
     const val headerSyncTimeoutMs: Long = 30_000
     const val headerRacePeers: Int = 10
+    /** At-tip health check / missed-block poll. One Bitcoin block time. */
+    const val headerIdleCheckMs: Long = 10 * 60 * 1_000L
     const val filterSyncTimeoutMs: Long = 30_000
     const val filterConcurrency: Int = 10
     const val filterHeaderBatchSize: Int = 2000

@@ -1,5 +1,9 @@
 package io.bluewallet.blueberry.peers.net
 
+import io.bluewallet.bip324.HeadersPayload
+import io.bluewallet.bip324.InventoryPayload
+import io.bluewallet.bip324.InventoryVector
+import io.bluewallet.bip324.Message
 import io.bluewallet.blueberry.peers.waitFor
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -244,5 +248,40 @@ class HeaderSessionPoolTest {
         assertTrue(pool.isFull())
         pool.closeAll()
         assertFalse(pool.isFull())
+    }
+}
+
+class HeaderTipHintTest {
+    @Test
+    fun inv_block_and_headers_hint_a_new_tip() {
+        assertTrue(
+            headerMessageSuggestsNewTip(
+                Message.Inv(InventoryPayload(listOf(InventoryVector(MSG_BLOCK, ByteArray(32))))),
+            ),
+        )
+        assertTrue(
+            headerMessageSuggestsNewTip(
+                Message.Headers(
+                    HeadersPayload(
+                        listOf(
+                            io.bluewallet.bip324.BlockHeader(
+                                version = 1,
+                                previousBlockHash = ByteArray(32),
+                                merkleRoot = ByteArray(32),
+                                timestamp = 0u,
+                                bits = 0u,
+                                nonce = 0u,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        assertFalse(headerMessageSuggestsNewTip(Message.Ping(ByteArray(8))))
+        assertFalse(
+            headerMessageSuggestsNewTip(
+                Message.Inv(InventoryPayload(listOf(InventoryVector(1u, ByteArray(32))))),
+            ),
+        )
     }
 }

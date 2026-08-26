@@ -417,6 +417,36 @@ class ChainHeadersTest {
     }
 
     @Test
+    fun empty_race_times_out_a_hung_peer_and_keeps_polling() = runBlocking {
+        val bus = createMessageBus()
+        val db = createSqliteDatabase(":memory:")
+        upsertPeer(db, "fast.peer")
+        upsertPeer(db, "hung.peer")
+        val tried = mutableListOf<String>()
+        val mod = createChainHeadersModule(
+            ModuleContext(bus, db),
+            ChainHeadersOptions(
+                net = stubPlatformNet(),
+                racePeers = 2,
+                connectTimeoutMs = 80,
+                headersTimeoutMs = 80,
+                pollIntervalMs = 40,
+                fetchBatch = { host, _, _ ->
+                    tried.add(host)
+                    if (host == "hung.peer") {
+                        kotlinx.coroutines.CompletableDeferred<Unit>().await()
+                    }
+                    HeaderBatchResult.Ok(CHECKPOINT_HEIGHT + 1, emptyList())
+                },
+            ),
+        )
+        mod.start()
+        waitFor(2000) { tried.count { it == "fast.peer" } >= 2 }
+        mod.stop()
+        db.close()
+    }
+
+    @Test
     fun idle_ignores_peers_updated_unless_waiting() = runBlocking {
         val bus = createMessageBus()
         val db = createSqliteDatabase(":memory:")

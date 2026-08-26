@@ -49,6 +49,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -248,6 +250,34 @@ private class HeadersState {
     @Volatile var waitingForPeers = false
 }
 
+/**
+ * WHY: the pool rarely hits the 20-watcher cap (device: a handful stay up).
+ * Napping only when isFull() therefore never naps, and the loop races
+ * getheaders every 100ms — worse than the old 30s poll.
+ * HOW: short wait only with zero live watchers (offline recover). Any live
+ * watcher takes the 10min health check; inv hints and last-socket drop still wake.
+ */
+internal const val HEADER_WATCHER_FILL_MS = 100L
+
+internal fun atTipWaitMs(pollIntervalMs: Long, hasLiveWatchers: Boolean): Long =
+    if (hasLiveWatchers) pollIntervalMs else HEADER_WATCHER_FILL_MS
+
+/**
+ * WHY: SyncIdle sets quiet so a chatty peer DB does not spin the loop.
+ * HOW: still wake when we have no live hdr sockets — that is recover-from-offline,
+ * not chatter. Tests inject fetchBatch (no pool) and pass hasLiveWatchers=true
+ * so their quiet behavior stays the old "ignore PeersUpdated" path.
+ */
+internal fun ignoreQuietPeerKick(
+    quiet: Boolean,
+    waitingForPeers: Boolean,
+    hasLiveWatchers: Boolean,
+): Boolean = quiet && !waitingForPeers && hasLiveWatchers
+
+/** WHY: last hdr FIN must not leave us in the 10min wait with hdr=0. */
+internal fun lostLastWatcher(prevOpen: Int, nextOpen: Int): Boolean =
+    prevOpen > 0 && nextOpen == 0
+
 @OptIn(ExperimentalAtomicApi::class)
 fun createChainHeadersModule(
     ctx: ModuleContext,
@@ -256,16 +286,22 @@ fun createChainHeadersModule(
     val connectTimeoutMs = options.connectTimeoutMs ?: Config.peerProbeTimeoutMs
     val headersTimeoutMs = options.headersTimeoutMs ?: Config.headerSyncTimeoutMs
     val racePeers = max(1, options.racePeers ?: Config.headerRacePeers)
-    val pollIntervalMs = options.pollIntervalMs ?: 30_000L
+    val pollIntervalMs = options.pollIntervalMs ?: Config.headerIdleCheckMs
     val consensus = options.consensus ?: BLUEBERRY_HEADER_CONSENSUS
     val checkpointHeight = consensus.checkpoint.height.toInt()
     val now = options.now ?: { currentTimeMillis() }
     val nowSeconds = options.nowSeconds ?: { currentTimeMillis() / 1_000 }
 
-    fun emitSockets(open: Int) {
-        ctx.bus.emit(Event.PeersSockets, PeersSocketsPayload(now(), PeerSocketKind.HDR, open))
-    }
+    var hdrOpen = 0
+    var onAdvance: () -> Unit = {}
 
+    fun emitSockets(open: Int) {
+        val lostLast = lostLastWatcher(hdrOpen, open)
+        hdrOpen = open
+        ctx.bus.emit(Event.PeersSockets, PeersSocketsPayload(now(), PeerSocketKind.HDR, open))
+        // HOW: pool already dropped the socket; durableKick aborts the 10min nap.
+        if (lostLast) onAdvance()
+    }
     val pool: HeaderSessionPool? =
         if (options.fetchBatch != null) {
             null
@@ -276,6 +312,7 @@ fun createChainHeadersModule(
                     connectTimeoutMs = connectTimeoutMs,
                     headersTimeoutMs = headersTimeoutMs,
                     onOpenCount = ::emitSockets,
+                    onTipHint = { onAdvance() },
                 ),
             )
         }
@@ -370,7 +407,15 @@ fun createChainHeadersModule(
                             headersTimeoutMs = headersTimeoutMs,
                         ),
                     )
-                    if (done.isCompleted) return@launch
+                    if (done.isCompleted) {
+                        // Race already timed out and the loop may be in the 10min
+                        // at-tip nap. A late non-empty batch is the missed tip —
+                        // onAdvance aborts the nap. Empty leftovers stay ignored.
+                        if (result is HeaderBatchResult.Ok && result.headers.isNotEmpty()) {
+                            onAdvance()
+                        }
+                        return@launch
+                    }
                     when (result) {
                         is HeaderBatchResult.Ok -> {
                             if (result.headers.isNotEmpty()) {
@@ -411,7 +456,20 @@ fun createChainHeadersModule(
                 }
             }
         }
-        return done.await()
+        return try {
+            withTimeout(headersTimeoutMs) { done.await() }
+        } catch (_: TimeoutCancellationException) {
+            // Complete `done` so a leftover non-empty Ok takes the late-kick
+            // path. If that leftover already finish()'d, use its winner.
+            // Do not cancel racers — their own fetch timeout drops a stuck
+            // session; cancel here would tear down live watchers.
+            lock.withLock {
+                if (!done.isCompleted) {
+                    done.complete(RaceOutcome(null, failed.toList(), hardFails == 0))
+                }
+            }
+            done.await()
+        }
     }
 
     fun kick() {
@@ -422,6 +480,7 @@ fun createChainHeadersModule(
         durableWake.store(true)
         kick()
     }
+    onAdvance = { durableKick() }
 
     suspend fun waitForKick(ms: Long) {
         if (state.stopped) return
@@ -504,6 +563,7 @@ fun createChainHeadersModule(
         }
 
         while (!state.stopped) {
+          try {
             val allAlive = ctx.db.peers.listAlive().map { PeerRef(it.host, it.port) }
             val alive = allAlive.filter { !dead.contains(peerKey(it.host, it.port)) }
 
@@ -571,7 +631,9 @@ fun createChainHeadersModule(
                     loggedTipHeight = tipHeight
                     log("chain-headers", "at tip height=$tipHeight")
                 }
-                waitForKick(pollIntervalMs)
+                // HOW: no pool (injected-fetch tests) counts as "watchers exist"
+                // so existing pollIntervalMs backoff tests still hold.
+                waitForKick(atTipWaitMs(pollIntervalMs, pool == null || hdrOpen > 0))
                 continue
             }
 
@@ -613,6 +675,14 @@ fun createChainHeadersModule(
                 logError("chain-headers", "persist fail ${peerKey(winner.peer.host, winner.peer.port)}", err)
                 waitForKick(500)
             }
+          } catch (err: kotlinx.coroutines.CancellationException) {
+              if (state.stopped) break
+              logError("chain-headers", "loop cancelled", err)
+              waitForKick(500)
+          } catch (err: Throwable) {
+              logError("chain-headers", "loop fail", err)
+              waitForKick(500)
+          }
         }
     }
 
@@ -634,7 +704,16 @@ fun createChainHeadersModule(
                 durableKick()
             }
             unsubPeers = ctx.bus.on(Event.PeersUpdated) {
-                if (state.quiet && !state.waitingForPeers) return@on
+                // hasLiveWatchers: no pool (tests) counts as "watchers exist".
+                if (
+                    ignoreQuietPeerKick(
+                        quiet = state.quiet,
+                        waitingForPeers = state.waitingForPeers,
+                        hasLiveWatchers = pool == null || hdrOpen > 0,
+                    )
+                ) {
+                    return@on
+                }
                 kick()
             }
             val job = SupervisorJob()

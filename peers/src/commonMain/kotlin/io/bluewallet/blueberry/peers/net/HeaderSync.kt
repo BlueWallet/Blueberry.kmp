@@ -16,7 +16,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -24,6 +26,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlin.concurrent.Volatile
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.coroutineContext
 
 const val SESSION_BUSY_ERROR = "session busy"
@@ -68,8 +72,20 @@ class HeaderSessionPoolOptions(
     val connect: TcpConnect? = null,
     val openSession: (suspend (String, Int) -> OpenedHeaderSession)? = null,
     val onOpenCount: ((Int) -> Unit)? = null,
+    val onTipHint: (() -> Unit)? = null,
     val max: Int? = null,
 )
+
+private const val MSG_CMPCT_BLOCK: UInt = 4u
+
+fun headerMessageSuggestsNewTip(message: Message): Boolean = when (message) {
+    is Message.Headers -> message.payload.headers.isNotEmpty()
+    is Message.Inv -> message.payload.inventory.any { item ->
+        val base = item.type and 0x3fffffffu
+        base == MSG_BLOCK || item.type == MSG_WITNESS_BLOCK || base == MSG_CMPCT_BLOCK
+    }
+    else -> false
+}
 
 interface HeaderSessionPool {
     fun has(host: String, port: Int): Boolean
@@ -204,6 +220,7 @@ private class LiveSession(
     val startHeight: Int,
     val requestHeaders: suspend (List<ByteArray>, ByteArray) -> HeaderRequestResult,
     val close: suspend () -> Unit,
+    val pumpJob: Job? = null,
 ) {
     var busy = false
 }
@@ -219,6 +236,7 @@ private class PoolSnapshotBox {
     @Volatile var value = PoolSnapshot(emptySet(), emptySet(), emptySet(), 0)
 }
 
+@OptIn(ExperimentalAtomicApi::class)
 fun createHeaderSessionPool(
     poolOptions: HeaderSessionPoolOptions = HeaderSessionPoolOptions(),
 ): HeaderSessionPool {
@@ -226,7 +244,9 @@ fun createHeaderSessionPool(
     val defaultHeadersTimeoutMs = poolOptions.headersTimeoutMs ?: Config.headerSyncTimeoutMs
     val max = maxOf(1, poolOptions.max ?: Config.headerRacePeers * 2)
     val onOpenCount = poolOptions.onOpenCount
+    val onTipHint = poolOptions.onTipHint
     val connect = poolOptions.connect
+    val pumpScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val sessions = LinkedHashMap<String, LiveSession>()
     val connecting = LinkedHashSet<String>()
     val mutex = Mutex()
@@ -266,6 +286,7 @@ fun createHeaderSessionPool(
             removed
         } ?: return
         try {
+            session.pumpJob?.cancel()
             session.close()
         } catch (_: Throwable) {
         }
@@ -290,20 +311,72 @@ fun createHeaderSessionPool(
                 duplex = connectOrAbort(tcp, host, port)
                 val liveDuplex = duplex!!
                 val (protocol, startHeight) = handshake(liveDuplex, port)
+                val headersWaiter = AtomicReference<CompletableDeferred<HeaderRequestResult>?>(null)
+                val pumpJob = pumpScope.launch {
+                    try {
+                        while (true) {
+                            val message = protocol.readMessage()
+                            if (message is Message.Headers) {
+                                val waiter = headersWaiter.load()
+                                if (waiter != null) {
+                                    // Deliver by waiter, not the expecting flag: the flag
+                                    // can still be false in the store-waiter / store-flag window.
+                                    waiter.complete(
+                                        HeaderRequestResult(
+                                            startHeight = startHeight,
+                                            headers = message.payload.headers.map(::wireToLib),
+                                        ),
+                                    )
+                                } else if (headerMessageSuggestsNewTip(message)) {
+                                    onTipHint?.invoke()
+                                }
+                            } else {
+                                answerPing(protocol, message)
+                                // Inv during getheaders still hints: a lone watcher
+                                // may get inv-then-empty-headers and would otherwise
+                                // 10min-nap on a block the peer will not re-announce.
+                                if (headerMessageSuggestsNewTip(message)) onTipHint?.invoke()
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        headersWaiter.load()?.completeExceptionally(e)
+                        throw e
+                    } catch (e: Throwable) {
+                        headersWaiter.load()?.completeExceptionally(e)
+                        dropSession(host, port)
+                    }
+                }
                 LiveSession(
                     host = host,
                     port = port,
                     startHeight = startHeight,
                     requestHeaders = { locator, stop ->
-                        requestHeaderBatch(protocol, startHeight, locator, stop)
+                        val waiter = CompletableDeferred<HeaderRequestResult>()
+                        headersWaiter.store(waiter)
+                        try {
+                            protocol.writeMessage(
+                                Message.GetHeaders(
+                                    GetHeadersPayload(
+                                        version = 70_016,
+                                        locatorHashes = locator,
+                                        stopHash = stop,
+                                    ),
+                                ),
+                            )
+                            waiter.await()
+                        } finally {
+                            headersWaiter.compareAndSet(waiter, null)
+                        }
                     },
                     close = {
+                        pumpJob.cancel()
                         try {
                             protocol.close()
                         } catch (_: Throwable) {
                             liveDuplex.close()
                         }
                     },
+                    pumpJob = pumpJob,
                 )
             }
         } catch (e: Throwable) {
@@ -400,7 +473,8 @@ fun createHeaderSessionPool(
                 dropSession(host, port)
                 return HeaderBatchResult.Err(timeoutMessage("header download", headersTimeoutMs))
             } catch (e: CancellationException) {
-                dropSession(host, port)
+                // Request was aborted (module stop / parent cancel). Keep the
+                // socket: a live watcher is still useful. closeAll drops on stop.
                 throw e
             } catch (e: Throwable) {
                 dropSession(host, port)

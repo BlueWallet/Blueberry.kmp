@@ -18,4 +18,9 @@ class ConfigTest {
         assertEquals(30_000L, Config.blockSyncTimeoutMs)
         assertEquals(10, Config.blockConcurrency)
     }
+
+    @Test
+    fun header_idle_check_is_one_block_time() {
+        assertEquals(10 * 60 * 1_000L, Config.headerIdleCheckMs)
+    }
 }
