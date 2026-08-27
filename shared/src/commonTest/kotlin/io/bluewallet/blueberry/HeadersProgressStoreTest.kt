@@ -77,6 +77,14 @@ class HeadersProgressStoreTest {
     }
 
     @Test
+    fun unifiedSyncPercent_stays_below_100_until_every_bar_is_complete() {
+        assertEquals(99, unifiedSyncPercent(100, 100, 100, 99))
+        assertEquals(99, unifiedSyncPercent(100, 100, 100, 98))
+        assertEquals(99, unifiedSyncPercent(99, 100, 100, 100))
+        assertEquals(100, unifiedSyncPercent(100, 100, 100, 100))
+    }
+
+    @Test
     fun formatGrouped_inserts_thousands_separators() {
         assertEquals("0", formatGrouped(0))
         assertEquals("963,482", formatGrouped(963_482))
