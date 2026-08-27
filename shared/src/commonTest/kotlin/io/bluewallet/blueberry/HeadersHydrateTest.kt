@@ -28,24 +28,29 @@ private fun stubNet(): PlatformNet = PlatformNet(
     },
 )
 
-private fun dummyHeader(): ByteArray = encodeBlockHeader(
+private fun dummyHeader(timestamp: Long = 1): ByteArray = encodeBlockHeader(
     BlockHeader(
         version = 1,
         previousBlockHash = ByteArray(32),
         merkleRoot = ByteArray(32),
-        timestamp = 1,
+        timestamp = timestamp,
         bits = 0x1d00ffff,
         nonce = 0,
     ),
 )
 
-private fun addHeader(db: io.bluewallet.blueberry.storage.Database, height: Int, nibble: String) {
+private fun addHeader(
+    db: io.bluewallet.blueberry.storage.Database,
+    height: Int,
+    nibble: String,
+    timestamp: Long = 1,
+) {
     db.headers.append(
         listOf(
             HeaderWrite(
                 height = height,
                 hashInternalHex = nibble.repeat(32),
-                header = dummyHeader(),
+                header = dummyHeader(timestamp),
                 cumulativeWork = BigInteger.fromInt(height),
             ),
         ),
@@ -163,6 +168,18 @@ class HeadersHydrateTest {
         assertEquals(seeded.percent, after.percent)
         headers.stop()
         off()
+        db.close()
+    }
+
+    @Test
+    fun hydrate_reads_tip_timestamp_from_header() {
+        val db = createSqliteDatabase(":memory:")
+        addHeader(db, 10, "aa", timestamp = 1_600_000_000)
+        addHeader(db, 11, "bb", timestamp = 1_700_000_042)
+        val store = createHeadersProgressStore()
+        hydrateHeaders(db, store, 1, 1)
+        assertEquals(11, store.get().height)
+        assertEquals(1_700_000_042, store.get().tipTimeS)
         db.close()
     }
 }

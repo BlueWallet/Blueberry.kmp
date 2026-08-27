@@ -166,8 +166,8 @@ fun PeersScreen(
                     ) {
                         ProgressMetricCard(
                             label = "Chain tip",
-                            value = formatGrouped(headers.height),
-                            caption = progressCaption(headers.downloaded, headers.total, headers.percent, headers.etaMs),
+                            value = "${headers.percent}%",
+                            caption = chainTipCaption(headers.height, rememberRelativeAge(headers.tipTimeS)),
                             percent = headers.percent,
                             modifier = Modifier.weight(1f).then(hideDetailedSync),
                         )

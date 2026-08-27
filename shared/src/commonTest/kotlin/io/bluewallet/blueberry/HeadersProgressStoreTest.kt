@@ -82,4 +82,18 @@ class HeadersProgressStoreTest {
         assertEquals("963,482", formatGrouped(963_482))
         assertEquals("-12,345", formatGrouped(-12_345))
     }
+
+    @Test
+    fun applyEvent_keeps_tip_header_timestamp() {
+        val store = createHeadersProgressStore()
+        assertNull(store.get().tipTimeS)
+        store.applyEvent(at = 1000, downloaded = 1, total = 1, height = 100, tipTimeS = 1_700_000_000)
+        assertEquals(1_700_000_000, store.get().tipTimeS)
+    }
+
+    @Test
+    fun chainTipCaption_joins_height_and_age() {
+        assertEquals("912,345 · 30 seconds ago", chainTipCaption(912_345, "30 seconds ago"))
+        assertEquals("0 · —", chainTipCaption(0, "—"))
+    }
 }

@@ -4,6 +4,7 @@ import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.MessageBus
 import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.headers.decodeBlockHeader
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.max
@@ -16,11 +17,12 @@ data class HeadersProgress(
     val at: Long? = null,
     val etaMs: Long? = null,
     val percent: Int = 0,
+    val tipTimeS: Long? = null,
 )
 
 interface HeadersProgressStore {
     fun get(): HeadersProgress
-    fun applyEvent(at: Long, downloaded: Int, total: Int, height: Int)
+    fun applyEvent(at: Long, downloaded: Int, total: Int, height: Int, tipTimeS: Long? = null)
     fun subscribe(listener: () -> Unit): () -> Unit
 }
 
@@ -83,7 +85,7 @@ private class HeadersProgressStoreImpl : HeadersProgressStore {
 
     override fun get() = state.load().progress
 
-    override fun applyEvent(at: Long, downloaded: Int, total: Int, height: Int) {
+    override fun applyEvent(at: Long, downloaded: Int, total: Int, height: Int, tipTimeS: Long?) {
         val nextHeight = max(0, height)
         while (true) {
             val cur = state.load()
@@ -107,7 +109,8 @@ private class HeadersProgressStoreImpl : HeadersProgressStore {
                 prev.height == nextHeight &&
                 prev.at == at &&
                 prev.etaMs == nextEta &&
-                prev.percent == nextPercent
+                prev.percent == nextPercent &&
+                prev.tipTimeS == tipTimeS
             ) {
                 return
             }
@@ -119,6 +122,7 @@ private class HeadersProgressStoreImpl : HeadersProgressStore {
                     at = at,
                     etaMs = nextEta,
                     percent = nextPercent,
+                    tipTimeS = tipTimeS,
                 ),
                 samples = nextSamples,
             )
@@ -163,7 +167,12 @@ fun hydrateHeaders(
     val minH = db.headers.minHeight() ?: return
     val downloaded = max(0, tip.height - minH)
     val total = sessionOrDurableTotal(peerTotal, store.get().total, downloaded)
-    store.applyEvent(at, downloaded, total, tip.height)
+    val tipTimeS = try {
+        decodeBlockHeader(tip.header).timestamp
+    } catch (_: Throwable) {
+        null
+    }
+    store.applyEvent(at, downloaded, total, tip.height, tipTimeS)
 }
 
 fun bindHeaderProgressEvents(

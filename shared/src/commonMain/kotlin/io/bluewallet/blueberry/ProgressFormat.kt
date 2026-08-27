@@ -62,3 +62,6 @@ fun progressCaption(count: Int, total: Int, percent: Int, etaMs: Long?): String 
         else -> counts
     }
 }
+
+fun chainTipCaption(height: Int, ageLabel: String): String =
+    "${formatGrouped(height)} · $ageLabel"
