@@ -1,8 +1,11 @@
 package io.bluewallet.blueberry.ui
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -77,10 +80,20 @@ private val BwColorScheme = lightColorScheme(
     error = BwColors.Danger,
 )
 
+/**
+ * Applies the light palette and paints the window with [BwColors.Paper]. The
+ * app has no dark palette; without this Surface the host window's own color
+ * (black when the OS is in dark mode) bleeds through screens that never set a
+ * background, leaving [BwColors.Ink] text invisible.
+ */
 @Composable
 fun BwTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = BwColorScheme,
-        content = content,
-    )
+    MaterialTheme(colorScheme = BwColorScheme) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background,
+            contentColor = MaterialTheme.colorScheme.onBackground,
+            content = content,
+        )
+    }
 }
