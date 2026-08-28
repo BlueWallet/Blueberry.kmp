@@ -43,6 +43,7 @@ import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.HorizontalProgressBar
 import io.bluewallet.blueberry.ui.PillButton
+import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.PsbtSendResult
 import io.bluewallet.blueberry.wallet.SendAmount
@@ -135,20 +136,7 @@ fun SendScreen(
             .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Send",
-                color = BwColors.Ink,
-                fontFamily = BwFontFamily,
-                fontSize = BwType.HeroSize,
-                fontWeight = BwType.Hero,
-                modifier = Modifier.weight(1f),
-            )
-            PillButton(text = "Back", onClick = { goBack() })
-        }
+        ScreenHeader(title = "Send", onBack = { goBack() })
         when (step) {
             SendStep.Utxos -> UtxoStep(
                 modifier = Modifier.weight(1f),

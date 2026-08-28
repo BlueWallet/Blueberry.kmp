@@ -9,7 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** Header text action — sister-project "Refresh" / "Sidebar". */
+/** Header text action — Settings, Back, Cancel. Not a primary pill. */
 @Composable
 fun TextAction(
     text: String,

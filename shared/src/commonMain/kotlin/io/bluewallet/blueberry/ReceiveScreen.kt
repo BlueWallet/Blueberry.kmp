@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -34,7 +33,7 @@ import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
-import io.bluewallet.blueberry.ui.PillButton
+import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.wallet.compactFilterFrom
 import io.bluewallet.blueberry.wallet.createWallet
 import io.github.alexzhirkevich.qrose.rememberQrCodePainter
@@ -85,20 +84,7 @@ fun ReceiveScreen(
             .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Receive",
-                color = BwColors.Ink,
-                fontFamily = BwFontFamily,
-                fontSize = BwType.HeroSize,
-                fontWeight = BwType.Hero,
-                modifier = Modifier.weight(1f),
-            )
-            PillButton(text = "Back", onClick = onBack)
-        }
+        ScreenHeader(title = "Receive", onBack = onBack)
         Column(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(BwSpace.Gap, Alignment.CenterVertically),

@@ -19,6 +19,13 @@ Operational guardrails for automated work in this repo.
 - iOS simulator builds and `iosSimulatorArm64Test` require macOS. Do not attempt them on Linux.
 - Desktop: `./gradlew :desktopApp:run` or `./gradlew :desktopApp:hotRun --auto`
 
+## Screen chrome
+
+- Header actions (Settings, Back, Cancel) use `TextAction`.
+- New title + Back screens use `ScreenHeader`.
+- Primary actions (Receive, Send, Clear, Continue) use `PillButton`.
+- Do not put `PillButton` in a screen header.
+
 ## Verification
 
 - Do not claim the app is running without evidence (`adb devices`, successful install, or a running process via `adb shell pidof io.bluewallet.blueberry`).

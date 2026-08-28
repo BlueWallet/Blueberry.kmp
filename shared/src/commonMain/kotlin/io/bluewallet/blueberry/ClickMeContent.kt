@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,11 +24,51 @@ import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.PillButton
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ClickMeContent() {
-    var result by remember { mutableStateOf<List<String>?>(null) }
-    val passed = result == listOf("ok")
+    var vendorResult by remember { mutableStateOf<List<String>?>(null) }
+    var torResult by remember { mutableStateOf<List<String>?>(null) }
+    var torBusy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
+        SettingsActionRow(
+            result = vendorResult,
+            buttonText = "Run self-diagnostics",
+            onClick = { vendorResult = vendorLibraryStatus() },
+        )
+        SettingsActionRow(
+            result = torResult,
+            busy = torBusy,
+            buttonText = if (torBusy) "Testing Tor…" else "Test Tor",
+            onClick = {
+                if (torBusy) return@SettingsActionRow
+                scope.launch {
+                    torBusy = true
+                    torResult = try {
+                        withContext(Dispatchers.Default) { checkTorExit() }
+                    } catch (err: Exception) {
+                        listOf(err.message ?: err.toString())
+                    } finally {
+                        torBusy = false
+                    }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SettingsActionRow(
+    result: List<String>?,
+    buttonText: String,
+    onClick: () -> Unit,
+    busy: Boolean = false,
+) {
+    val passed = result?.firstOrNull() == "ok"
     val shape = RoundedCornerShape(BwSpace.Radius)
     Row(
         modifier = Modifier
@@ -41,6 +82,13 @@ fun ClickMeContent() {
     ) {
         Column(modifier = Modifier.weight(1f)) {
             when {
+                busy -> Text(
+                    text = "Running…",
+                    color = BwColors.InkMuted,
+                    fontFamily = BwFontFamily,
+                    fontSize = BwType.ValueSize,
+                    fontWeight = BwType.Value,
+                )
                 result == null -> Text(
                     text = "\u00A0",
                     color = Color.Transparent,
@@ -48,14 +96,25 @@ fun ClickMeContent() {
                     fontSize = BwType.ValueSize,
                     fontWeight = BwType.Value,
                 )
-                passed -> Text(
-                    text = "OK",
-                    color = BwColors.Ink,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.ValueSize,
-                    fontWeight = BwType.Value,
-                )
-                else -> result?.forEach { line ->
+                passed -> {
+                    Text(
+                        text = "OK",
+                        color = BwColors.Ink,
+                        fontFamily = BwFontFamily,
+                        fontSize = BwType.ValueSize,
+                        fontWeight = BwType.Value,
+                    )
+                    result.drop(1).forEach { line ->
+                        Text(
+                            text = line,
+                            color = BwColors.InkMuted,
+                            fontFamily = BwFontFamily,
+                            fontSize = BwType.CaptionSize,
+                            fontWeight = BwType.Caption,
+                        )
+                    }
+                }
+                else -> result.forEach { line ->
                     Text(
                         text = line,
                         color = BwColors.Danger,
@@ -66,6 +125,6 @@ fun ClickMeContent() {
                 }
             }
         }
-        PillButton(text = "Run self-diagnostics", onClick = { result = vendorLibraryStatus() })
+        PillButton(text = buttonText, onClick = onClick)
     }
 }
