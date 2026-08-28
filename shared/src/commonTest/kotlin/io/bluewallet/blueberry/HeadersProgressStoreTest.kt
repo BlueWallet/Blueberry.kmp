@@ -66,20 +66,30 @@ class HeadersProgressStoreTest {
     }
 
     @Test
-    fun unifiedSyncPercent_is_rounded_average_of_the_four_bars() {
+    fun unifiedSyncPercent_is_rounded_average_of_incomplete_bars() {
         assertEquals(0, unifiedSyncPercent(0, 0, 0, 0))
         assertEquals(25, unifiedSyncPercent(10, 20, 30, 40))
         assertEquals(26, unifiedSyncPercent(10, 20, 30, 42))
         assertEquals(100, unifiedSyncPercent(100, 100, 100, 100))
-        assertEquals(50, unifiedSyncPercent(0, 0, 100, 100))
+        assertEquals(0, unifiedSyncPercent(0, 0, 100, 100))
+        assertEquals(50, unifiedSyncPercent(50, 100, 100, 100))
+        assertEquals(50, unifiedSyncPercent(40, 60, 100, 100))
+        assertEquals(20, unifiedSyncPercent(100, 100, 10, 30))
         assertEquals(0, unifiedSyncPercent(-10, 0, 0, 0))
         assertEquals(100, unifiedSyncPercent(200, 100, 100, 100))
     }
 
     @Test
+    fun unifiedSyncPercent_omits_empty_work_counted_as_complete() {
+        assertEquals(100, progressPercent(0, 0))
+        assertEquals(0, unifiedSyncPercent(progressPercent(0, 0), 0, 0, 0))
+        assertEquals(40, unifiedSyncPercent(progressPercent(0, 0), 40, 100, 100))
+    }
+
+    @Test
     fun unifiedSyncPercent_stays_below_100_until_every_bar_is_complete() {
         assertEquals(99, unifiedSyncPercent(100, 100, 100, 99))
-        assertEquals(99, unifiedSyncPercent(100, 100, 100, 98))
+        assertEquals(98, unifiedSyncPercent(100, 100, 100, 98))
         assertEquals(99, unifiedSyncPercent(99, 100, 100, 100))
         assertEquals(100, unifiedSyncPercent(100, 100, 100, 100))
     }

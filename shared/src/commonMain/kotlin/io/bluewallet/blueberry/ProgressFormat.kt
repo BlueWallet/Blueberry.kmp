@@ -34,15 +34,24 @@ fun progressFillFraction(percent: Int): Float =
 fun progressPercent(done: Int, total: Int): Int =
     if (total <= 0) 100 else min(100, (100 * done) / total)
 
-/** Mean of the four home-screen sync bars, each clamped to 0..100. Stays below 100 until all four are done. */
+/** Mean of incomplete home-screen sync bars. Bars at 100% (including 0/0) are omitted. */
 fun unifiedSyncPercent(chain: Int, filtersDl: Int, filtersMatch: Int, blocksDl: Int): Int {
     fun clamp(n: Int) = max(0, min(100, n))
-    val a = clamp(chain)
-    val b = clamp(filtersDl)
-    val c = clamp(filtersMatch)
-    val d = clamp(blocksDl)
-    val average = round((a + b + c + d) / 4.0).toInt()
-    return if (a < 100 || b < 100 || c < 100 || d < 100) min(average, 99) else average
+    var sum = 0
+    var count = 0
+    fun addIncomplete(raw: Int) {
+        val percent = clamp(raw)
+        if (percent < 100) {
+            sum += percent
+            count += 1
+        }
+    }
+    addIncomplete(chain)
+    addIncomplete(filtersDl)
+    addIncomplete(filtersMatch)
+    addIncomplete(blocksDl)
+    if (count == 0) return 100
+    return round(sum / count.toDouble()).toInt()
 }
 
 fun formatGrouped(n: Int): String {
