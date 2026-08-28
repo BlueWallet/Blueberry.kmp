@@ -1,4 +1,4 @@
-CREATE TABLE peers (
+CREATE TABLE IF NOT EXISTS peers (
   host TEXT NOT NULL,
   port INTEGER NOT NULL,
   services INTEGER NOT NULL DEFAULT 0,
@@ -10,44 +10,44 @@ CREATE TABLE peers (
   PRIMARY KEY (host, port)
 );
 
-CREATE TABLE headers (
+CREATE TABLE IF NOT EXISTS headers (
   height INTEGER PRIMARY KEY,
   hash_internal_hex TEXT NOT NULL,
   header BLOB NOT NULL,
   cumulative_work TEXT NOT NULL DEFAULT '0'
 );
 
-CREATE TABLE filter_headers (
+CREATE TABLE IF NOT EXISTS filter_headers (
   height INTEGER PRIMARY KEY,
   header BLOB NOT NULL
 );
 
-CREATE TABLE filters (
+CREATE TABLE IF NOT EXISTS filters (
   height INTEGER PRIMARY KEY,
   block_hash_internal_hex TEXT NOT NULL,
   filter BLOB NOT NULL
 );
 
-CREATE TABLE filters_unscanned (
+CREATE TABLE IF NOT EXISTS filters_unscanned (
   height INTEGER PRIMARY KEY
 );
 
-CREATE TABLE matched_blocks (
+CREATE TABLE IF NOT EXISTS matched_blocks (
   height INTEGER PRIMARY KEY,
   block_hash_internal_hex TEXT NOT NULL
 );
 
-CREATE TABLE blocks (
+CREATE TABLE IF NOT EXISTS blocks (
   height INTEGER PRIMARY KEY,
   block_hash_internal_hex TEXT NOT NULL,
   block BLOB NOT NULL
 );
 
-CREATE TABLE parsed_blocks (
+CREATE TABLE IF NOT EXISTS parsed_blocks (
   height INTEGER PRIMARY KEY
 );
 
-CREATE TABLE transactions (
+CREATE TABLE IF NOT EXISTS transactions (
   txid TEXT PRIMARY KEY,
   height INTEGER NOT NULL,
   tx_index INTEGER NOT NULL,
@@ -56,24 +56,24 @@ CREATE TABLE transactions (
   net_delta_sats INTEGER NOT NULL
 );
 
-CREATE TABLE key_value (
+CREATE TABLE IF NOT EXISTS key_value (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
 
-CREATE TABLE utxo_names (
+CREATE TABLE IF NOT EXISTS utxo_names (
   outpoint TEXT PRIMARY KEY,
   name TEXT NOT NULL
 );
 
-CREATE TABLE tx_payment_labels (
+CREATE TABLE IF NOT EXISTS tx_payment_labels (
   txid TEXT PRIMARY KEY,
   label TEXT NOT NULL
 );
 
-CREATE INDEX headers_hash_internal_hex
+CREATE INDEX IF NOT EXISTS headers_hash_internal_hex
   ON headers(hash_internal_hex);
-CREATE INDEX filters_height_hash
+CREATE INDEX IF NOT EXISTS filters_height_hash
   ON filters(height, block_hash_internal_hex);
-CREATE INDEX peers_alive_used
+CREATE INDEX IF NOT EXISTS peers_alive_used
   ON peers(alive, used_for_blocks);

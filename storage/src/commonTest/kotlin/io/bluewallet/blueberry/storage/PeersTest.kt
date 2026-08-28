@@ -52,7 +52,7 @@ class PeersTest {
     }
 
     @Test
-    fun conflict_upsert_refreshes_services_without_clearing_flags() {
+    fun gossip_cannot_replace_services_verified_by_a_probe() {
         val db = createSqliteDatabase(":memory:")
         db.peers.upsert(basePeer(services = 1uL))
         db.peers.markAlive("1.2.3.4", 8333, true)
@@ -67,10 +67,23 @@ class PeersTest {
         )
         assertEquals(1, db.peers.count())
         val peer = db.peers.list().single()
-        assertEquals(9uL, peer.services)
+        assertEquals(1uL, peer.services)
         assertEquals(true, peer.alive)
         assertEquals(42L, peer.lastProbedAt)
         assertEquals(false, peer.usedForBlocks)
+        db.close()
+    }
+
+    @Test
+    fun unprobed_hints_and_verified_probes_can_refresh_services() {
+        val db = createSqliteDatabase(":memory:")
+        db.peers.upsert(basePeer(services = 1uL))
+        db.peers.upsert(basePeer(services = 9uL))
+        assertEquals(9uL, db.peers.list().single().services)
+
+        db.peers.markProbed("1.2.3.4", 8333, 42)
+        db.peers.upsert(basePeer(services = 64uL, lastProbedAt = 42))
+        assertEquals(64uL, db.peers.list().single().services)
         db.close()
     }
 

@@ -91,21 +91,11 @@ class BlocksAndTxsTest {
         db.blocks.insert(DownloadedBlock(11, "bb".repeat(32), byteArrayOf(0x22)))
         db.blocks.insert(DownloadedBlock(12, "cc".repeat(32), byteArrayOf(0x33)))
 
-        assertEquals(
-            listOf(10, 11, 12),
-            db.blocks.listNeedingParse(10).map { it.height },
-        )
+        assertEquals(listOf(10, 11, 12), db.blocks.listNeedingParseHeights(10))
         db.parsedBlocks.mark(11)
         db.parsedBlocks.mark(11)
         assertEquals(1, db.parsedBlocks.count())
-        assertEquals(
-            listOf(10, 12),
-            db.blocks.listNeedingParse(10).map { it.height },
-        )
-        assertEquals(
-            listOf(10, 12),
-            db.blocks.listNeedingParseHeights(10),
-        )
+        assertEquals(listOf(10, 12), db.blocks.listNeedingParseHeights(10))
 
         db.transactions.upsert(
             StoredTx("a".repeat(64), 12, 1, "cc".repeat(32), byteArrayOf(0xaa.toByte()), 100),

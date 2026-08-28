@@ -26,10 +26,6 @@ private val androidFrameworkSqliteAvailable: Boolean by lazy {
 
 private fun isAndroidFrameworkSqliteAvailable(): Boolean = androidFrameworkSqliteAvailable
 
-// JdbcSqliteDriver (org.xerial:sqlite-jdbc) is `compileOnly` in the Android app; it is present
-// only for host tests. If the Android framework SQLite is unavailable (mocked) and the JDBC
-// fallback class is also missing at runtime, fail with a clear message instead of a raw
-// NoClassDefFoundError.
 private fun openJdbcSqliteDriver(path: String): SqlDriver {
     try {
         if (path == ":memory:") {
@@ -45,9 +41,7 @@ private fun openJdbcSqliteDriver(path: String): SqlDriver {
         )
     } catch (e: NoClassDefFoundError) {
         throw IllegalStateException(
-            "Android framework SQLite is unavailable (mocked) and the JDBC fallback driver " +
-                "(org.xerial:sqlite-jdbc / JdbcSqliteDriver) is missing from the runtime " +
-                "classpath. JDBC is compileOnly for the Android app; add it only for host tests.",
+            "Android SQLite is unavailable and JdbcSqliteDriver is not on the classpath.",
             e,
         )
     }
@@ -97,7 +91,6 @@ private class PathSqliteOpenHelper(
     }
 }
 
-// Release minification (R8) can strip FrameworkSQLiteDatabase; keep it if minify is enabled.
 private fun wrapFrameworkDatabase(sqlite: SQLiteDatabase): SupportSQLiteDatabase {
     val className = "androidx.sqlite.db.framework.FrameworkSQLiteDatabase"
     val clazz = try {

@@ -191,11 +191,6 @@ internal class SqliteDatabase(
         override fun loadAll(): List<StoredHeader> =
             storageDb.headersQueries.loadAll().executeAsList().map(::rowToStoredHeader)
 
-        override fun loadFrom(height: Int): List<StoredHeader> =
-            storageDb.headersQueries.loadFrom(height.toLong())
-                .executeAsList()
-                .map(::rowToStoredHeader)
-
         override fun append(headers: List<HeaderWrite>) {
             if (headers.isEmpty()) return
             transaction {
@@ -487,13 +482,6 @@ internal class SqliteDatabase(
             return inserted
         }
 
-        override fun listNeedingParse(limit: Int): List<DownloadedBlock> {
-            if (limit <= 0) return emptyList()
-            return storageDb.blocksQueries.listNeedingParse(limit.toLong())
-                .executeAsList()
-                .map(::rowToDownloadedBlock)
-        }
-
         override fun listNeedingParseHeights(limit: Int): List<Int> {
             if (limit <= 0) return emptyList()
             return storageDb.blocksQueries.listNeedingParseHeights(limit.toLong())
@@ -591,10 +579,6 @@ internal class SqliteDatabase(
     }
 
     override fun close() {
-        try {
-            queryPragmaValue(driver, "wal_checkpoint(TRUNCATE)")
-        } catch (_: Throwable) {
-        }
         driver.close()
     }
 
@@ -630,18 +614,6 @@ private fun rowToStoredHeader(row: Headers): StoredHeader = StoredHeader(
     hashInternalHex = row.hash_internal_hex,
     header = row.header_,
     cumulativeWork = BigInteger.parseString(row.cumulative_work),
-)
-
-private fun rowToDownloadedBlock(row: Blocks): DownloadedBlock = DownloadedBlock(
-    height = row.height.toInt(),
-    blockHashInternalHex = row.block_hash_internal_hex,
-    block = row.block,
-)
-
-private fun rowToDownloadedBlock(row: ListNeedingParse): DownloadedBlock = DownloadedBlock(
-    height = row.height.toInt(),
-    blockHashInternalHex = row.block_hash_internal_hex,
-    block = row.block,
 )
 
 private fun rowToStoredTx(row: Transactions): StoredTx = StoredTx(

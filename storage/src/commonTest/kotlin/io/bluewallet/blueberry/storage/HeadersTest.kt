@@ -57,7 +57,8 @@ class HeadersTest {
         assertEquals(base + BigInteger.fromInt(30), db.headers.tip()!!.cumulativeWork)
         assertEquals(
             listOf(seed.height.toInt() + 1, seed.height.toInt() + 2, seed.height.toInt() + 3),
-            db.headers.loadFrom(seed.height.toInt() + 1).map { it.height },
+            db.headers.loadRange(seed.height.toInt() + 1, seed.height.toInt() + 3)
+                .map { it.height },
         )
         assertEquals(
             seed.height.toInt() + 2,

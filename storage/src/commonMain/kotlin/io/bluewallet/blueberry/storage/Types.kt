@@ -72,7 +72,6 @@ interface HeadersRepository {
     fun heightForHashInternal(hashInternalHex: String): Int?
     fun loadRange(fromHeight: Int, toHeight: Int): List<StoredHeader>
     fun loadAll(): List<StoredHeader>
-    fun loadFrom(height: Int): List<StoredHeader>
     fun append(headers: List<HeaderWrite>)
     fun replaceAfter(commonAncestorHeight: Int, headers: List<HeaderWrite>)
 }
@@ -148,7 +147,6 @@ interface BlocksRepository {
     fun get(height: Int): DownloadedBlock?
     fun insert(block: DownloadedBlock): Boolean
     fun insertIfMatched(block: DownloadedBlock): Boolean
-    fun listNeedingParse(limit: Int): List<DownloadedBlock>
     fun listNeedingParseHeights(limit: Int): List<Int>
 }
 
