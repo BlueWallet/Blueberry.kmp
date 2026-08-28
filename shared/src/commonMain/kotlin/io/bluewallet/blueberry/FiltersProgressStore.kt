@@ -163,5 +163,11 @@ fun bindFilterProgressEvents(
     bus: MessageBus,
     db: Database,
     store: FiltersProgressStore,
-): () -> Unit =
-    bus.on(Event.FiltersProgress) { hydrateFilters(db, store, it.total, it.at) }
+): () -> Unit {
+    val a = bus.on(Event.FiltersProgress) { hydrateFilters(db, store, it.total, it.at) }
+    val b = bus.on(Event.BlocksProgress) { hydrateFilters(db, store, null, it.at) }
+    return {
+        a()
+        b()
+    }
+}

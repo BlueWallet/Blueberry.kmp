@@ -1,5 +1,6 @@
 package io.bluewallet.blueberry
 
+import io.bluewallet.blueberry.bus.BlocksProgressPayload
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.FiltersProgressPayload
 import io.bluewallet.blueberry.bus.createMessageBus
@@ -99,6 +100,27 @@ class FiltersHydrateTest {
         assertEquals(200, store.get().total)
         assertEquals(1000, store.get().at)
         assertEquals(0, store.get().percent)
+        off()
+        db.close()
+    }
+
+    @Test
+    fun blocks_progress_rehydrates_downloaded_from_db_keeps_session_total() {
+        val bus = createMessageBus()
+        val db = createSqliteDatabase(":memory:")
+        addFilter(db, 1, "11")
+        addFilter(db, 2, "22")
+        val store = createFiltersProgressStore()
+        val off = bindFilterProgressEvents(bus, db, store)
+        hydrateFilters(db, store, 2, 1)
+        assertEquals(2, store.get().downloaded)
+        assertEquals(2, store.get().total)
+
+        db.wipeFiltersFrom(2)
+        bus.emit(Event.BlocksProgress, BlocksProgressPayload(at = 2000, downloaded = 9, matched = 9))
+        assertEquals(1, store.get().downloaded)
+        assertEquals(2, store.get().total)
+        assertEquals(2000, store.get().at)
         off()
         db.close()
     }

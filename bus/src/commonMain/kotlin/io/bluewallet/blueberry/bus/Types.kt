@@ -128,6 +128,8 @@ data class MatchingProgressPayload(
  * Ignore payload counts.
  * The wallet store refreshes parse-backlog counts and does not rebuild
  * the tx list. The matching store also re-reads scanned/total.
+ * The filters store re-reads downloaded from SQLite (reorg persist
+ * emits this event, not `filters:progress`).
  */
 data class BlocksProgressPayload(
     val at: Long,
@@ -275,6 +277,8 @@ sealed class Event<T>(val name: String) {
      * Ignore payload counts.
      * The wallet store refreshes parse-backlog counts and does not rebuild
      * the tx list. The matching store also re-reads scanned/total.
+     * The filters store re-reads downloaded from SQLite (reorg persist
+     * emits this event, not `filters:progress`).
      */
     data object BlocksProgress : Event<BlocksProgressPayload>("blocks:progress")
 
