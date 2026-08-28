@@ -23,14 +23,22 @@ import io.bluewallet.blueberry.ui.MetricCard
 import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.ui.TextAction
+import io.bluewallet.blueberry.wallet.WalletSecretKind
+import io.bluewallet.blueberry.wallet.parseWalletSecret
 
 @Composable
 fun SettingsScreen(
     databaseSize: String,
+    secret: String?,
     onClearStorage: () -> Unit,
     onBack: () -> Unit,
 ) {
     var confirmClear by remember { mutableStateOf(false) }
+    var showSecret by remember { mutableStateOf(false) }
+    if (showSecret) {
+        SecretScreen(secret = secret, onBack = { showSecret = false })
+        return
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -40,6 +48,15 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         ScreenHeader(title = "Settings", onBack = onBack)
+        MetricCard(
+            label = "Secret",
+            value = secretKindLabel(secret),
+            caption = "QR code and text",
+            modifier = Modifier.fillMaxWidth(),
+            trailing = {
+                PillButton(text = "Show", onClick = { showSecret = true })
+            },
+        )
         MetricCard(
             label = "Storage",
             value = databaseSize,
@@ -85,5 +102,16 @@ fun SettingsScreen(
             },
             containerColor = BwColors.Card,
         )
+    }
+}
+
+private fun secretKindLabel(secret: String?): String {
+    if (secret == null) return "Missing"
+    return when (runCatching { parseWalletSecret(secret).kind }.getOrNull()) {
+        WalletSecretKind.MNEMONIC -> "Mnemonic"
+        WalletSecretKind.ZPUB -> "zpub"
+        WalletSecretKind.WIF -> "WIF"
+        WalletSecretKind.ADDRESS -> "Address"
+        null -> "Stored"
     }
 }

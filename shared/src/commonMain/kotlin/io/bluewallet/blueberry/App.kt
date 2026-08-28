@@ -24,6 +24,7 @@ import io.bluewallet.blueberry.onboarding.persistSyncYear
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.BwTheme
 import io.bluewallet.blueberry.storage.createSqliteDatabase
+import io.bluewallet.blueberry.wallet.WalletSecretInspection
 import io.bluewallet.blueberry.wallet.inspectWalletSecret
 import kotlin.concurrent.Volatile
 import kotlinx.coroutines.Dispatchers
@@ -98,6 +99,9 @@ fun App(databasePath: String) {
             SettingsScreen(
                 databaseSize = remember(databasePath, session) {
                     formatDatabaseGigabytes(sqliteDatabaseBytes(databasePath))
+                },
+                secret = remember(databasePath, session) {
+                    (inspectWalletSecret(db) as? WalletSecretInspection.Ok)?.value
                 },
                 onClearStorage = {
                     scope.launch {
