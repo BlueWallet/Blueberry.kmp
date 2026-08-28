@@ -47,8 +47,6 @@ private data class SyncIdleState(
     val idleStreak: Int = 0,
     val headersDownloaded: Int = 0,
     val headersTotal: Int = 0,
-    val blocksDownloaded: Int = 0,
-    val blocksMatched: Int = 0,
 )
 
 private data class EvaluationRequest(
@@ -122,8 +120,10 @@ fun createSyncIdleModule(
             headersTotal = cur.headersTotal,
             filterMissingRangeCount = filterMissingRangeCount,
             filterWorkNeedsPeers = filterWorkNeedsPeers,
-            blocksDownloaded = cur.blocksDownloaded,
-            blocksMatched = cur.blocksMatched,
+            // Re-read blocks. A throttled or stale blocks:progress must not
+            // keep CATCHUP after SQLite is already caught up (parse stays paused).
+            blocksDownloaded = ctx.db.blocks.count(),
+            blocksMatched = ctx.db.matchedBlocks.count(),
             needingDownloadCount = needingDownloadCount,
             alivePeerCount = alivePeerCount,
         )
@@ -225,8 +225,6 @@ fun createSyncIdleModule(
                     idleStreak = 0,
                     headersDownloaded = headersDownloaded,
                     headersTotal = headersTotal,
-                    blocksDownloaded = ctx.db.blocks.count(),
-                    blocksMatched = ctx.db.matchedBlocks.count(),
                 ),
             )
             unsubs += ctx.bus.on(Event.HeadersProgress) { p ->
@@ -238,15 +236,7 @@ fun createSyncIdleModule(
                     ),
                 )
             }
-            unsubs += ctx.bus.on(Event.BlocksProgress) { p ->
-                requestEvaluation(
-                    EvaluationRequest(
-                        update = {
-                            it.copy(blocksDownloaded = p.downloaded, blocksMatched = p.matched)
-                        },
-                    ),
-                )
-            }
+            unsubs += ctx.bus.on(Event.BlocksProgress) { requestEvaluation() }
             unsubs += ctx.bus.on(Event.FiltersProgress) { requestEvaluation() }
             unsubs += ctx.bus.on(Event.FiltersMatch) {
                 requestEvaluation(EvaluationRequest(churnOnly = true))

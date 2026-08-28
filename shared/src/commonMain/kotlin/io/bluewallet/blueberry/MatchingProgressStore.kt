@@ -32,7 +32,7 @@ private data class MatchingStoreState(
     val progress: MatchingProgress = MatchingProgress(),
 )
 
-/** ETA from the first real advance — ignore the TUI seed sample. */
+/** ETA from the first real advance. Ignore the initial hydrate seed. */
 @OptIn(ExperimentalAtomicApi::class)
 private class MatchingProgressStoreImpl : MatchingProgressStore {
     private val state = AtomicReference(MatchingStoreState())

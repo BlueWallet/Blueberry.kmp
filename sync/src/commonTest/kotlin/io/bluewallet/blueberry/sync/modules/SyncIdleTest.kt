@@ -16,6 +16,7 @@ import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.peers.modules.ModuleContext
 import io.bluewallet.blueberry.storage.AliveServiceOptions
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.storage.DownloadedBlock
 import io.bluewallet.blueberry.storage.FilterHeaderRecord
 import io.bluewallet.blueberry.storage.FilterRecord
 import io.bluewallet.blueberry.storage.HeaderWrite
@@ -368,10 +369,46 @@ class SyncIdleTest {
     }
 
     @Test
-    fun idle_to_catchup_blocks_when_progress_shows_download_behind_match() = runBlocking {
+    fun idle_to_catchup_blocks_when_db_has_a_match_without_download() = runBlocking {
         val bus = createMessageBus()
         val db = createSqliteDatabase(":memory:")
-        seedCaughtUpDb(db)
+        val tip = seedCaughtUpDb(db)
+
+        val idles = mutableListOf<Long>()
+        val catchups = mutableListOf<SyncCatchupReason>()
+        bus.on(Event.SyncIdle) { idles.add(it.at) }
+        bus.on(Event.SyncCatchup) { catchups.add(it.reason) }
+
+        val mod = createSyncIdleModule(
+            ModuleContext(bus, db),
+            SyncIdleOptions(evalIntervalMs = 10_000, minAliveCompactFilters = 1),
+        )
+        mod.start()
+        enterIdle(bus)
+        waitFor { idles.size >= 1 }
+
+        db.matchedBlocks.insert(MatchedBlock(tip.height, tip.hashInternalHex))
+        bus.emit(Event.BlocksProgress, BlocksProgressPayload(nowMillis(), downloaded = 0, matched = 1))
+        waitFor { catchups.contains(SyncCatchupReason.BLOCKS) }
+        assertEquals(listOf(SyncCatchupReason.BLOCKS), catchups)
+
+        db.blocks.insert(DownloadedBlock(tip.height, tip.hashInternalHex, byteArrayOf(1)))
+        val at = nowMillis()
+        bus.emit(Event.BlocksProgress, BlocksProgressPayload(at, downloaded = 1, matched = 1))
+        bus.emit(Event.FiltersProgress, FiltersProgressPayload(at, 1, 1))
+        waitFor { idles.size >= 2 }
+
+        mod.stop()
+        db.close()
+    }
+
+    @Test
+    fun stale_blocks_progress_does_not_catchup_when_db_is_caught_up() = runBlocking {
+        val bus = createMessageBus()
+        val db = createSqliteDatabase(":memory:")
+        val tip = seedCaughtUpDb(db)
+        db.matchedBlocks.insert(MatchedBlock(tip.height, tip.hashInternalHex))
+        db.blocks.insert(DownloadedBlock(tip.height, tip.hashInternalHex, byteArrayOf(1)))
 
         val idles = mutableListOf<Long>()
         val catchups = mutableListOf<SyncCatchupReason>()
@@ -387,13 +424,9 @@ class SyncIdleTest {
         waitFor { idles.size >= 1 }
 
         bus.emit(Event.BlocksProgress, BlocksProgressPayload(nowMillis(), downloaded = 0, matched = 1))
-        waitFor { catchups.contains(SyncCatchupReason.BLOCKS) }
-        assertEquals(listOf(SyncCatchupReason.BLOCKS), catchups)
-
-        val at = nowMillis()
-        bus.emit(Event.BlocksProgress, BlocksProgressPayload(at, downloaded = 1, matched = 1))
-        bus.emit(Event.FiltersProgress, FiltersProgressPayload(at, 1, 1))
-        waitFor { idles.size >= 2 }
+        delay(40)
+        assertEquals(emptyList(), catchups)
+        assertEquals(1, idles.size)
 
         mod.stop()
         db.close()
