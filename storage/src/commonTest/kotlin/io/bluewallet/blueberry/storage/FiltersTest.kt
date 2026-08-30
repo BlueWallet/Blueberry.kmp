@@ -246,4 +246,18 @@ class FiltersTest {
         assertEquals(3, db.filters.listNeedingMatch(10).size)
         db.close()
     }
+
+    @Test
+    fun hasUnscanned_ignores_orphan_queue_rows() {
+        val db = createSqliteDatabase(":memory:")
+        db.filters.markUnscanned(listOf(99))
+        assertFalse(db.filters.hasUnscanned())
+        assertEquals(emptyList(), db.filters.listNeedingMatch(10))
+
+        db.filters.append(
+            listOf(FilterRecord(1, "aa".repeat(32), byteArrayOf(0x01))),
+        )
+        assertTrue(db.filters.hasUnscanned())
+        db.close()
+    }
 }

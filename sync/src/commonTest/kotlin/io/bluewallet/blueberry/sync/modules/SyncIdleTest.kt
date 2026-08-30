@@ -7,6 +7,7 @@ import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.FiltersMatchPayload
 import io.bluewallet.blueberry.bus.FiltersProgressPayload
 import io.bluewallet.blueberry.bus.HeadersProgressPayload
+import io.bluewallet.blueberry.bus.MatchingProgressPayload
 import io.bluewallet.blueberry.bus.ModuleStatus
 import io.bluewallet.blueberry.bus.PeersUpdatedPayload
 import io.bluewallet.blueberry.bus.SyncCatchupReason
@@ -50,7 +51,7 @@ private fun enterIdle(bus: io.bluewallet.blueberry.bus.MessageBus) {
     bus.emit(Event.PeersUpdated, PeersUpdatedPayload(at))
 }
 
-private fun seedCaughtUpDb(db: Database): io.bluewallet.blueberry.storage.StoredHeader {
+private fun seedCaughtUpDb(db: Database, scanned: Boolean = true): io.bluewallet.blueberry.storage.StoredHeader {
     db.peers.upsert(
         PeerWrite(
             host = "1.1.1.1",
@@ -73,6 +74,7 @@ private fun seedCaughtUpDb(db: Database): io.bluewallet.blueberry.storage.Stored
             ),
         ),
     )
+    if (scanned) db.filters.markScanned(listOf(tip.height))
     return tip
 }
 
@@ -136,6 +138,7 @@ class SyncIdleTest {
         db.filters.append(
             listOf(FilterRecord(tipHeight, tipHash, byteArrayOf(0x00))),
         )
+        db.filters.markScanned(listOf(tipHeight))
 
         val idles = mutableListOf<Long>()
         bus.on(Event.SyncIdle) { idles.add(it.at) }
@@ -455,6 +458,7 @@ class SyncIdleTest {
         maybeFreezeWalletBirthday(db, tipHeight)
         db.filterHeaders.append(listOf(FilterHeaderRecord(tipHeight, ByteArray(32) { 0x11 })))
         db.filters.append(listOf(FilterRecord(tipHeight, tipHash, byteArrayOf(0x00))))
+        db.filters.markScanned(listOf(tipHeight))
 
         val idles = mutableListOf<Long>()
         bus.on(Event.SyncIdle) { idles.add(it.at) }
@@ -603,5 +607,31 @@ class SyncIdleTest {
 
         mod.stop()
         inner.close()
+    }
+
+    @Test
+    fun does_not_idle_while_filters_are_unscanned_and_ignores_stale_progress_counts() = runBlocking {
+        val bus = createMessageBus()
+        val db = createSqliteDatabase(":memory:")
+        val tip = seedCaughtUpDb(db, scanned = false)
+        val idles = mutableListOf<Long>()
+        bus.on(Event.SyncIdle) { idles.add(it.at) }
+        val mod = createSyncIdleModule(
+            ModuleContext(bus, db),
+            SyncIdleOptions(evalIntervalMs = 10_000, minAliveCompactFilters = 1),
+        )
+        mod.start()
+        enterIdle(bus)
+        delay(40)
+        assertEquals(emptyList(), idles)
+
+        db.filters.markScanned(listOf(tip.height))
+        val at = nowMillis()
+        bus.emit(Event.MatchingProgress, MatchingProgressPayload(at, 0, 1))
+        bus.emit(Event.MatchingProgress, MatchingProgressPayload(at, 0, 1))
+        waitFor { idles.size >= 1 }
+
+        mod.stop()
+        db.close()
     }
 }

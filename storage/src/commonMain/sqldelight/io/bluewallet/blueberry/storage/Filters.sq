@@ -25,6 +25,12 @@ SELECT COUNT(*) AS n FROM filters;
 countUnscanned:
 SELECT COUNT(*) AS n FROM filters_unscanned;
 
+hasUnscanned:
+SELECT 1 AS pending
+FROM filters_unscanned u
+INNER JOIN filters f ON f.height = u.height
+LIMIT 1;
+
 hashAt:
 SELECT block_hash_internal_hex AS h FROM filters WHERE height = ?;
 

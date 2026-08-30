@@ -21,6 +21,9 @@ fun evaluateSyncState(s: SyncSnapshot): SyncEvaluation {
     if (filtersBehind) {
         return SyncEvaluation.Catchup(SyncCatchupReason.FILTERS)
     }
+    if (s.matchingBehind) {
+        return SyncEvaluation.Catchup(SyncCatchupReason.FILTERS)
+    }
     if (blocksBehind) {
         return SyncEvaluation.Catchup(SyncCatchupReason.BLOCKS)
     }

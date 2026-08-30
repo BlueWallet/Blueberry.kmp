@@ -19,6 +19,8 @@ data class SyncSnapshot(
     val filterMissingRangeCount: Int,
     /** Filter work pending and CF peer pool below threshold. */
     val filterWorkNeedsPeers: Boolean,
+    /** Whether compact-filter matching still has durable work queued. */
+    val matchingBehind: Boolean,
     val blocksDownloaded: Int,
     val blocksMatched: Int,
     val needingDownloadCount: Int,

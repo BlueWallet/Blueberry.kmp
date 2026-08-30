@@ -107,12 +107,38 @@ internal class SqliteDatabase(
                 .map(::rowToPeer)
         }
 
+        override fun listUnprobedWithServicesUnused(serviceBits: ULong, limit: Int): List<Peer> {
+            if (limit <= 0) return emptyList()
+            return storageDb.peersQueries
+                .listUnprobedWithServicesUnused(toSqliteServices(serviceBits), limit.toLong())
+                .executeAsList()
+                .map(::rowToPeer)
+        }
+
         override fun listProbeQueue(limit: Int): List<Peer> {
             if (limit <= 0) return emptyList()
             return storageDb.peersQueries
                 .listProbeQueue(limit.toLong())
                 .executeAsList()
                 .map(::rowToPeer)
+        }
+
+        override fun listOldestDeadWithServices(serviceBits: ULong, limit: Int): List<Peer> {
+            if (limit <= 0) return emptyList()
+            return storageDb.peersQueries
+                .listOldestDeadWithServices(toSqliteServices(serviceBits), limit.toLong()) { host, port, services, alive, usedForBlocks, lastProbedAt, createdAt, updatedAt ->
+                    Peer(
+                        host = host,
+                        port = port.toInt(),
+                        services = fromSqliteServices(services),
+                        alive = alive == 1L,
+                        usedForBlocks = usedForBlocks == 1L,
+                        lastProbedAt = lastProbedAt,
+                        createdAt = createdAt,
+                        updatedAt = updatedAt,
+                    )
+                }
+                .executeAsList()
         }
 
         override fun markProbed(host: String, port: Int, at: Long) {
@@ -349,6 +375,12 @@ internal class SqliteDatabase(
 
         override fun countScanned(): Int = count() - unscannedCount()
 
+        override fun hasUnscanned(): Boolean =
+            storageDb.filtersQueries.hasUnscanned().executeAsOneOrNull() != null
+
+        private fun unscannedCount(): Int =
+            storageDb.filtersQueries.countUnscanned().executeAsOne().toInt()
+
         override fun markScanned(heights: List<Int>) {
             if (heights.isEmpty()) return
             val sorted = heights.sorted()
@@ -387,9 +419,6 @@ internal class SqliteDatabase(
                 storageDb.filtersQueries.deleteFiltersFrom(height.toLong())
             }
         }
-
-        private fun unscannedCount(): Int =
-            storageDb.filtersQueries.countUnscanned().executeAsOne().toInt()
     }
     override val matchedBlocks = object : MatchedBlocksRepository {
         override fun insert(block: MatchedBlock): Boolean {

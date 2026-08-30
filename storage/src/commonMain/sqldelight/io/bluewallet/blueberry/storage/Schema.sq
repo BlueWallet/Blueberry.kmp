@@ -77,3 +77,12 @@ CREATE INDEX IF NOT EXISTS filters_height_hash
   ON filters(height, block_hash_internal_hex);
 CREATE INDEX IF NOT EXISTS peers_alive_used
   ON peers(alive, used_for_blocks);
+CREATE INDEX IF NOT EXISTS peers_dead_retry
+  ON peers(
+    alive,
+    used_for_blocks,
+    last_probed_at,
+    CASE WHEN instr(host, ':') > 0 THEN 1 ELSE 0 END,
+    host,
+    port
+  );

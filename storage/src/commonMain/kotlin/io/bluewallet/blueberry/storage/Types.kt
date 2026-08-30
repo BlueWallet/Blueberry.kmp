@@ -37,7 +37,9 @@ interface PeersRepository {
         options: AliveServiceOptions? = null,
     ): List<Peer>
     fun listWithServices(serviceBits: ULong, limit: Int): List<Peer>
+    fun listUnprobedWithServicesUnused(serviceBits: ULong, limit: Int): List<Peer>
     fun listProbeQueue(limit: Int): List<Peer>
+    fun listOldestDeadWithServices(serviceBits: ULong, limit: Int): List<Peer>
     fun markProbed(host: String, port: Int, at: Long)
     fun markAlive(host: String, port: Int, alive: Boolean)
     fun markUsedForBlocks(host: String, port: Int)
@@ -103,6 +105,7 @@ interface FiltersRepository {
     fun append(rows: List<FilterRecord>)
     fun listNeedingMatch(limit: Int): List<FilterRecord>
     fun countScanned(): Int
+    fun hasUnscanned(): Boolean
     fun markScanned(heights: List<Int>)
     fun markUnscanned(heights: List<Int>)
     fun markUnscannedFrom(fromHeight: Int)

@@ -151,7 +151,7 @@ class BlocksDownloadTest {
         assertTrue(events.any { it == 1 to 1 })
         assertTrue(
             logs.any {
-                it == "module start concurrency=2 connectTimeoutMs=3000 syncTimeoutMs=30000"
+                it == "module start concurrency=2 connectTimeoutMs=15000 syncTimeoutMs=30000"
             },
         )
         assertTrue(logs.contains("block start attempt=1 peer=1.1.1.1:8333"))

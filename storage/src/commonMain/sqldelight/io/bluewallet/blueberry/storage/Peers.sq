@@ -47,11 +47,32 @@ ORDER BY alive DESC,
   host, port
 LIMIT ?;
 
+listUnprobedWithServicesUnused:
+SELECT * FROM peers
+WHERE last_probed_at IS NULL
+  AND alive = 0
+  AND used_for_blocks = 0
+  AND (services & ?) != 0
+ORDER BY CASE WHEN instr(host, ':') > 0 THEN 1 ELSE 0 END,
+  host, port
+LIMIT ?;
+
 listProbeQueue:
 SELECT * FROM peers
 ORDER BY
   CASE WHEN last_probed_at IS NULL THEN 0 ELSE 1 END,
   last_probed_at ASC,
+  CASE WHEN instr(host, ':') > 0 THEN 1 ELSE 0 END,
+  host, port
+LIMIT ?;
+
+listOldestDeadWithServices:
+SELECT * FROM peers
+WHERE last_probed_at >= 0
+  AND alive = 0
+  AND used_for_blocks = 0
+  AND (services & ?) != 0
+ORDER BY last_probed_at ASC,
   CASE WHEN instr(host, ':') > 0 THEN 1 ELSE 0 END,
   host, port
 LIMIT ?;

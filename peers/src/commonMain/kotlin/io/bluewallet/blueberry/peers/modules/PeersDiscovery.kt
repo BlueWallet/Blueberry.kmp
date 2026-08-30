@@ -19,6 +19,7 @@ import io.bluewallet.blueberry.peers.net.ProbeOptions
 import io.bluewallet.blueberry.peers.net.ProbeResult
 import io.bluewallet.blueberry.peers.net.probePeer
 import io.bluewallet.blueberry.peers.net.resolveSeedPeers
+import io.bluewallet.blueberry.storage.AliveServiceOptions
 import io.bluewallet.blueberry.storage.Peer
 import io.bluewallet.blueberry.storage.PeerWrite
 import kotlinx.coroutines.CancellationException
@@ -37,6 +38,10 @@ import kotlin.concurrent.Volatile
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.ceil
+import kotlin.math.max
+
+/** Bitcoin NODE_NETWORK — peer can serve historical blocks. */
+private val NODE_NETWORK = 1uL
 
 /** Cap for `stop()` join: wait out in-flight SQLite, not blocking DNS/connect. */
 private const val STOP_JOIN_MS = 1_000L
@@ -47,7 +52,7 @@ private class DiscoveryState {
     @Volatile var syncIdle = false
 }
 
-class ProbeCallOptions(val wantAddr: Boolean = false)
+class ProbeCallOptions(val wantAddr: Boolean = false, val timeoutMs: Long? = null)
 
 class PeersDiscoveryOptions(
     val net: PlatformNet,
@@ -60,7 +65,9 @@ class PeersDiscoveryOptions(
     val crawlIntervalMs: Long? = null,
     val now: (() -> Long)? = null,
     val minAliveCompactFilters: Int? = null,
+    val minAliveBlockPeers: Int? = null,
     val reseedIntervalMs: Long? = null,
+    val retryProbeTimeoutMs: Long? = null,
 )
 
 @OptIn(ExperimentalAtomicApi::class, ExperimentalCoroutinesApi::class)
@@ -73,6 +80,7 @@ fun createPeersDiscoveryModule(
         resolveSeedPeers(MAINNET_DNS_SEEDS, port, options.net.dns)
     }
     val probeTimeoutMs = options.probeTimeoutMs ?: Config.peerProbeTimeoutMs
+    val retryProbeTimeoutMs = options.retryProbeTimeoutMs ?: Config.peerRetryProbeTimeoutMs
     val addrTimeoutMs = options.addrTimeoutMs ?: Config.peerAddrTimeoutMs
     val crawlIntervalMs = options.crawlIntervalMs ?: Config.peerCrawlIntervalMs
     val probe = options.probe ?: { host, p, call ->
@@ -80,7 +88,7 @@ fun createPeersDiscoveryModule(
             host,
             p,
             ProbeOptions(
-                timeoutMs = probeTimeoutMs,
+                timeoutMs = call.timeoutMs ?: probeTimeoutMs,
                 addrTimeoutMs = addrTimeoutMs,
                 wantAddr = call.wantAddr,
                 connect = options.net.connect,
@@ -91,6 +99,7 @@ fun createPeersDiscoveryModule(
     val idleDelayMs = options.idleDelayMs ?: 500L
     val now = options.now ?: { currentTimeMillis() }
     val minAliveCompactFilters = options.minAliveCompactFilters ?: 16
+    val minAliveBlockPeers = options.minAliveBlockPeers ?: Config.blockConcurrency
     val reseedIntervalMs = options.reseedIntervalMs ?: 60_000L
 
     val state = DiscoveryState()
@@ -102,7 +111,7 @@ fun createPeersDiscoveryModule(
     var lastReseedAt = 0L
     var dnsInFlight = false
     var lastCrawlAt: Long? = null
-    var crawlInFlight = false
+    var crawlsInFlight = 0
     var epoch = 0
     val inflight = mutableSetOf<String>()
     var loopJob: Job? = null
@@ -117,8 +126,32 @@ fun createPeersDiscoveryModule(
         kick()
     }
 
+    fun pendingBlockDownloads(): Boolean =
+        ctx.db.matchedBlocks.listNeedingDownload(1).isNotEmpty()
+
+    fun unusedAliveNetworkCount(): Int =
+        ctx.db.peers.listAliveWithServices(
+            NODE_NETWORK,
+            minAliveBlockPeers,
+            AliveServiceOptions(unusedForBlocks = true),
+        ).size
+
+    fun needsBlockPeers(): Boolean =
+        pendingBlockDownloads() && unusedAliveNetworkCount() < minAliveBlockPeers
+
+    fun needsMoreBlockAddrs(): Boolean =
+        needsBlockPeers() &&
+            ctx.db.peers.listUnprobedWithServicesUnused(NODE_NETWORK, minAliveBlockPeers).size <
+                minAliveBlockPeers
+
+    fun reseedEveryMs(): Long =
+        if (needsBlockPeers()) Config.peerDnsReseedWhenBlocksMs else reseedIntervalMs
+
     fun refreshPause() {
-        val wantPause = state.syncIdle && ctx.db.peers.listAlive().isNotEmpty()
+        val wantPause =
+            state.syncIdle &&
+                ctx.db.peers.listAlive().isNotEmpty() &&
+                !pendingBlockDownloads()
         if (wantPause == state.paused) return
         state.paused = wantPause
         log("peers-discovery", if (state.paused) "pause" else "resume")
@@ -194,24 +227,36 @@ fun createPeersDiscoveryModule(
 
     suspend fun maybeReseed() {
         if (dnsInFlight) return
-        if (now() - lastReseedAt < reseedIntervalMs) return
-        if (aliveCompactFilterCount() >= minAliveCompactFilters) return
+        if (now() - lastReseedAt < reseedEveryMs()) return
+        if (aliveCompactFilterCount() >= minAliveCompactFilters && !needsBlockPeers()) return
         pullSeeds()
     }
 
-    fun takeProbeBatch(limit: Int, inflightKeys: Set<String>): List<Pair<String, Int>> {
+    fun probeTimeoutFor(peer: Peer): Long {
+        val last = peer.lastProbedAt
+        return if (last != null && !peer.alive && (peer.services and NODE_NETWORK) != 0uL) {
+            retryProbeTimeoutMs
+        } else {
+            probeTimeoutMs
+        }
+    }
+
+    fun takeProbeBatch(limit: Int, inflightKeys: Set<String>): List<Peer> {
         if (limit <= 0) return emptyList()
-        val picked = mutableListOf<Pair<String, Int>>()
+        val picked = mutableListOf<Peer>()
         val seen = inflightKeys.toMutableSet()
         val t = now()
-        fun due(lastProbedAt: Long?) = lastProbedAt == null || t - lastProbedAt >= probeTimeoutMs
+        fun due(peer: Peer): Boolean {
+            val last = peer.lastProbedAt ?: return true
+            return t - last >= probeTimeoutFor(peer)
+        }
         fun take(peers: List<Peer>, max: Int = limit) {
             for (peer in peers) {
                 if (picked.size >= max) return
                 val key = "${peer.host}:${peer.port}"
                 if (key in seen) continue
                 seen.add(key)
-                picked.add(peer.host to peer.port)
+                picked.add(peer)
             }
         }
         if (aliveCompactFilterCount() < minAliveCompactFilters) {
@@ -220,14 +265,34 @@ fun createPeersDiscoveryModule(
                 ctx.db.peers.listWithServices(
                     NODE_COMPACT_FILTERS.toULong(),
                     minAliveCompactFilters + concurrency + 32,
-                ).filter { !it.alive && due(it.lastProbedAt) },
+                ).filter { !it.alive && due(it) },
                 cfMax,
+            )
+        }
+        if (needsBlockPeers() && picked.size < limit) {
+            val retryMax = if (limit < 2) limit else ceil(limit / 2.0).toInt()
+            take(
+                ctx.db.peers.listOldestDeadWithServices(
+                    NODE_NETWORK,
+                    retryMax + concurrency + 32,
+                ).filter { due(it) },
+                (picked.size + retryMax).coerceAtMost(limit),
+            )
+        }
+        if (needsBlockPeers() && picked.size < limit) {
+            val nnMax = if (limit < 2) limit else ceil(limit / 2.0).toInt()
+            take(
+                ctx.db.peers.listUnprobedWithServicesUnused(
+                    NODE_NETWORK,
+                    nnMax + concurrency + 32,
+                ),
+                (picked.size + nnMax).coerceAtMost(limit),
             )
         }
         if (picked.size < limit) {
             take(
                 ctx.db.peers.listProbeQueue(concurrency + inflightKeys.size + 16)
-                    .filter { due(it.lastProbedAt) },
+                    .filter { due(it) },
             )
         }
         return picked
@@ -243,30 +308,40 @@ fun createPeersDiscoveryModule(
             moduleScope.launch { runCatching { maybeReseed() } }
             val inflightKeys = inflight.toSet()
             val batch = takeProbeBatch(concurrency - inflightKeys.size, inflightKeys)
+            val huntAddrs = needsMoreBlockAddrs()
+            val addrBudget = if (huntAddrs) max(2, concurrency / 2) else 1
+            val addrEveryMs = if (huntAddrs) 0L else crawlIntervalMs
             var spawned = 0
             for (next in batch) {
                 if (state.stopped || state.paused) break
-                val key = "${next.first}:${next.second}"
+                val key = "${next.host}:${next.port}"
                 inflight.add(key)
                 spawned++
+                val crawlable = next.lastProbedAt == null || next.alive
                 val wantAddr =
                     !state.paused &&
-                        !crawlInFlight &&
-                        (lastCrawlAt == null || now() - lastCrawlAt!! >= crawlIntervalMs)
-                if (wantAddr) crawlInFlight = true
+                        crawlable &&
+                        crawlsInFlight < addrBudget &&
+                        (lastCrawlAt == null || now() - lastCrawlAt!! >= addrEveryMs)
+                if (wantAddr) crawlsInFlight++
+                val timeoutMs = probeTimeoutFor(next)
                 val spawnedEpoch = epoch
                 moduleScope.launch {
                     try {
-                        val result = probe(next.first, next.second, ProbeCallOptions(wantAddr = wantAddr))
+                        val result = probe(
+                            next.host,
+                            next.port,
+                            ProbeCallOptions(wantAddr = wantAddr, timeoutMs = timeoutMs),
+                        )
                         if (state.stopped || spawnedEpoch != epoch) return@launch
                         val probedAt = now()
                         ctx.db.transaction {
-                            ctx.db.peers.markProbed(next.first, next.second, probedAt)
+                            ctx.db.peers.markProbed(next.host, next.port, probedAt)
                             if (result is ProbeResult.Ok) {
                                 ctx.db.peers.upsert(
                                     PeerWrite(
-                                        host = next.first,
-                                        port = next.second,
+                                        host = next.host,
+                                        port = next.port,
                                         services = result.services,
                                         alive = true,
                                         usedForBlocks = false,
@@ -274,9 +349,9 @@ fun createPeersDiscoveryModule(
                                     ),
                                 )
                                 for (p in result.peers) upsertCandidate(p)
-                                ctx.db.peers.markAlive(next.first, next.second, true)
+                                ctx.db.peers.markAlive(next.host, next.port, true)
                             } else {
-                                ctx.db.peers.markAlive(next.first, next.second, false)
+                                ctx.db.peers.markAlive(next.host, next.port, false)
                             }
                         }
                         if (result is ProbeResult.Err) {
@@ -293,12 +368,12 @@ fun createPeersDiscoveryModule(
                     } catch (err: Throwable) {
                         if (state.stopped || spawnedEpoch != epoch) return@launch
                         logError("peers-discovery", "probe fail $key", err)
-                        ctx.db.peers.markProbed(next.first, next.second, now())
-                        ctx.db.peers.markAlive(next.first, next.second, false)
+                        ctx.db.peers.markProbed(next.host, next.port, now())
+                        ctx.db.peers.markAlive(next.host, next.port, false)
                         emitUpdated()
                     } finally {
                         if (wantAddr && spawnedEpoch == epoch) {
-                            crawlInFlight = false
+                            crawlsInFlight = (crawlsInFlight - 1).coerceAtLeast(0)
                             lastCrawlAt = now()
                         }
                         if (state.stopped || spawnedEpoch != epoch) return@launch
@@ -312,7 +387,8 @@ fun createPeersDiscoveryModule(
             if (state.stopped) break
             val inflightSize = inflight.size
             if (inflightSize >= concurrency || spawned == 0) {
-                waitForKick(if (inflightSize > 0) probeTimeoutMs else idleDelayMs)
+                val waitMs = if (inflightSize > 0) max(probeTimeoutMs, idleDelayMs) else idleDelayMs
+                waitForKick(waitMs)
             } else {
                 waitForKick(1)
             }
@@ -376,7 +452,7 @@ fun createPeersDiscoveryModule(
             state.paused = false
             state.syncIdle = false
             epoch++
-            crawlInFlight = false
+            crawlsInFlight = 0
             lastCrawlAt = null
             inflight.clear()
             emitSockets()

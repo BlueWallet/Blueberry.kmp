@@ -77,6 +77,17 @@ class SchemaTest {
                 listOf("alive", "used_for_blocks"),
                 indexColumns(driver, "peers_alive_used"),
             )
+            assertEquals(
+                listOf(
+                    "alive",
+                    "used_for_blocks",
+                    "last_probed_at",
+                    "<expression>",
+                    "host",
+                    "port",
+                ),
+                indexColumns(driver, "peers_dead_retry"),
+            )
         } finally {
             driver.close()
         }
@@ -93,7 +104,10 @@ private fun columnNames(driver: SqlDriver, table: String): List<String> =
     queryStrings(driver, "SELECT name FROM pragma_table_info('$table') ORDER BY cid")
 
 private fun indexColumns(driver: SqlDriver, index: String): List<String> =
-    queryStrings(driver, "SELECT name FROM pragma_index_info('$index') ORDER BY seqno")
+    queryStrings(
+        driver,
+        "SELECT COALESCE(name, '<expression>') FROM pragma_index_info('$index') ORDER BY seqno",
+    )
 
 private fun queryStrings(driver: SqlDriver, sql: String): List<String> {
     return driver.executeQuery(

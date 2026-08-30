@@ -14,9 +14,10 @@ class ConfigTest {
         assertEquals(10, Config.filterConcurrency)
         assertEquals(2000, Config.filterHeaderBatchSize)
         assertEquals(100, Config.filterBatchSize)
-        assertEquals(3_000L, Config.blockConnectTimeoutMs)
+        assertEquals(15_000L, Config.blockConnectTimeoutMs)
         assertEquals(30_000L, Config.blockSyncTimeoutMs)
-        assertEquals(10, Config.blockConcurrency)
+        assertEquals(30, Config.blockConcurrency)
+        assertEquals(15_000L, Config.peerRetryProbeTimeoutMs)
     }
 
     @Test

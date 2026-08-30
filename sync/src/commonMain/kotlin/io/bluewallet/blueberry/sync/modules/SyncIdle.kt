@@ -105,6 +105,7 @@ fun createSyncIdleModule(
             }
 
         val needingDownloadCount = ctx.db.matchedBlocks.listNeedingDownload(1).size
+        val matchingBehind = ctx.db.filters.hasUnscanned()
         // CF pool size only changes the catchup *reason* when leaving idle with
         // filter work. Skip the extra scan on the catchup/idle-complete path.
         val filterWorkNeedsPeers =
@@ -120,6 +121,7 @@ fun createSyncIdleModule(
             headersTotal = cur.headersTotal,
             filterMissingRangeCount = filterMissingRangeCount,
             filterWorkNeedsPeers = filterWorkNeedsPeers,
+            matchingBehind = matchingBehind,
             // Re-read blocks. A throttled or stale blocks:progress must not
             // keep CATCHUP after SQLite is already caught up (parse stays paused).
             blocksDownloaded = ctx.db.blocks.count(),
@@ -238,6 +240,9 @@ fun createSyncIdleModule(
             }
             unsubs += ctx.bus.on(Event.BlocksProgress) { requestEvaluation() }
             unsubs += ctx.bus.on(Event.FiltersProgress) { requestEvaluation() }
+            unsubs += ctx.bus.on(Event.MatchingProgress) {
+                requestEvaluation(EvaluationRequest(churnOnly = ctx.db.filters.hasUnscanned()))
+            }
             unsubs += ctx.bus.on(Event.FiltersMatch) {
                 requestEvaluation(EvaluationRequest(churnOnly = true))
             }

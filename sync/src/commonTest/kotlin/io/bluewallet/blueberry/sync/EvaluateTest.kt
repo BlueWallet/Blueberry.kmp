@@ -10,6 +10,7 @@ class EvaluateTest {
         headersTotal: Int = 100,
         filterMissingRangeCount: Int = 0,
         filterWorkNeedsPeers: Boolean = false,
+        matchingBehind: Boolean = false,
         blocksDownloaded: Int = 5,
         blocksMatched: Int = 5,
         needingDownloadCount: Int = 0,
@@ -19,6 +20,7 @@ class EvaluateTest {
         headersTotal = headersTotal,
         filterMissingRangeCount = filterMissingRangeCount,
         filterWorkNeedsPeers = filterWorkNeedsPeers,
+        matchingBehind = matchingBehind,
         blocksDownloaded = blocksDownloaded,
         blocksMatched = blocksMatched,
         needingDownloadCount = needingDownloadCount,
@@ -64,6 +66,22 @@ class EvaluateTest {
         assertEquals(
             SyncEvaluation.Catchup(SyncCatchupReason.PEERS),
             evaluateSyncState(base(filterMissingRangeCount = 2, filterWorkNeedsPeers = true)),
+        )
+    }
+
+    @Test
+    fun unscanned_filters_are_filters_not_idle() {
+        assertEquals(
+            SyncEvaluation.Catchup(SyncCatchupReason.FILTERS),
+            evaluateSyncState(base(matchingBehind = true)),
+        )
+        assertEquals(
+            SyncEvaluation.Idle,
+            evaluateSyncState(base(matchingBehind = false)),
+        )
+        assertEquals(
+            SyncEvaluation.Catchup(SyncCatchupReason.FILTERS),
+            evaluateSyncState(base(matchingBehind = true, alivePeerCount = 0)),
         )
     }
 

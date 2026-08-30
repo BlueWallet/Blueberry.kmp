@@ -40,7 +40,7 @@ private suspend fun connectSocket(host: String, port: Int): ByteDuplex {
             val job = launch(Dispatchers.IO) {
                 socket.connect(
                     InetSocketAddress(host, port),
-                    Config.peerProbeTimeoutMs.toInt(),
+                    Config.peerRetryProbeTimeoutMs.toInt(),
                 )
                 socket.tcpNoDelay = true
             }
