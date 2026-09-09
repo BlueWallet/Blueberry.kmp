@@ -362,6 +362,37 @@ class ChainHeadersTest {
     }
 
     @Test
+    fun inflated_startHeight_after_tip_does_not_drop_progress() = runBlocking {
+        val bus = createMessageBus()
+        val db = createSqliteDatabase(":memory:")
+        val events = mutableListOf<Pair<Int, Int>>()
+        bus.on(Event.HeadersProgress) { events.add(it.downloaded to it.total) }
+        val nextHeader = decodeBlockHeader(hexToBytes(NEXT_HEADER_HEX))
+        var calls = 0
+        val mod = createChainHeadersModule(
+            ModuleContext(bus, db),
+            ChainHeadersOptions(
+                net = stubPlatformNet(),
+                connectTimeoutMs = 200,
+                headersTimeoutMs = 200,
+                pollIntervalMs = 50,
+                fetchBatch = { _, _, _ ->
+                    calls++
+                    HeaderBatchResult.Ok(CHECKPOINT_HEIGHT + 100, listOf(nextHeader))
+                },
+            ),
+        )
+        upsertPeer(db, "1.1.1.1")
+        mod.start()
+        waitFor { db.headers.tip()?.height == CHECKPOINT_HEIGHT + 1 }
+        delay(150)
+        assertTrue(calls >= 2)
+        assertEquals(1 to 1, events.last())
+        mod.stop()
+        db.close()
+    }
+
+    @Test
     fun backs_off_when_every_raced_peer_fails_instantly() = runBlocking {
         val bus = createMessageBus()
         val db = createSqliteDatabase(":memory:")
