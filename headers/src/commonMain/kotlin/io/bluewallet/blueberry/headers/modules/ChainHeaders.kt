@@ -637,12 +637,6 @@ fun createChainHeadersModule(
                 continue
             }
 
-            if (winner.result.startHeight > checkpointHeight) {
-                val prevTotal = maxPeerStartHeight
-                maxPeerStartHeight = max(maxPeerStartHeight, winner.result.startHeight)
-                if (maxPeerStartHeight != prevTotal) emitProgress()
-            }
-
             try {
                 when (
                     val applied = applyHeaderBatch(
@@ -657,12 +651,17 @@ fun createChainHeadersModule(
                     is ApplyResult.Applied -> {
                         skipped.clear()
                         chain = trimChainMemory(applied.chain)
+                        if (winner.result.startHeight > checkpointHeight) {
+                            maxPeerStartHeight = max(maxPeerStartHeight, winner.result.startHeight)
+                        }
                         emitProgress()
                         tryFreezeBirthday()
                     }
                     ApplyResult.NothingNew, ApplyResult.Weaker -> {
                         skipped.add(peerKey(winner.peer.host, winner.peer.port))
                         sticky = null
+                        maxPeerStartHeight = ensureChain().tipHeight.toInt()
+                        emitProgress()
                     }
                 }
             } catch (err: HeaderConsensusError) {
