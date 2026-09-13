@@ -73,15 +73,16 @@ class FiltersDownloadOptions(
     val log: ((String) -> Unit)? = null,
 )
 
-private data class PeerRef(val host: String, val port: Int)
+private data class PeerRef(
+    val host: String,
+    val port: Int,
+)
 
 private const val UI_MIN_MS = 100L
 
-private fun nextCheckpointHeight(from: Int): Int =
-    ((from + 1 + CF_CHECKPT_INTERVAL - 1) / CF_CHECKPT_INTERVAL) * CF_CHECKPT_INTERVAL
+private fun nextCheckpointHeight(from: Int): Int = ((from + 1 + CF_CHECKPT_INTERVAL - 1) / CF_CHECKPT_INTERVAL) * CF_CHECKPT_INTERVAL
 
-private fun isBip157CheckpointHeight(height: Int): Boolean =
-    height > 0 && height % CF_CHECKPT_INTERVAL == 0
+private fun isBip157CheckpointHeight(height: Int): Boolean = height > 0 && height % CF_CHECKPT_INTERVAL == 0
 
 private fun formatError(err: Throwable): String = err.message ?: err.toString()
 
@@ -94,38 +95,41 @@ fun createFiltersDownloadModule(
     val connectTimeoutMs = options.connectTimeoutMs ?: Config.peerProbeTimeoutMs
     val syncTimeoutMs = options.syncTimeoutMs ?: Config.filterSyncTimeoutMs
     val concurrency = max(1, options.concurrency ?: Config.filterConcurrency)
-    val headerBatchSize = min(
-        options.headerBatchSize ?: Config.filterHeaderBatchSize,
-        MAX_GETCFHEADERS_RANGE,
-    )
-    val filterBatchSize = min(
-        options.filterBatchSize ?: Config.filterBatchSize,
-        MAX_GETCFILTERS_RANGE,
-    )
+    val headerBatchSize =
+        min(
+            options.headerBatchSize ?: Config.filterHeaderBatchSize,
+            MAX_GETCFHEADERS_RANGE,
+        )
+    val filterBatchSize =
+        min(
+            options.filterBatchSize ?: Config.filterBatchSize,
+            MAX_GETCFILTERS_RANGE,
+        )
     val persistBatchSize = max(1, options.persistBatchSize ?: 25)
     val idleDelayMs = options.idleDelayMs ?: 250L
     val now = options.now ?: { currentTimeMillis() }
     val diagnosticLog = options.log ?: { message -> log("filters-download", message) }
     var runSequence = 0
 
-    val pool = createFilterSessionPool(
-        FilterSessionPoolOptions(
-            connect = options.net.connect,
-            openSession = openSession,
-            max = concurrency,
-            connectTimeoutMs = connectTimeoutMs,
-            syncTimeoutMs = syncTimeoutMs,
-            coolMs = options.coolMs ?: 30_000L,
-            now = now,
-            onOpenCount = { open ->
-                ctx.bus.emit(
-                    Event.PeersSockets,
-                    PeersSocketsPayload(at = now(), kind = PeerSocketKind.FILT, open = open),
-                )
-            },
-            onDiagnostic = diagnosticLog,
-        ),
-    )
+    val pool =
+        createFilterSessionPool(
+            FilterSessionPoolOptions(
+                connect = options.net.connect,
+                openSession = openSession,
+                max = concurrency,
+                connectTimeoutMs = connectTimeoutMs,
+                syncTimeoutMs = syncTimeoutMs,
+                coolMs = options.coolMs ?: 30_000L,
+                now = now,
+                onOpenCount = { open ->
+                    ctx.bus.emit(
+                        Event.PeersSockets,
+                        PeersSocketsPayload(at = now(), kind = PeerSocketKind.FILT, open = open),
+                    )
+                },
+                onDiagnostic = diagnosticLog,
+            ),
+        )
 
     val stopped = AtomicBoolean(true)
     var quiet = false
@@ -171,19 +175,27 @@ fun createFiltersDownloadModule(
 
     suspend fun refreshPeers(): List<PeerRef> {
         val bits = NODE_COMPACT_FILTERS.toULong()
-        val peers = ctx.db.peers.listAliveWithServices(bits, 512)
-            .map { PeerRef(it.host, it.port) }
+        val peers =
+            ctx.db.peers
+                .listAliveWithServices(bits, 512)
+                .map { PeerRef(it.host, it.port) }
         if (peers.isNotEmpty()) {
             pool.setPeers(peers.map { FilterPoolPeer(it.host, it.port) })
             return peers
         }
-        val stored = ctx.db.peers.listWithServices(bits, 256)
-            .map { PeerRef(it.host, it.port) }
+        val stored =
+            ctx.db.peers
+                .listWithServices(bits, 256)
+                .map { PeerRef(it.host, it.port) }
         pool.setPeers(stored.map { FilterPoolPeer(it.host, it.port) })
         return stored
     }
 
-    fun emitProgress(chainFrom: Int, tipTo: Int, force: Boolean = false) {
+    fun emitProgress(
+        chainFrom: Int,
+        tipTo: Int,
+        force: Boolean = false,
+    ) {
         val t = now()
         if (!force && t - lastEmitAt < UI_MIN_MS) return
         lastEmitAt = t
@@ -198,16 +210,25 @@ fun createFiltersDownloadModule(
         haveCached.store(ctx.db.filters.count())
     }
 
-    fun wipeFilterTablesFrom(height: Int, rangeFrom: Int) {
+    fun wipeFilterTablesFrom(
+        height: Int,
+        rangeFrom: Int,
+    ) {
         ctx.db.wipeFiltersFrom(
             height,
-            if (height == rangeFrom && rangeFrom > 0) WipeFiltersFromOptions(prevHeaderHeight = rangeFrom - 1)
-            else null,
+            if (height == rangeFrom && rangeFrom > 0) {
+                WipeFiltersFromOptions(prevHeaderHeight = rangeFrom - 1)
+            } else {
+                null
+            },
         )
         hashCheckedThrough = min(hashCheckedThrough, height - 1)
     }
 
-    fun reconcileReorg(from: Int, to: Int) {
+    fun reconcileReorg(
+        from: Int,
+        to: Int,
+    ) {
         val filterHeaderTip = ctx.db.filterHeaders.tip()
         if (filterHeaderTip != null && filterHeaderTip.height > to) {
             wipeFilterTablesFrom(to + 1, from)
@@ -262,7 +283,10 @@ fun createFiltersDownloadModule(
         return derived
     }
 
-    fun firstMissingFilterHeader(from: Int, to: Int): Int? {
+    fun firstMissingFilterHeader(
+        from: Int,
+        to: Int,
+    ): Int? {
         if (ctx.db.filterHeaders.get(from) == null) return from
         val tip = ctx.db.filterHeaders.tip() ?: return from
         if (tip.height < from) return from
@@ -270,7 +294,11 @@ fun createFiltersDownloadModule(
         return tip.height + 1
     }
 
-    fun buildHeaderClaim(cursor: Int, chainFrom: Int, tipTo: Int): HeightRange? {
+    fun buildHeaderClaim(
+        cursor: Int,
+        chainFrom: Int,
+        tipTo: Int,
+    ): HeightRange? {
         if (cursor > tipTo) return null
         var stop = min(cursor + headerBatchSize - 1, tipTo)
         if (cursor == chainFrom && !isBip157CheckpointHeight(chainFrom)) {
@@ -297,62 +325,70 @@ fun createFiltersDownloadModule(
             }
             var ok = false
             try {
-                val leased = pool.withSession { session, peer ->
-                    val startedAt = now()
-                    if (ctx.db.filterHeaders.get(claim.from) != null) {
-                        ok = true
-                        return@withSession
-                    }
-                    try {
-                        val cache = checkpointCache
-                        if (cache == null || cache.first != tipHashInternalHex) {
-                            val cpHeaders = session.getCFCheckpt(hexToBytes(tipHashInternalHex))
-                            checkpointCache = tipHashInternalHex to checkpointMap(cpHeaders)
+                val leased =
+                    pool.withSession { session, peer ->
+                        val startedAt = now()
+                        if (ctx.db.filterHeaders.get(claim.from) != null) {
+                            ok = true
+                            return@withSession
                         }
-                        val stopRow = ctx.db.headers.get(claim.to) ?: error("missing stop header")
-                        val stopHashInternalHex = stopRow.hashInternalHex
-                        val response = session.getCFHeaders(claim.from, hexToBytes(stopHashInternalHex))
-                        val derived = verifyCfHeadersBatch(
-                            chainFrom,
-                            claim.from,
-                            claim.to,
-                            response.previousFilterHeader,
-                            response.filterHashes,
-                            checkpointCache!!.second,
-                        ) ?: error("cfheaders verification failed")
-                        val stopNow = ctx.db.headers.get(claim.to)
-                        if (stopNow == null || stopNow.hashInternalHex != stopHashInternalHex) {
-                            error("stale cfheaders stop hash after reorg")
-                        }
-                        val rows = mutableListOf<FilterHeaderRecord>()
-                        if (claim.from == chainFrom && chainFrom > 0) {
-                            val prevHeight = chainFrom - 1
-                            val prevHeader = response.previousFilterHeader
-                            val existing = ctx.db.filterHeaders.get(prevHeight)
-                            if (existing != null) {
-                                if (!equalBytes(existing.header, prevHeader)) {
-                                    error("cfheaders previous header mismatch")
-                                }
-                            } else {
-                                rows.add(FilterHeaderRecord(prevHeight, prevHeader.copyOf()))
+                        try {
+                            val cache = checkpointCache
+                            if (cache == null || cache.first != tipHashInternalHex) {
+                                val cpHeaders = session.getCFCheckpt(hexToBytes(tipHashInternalHex))
+                                checkpointCache = tipHashInternalHex to checkpointMap(cpHeaders)
                             }
+                            val stopRow = ctx.db.headers.get(claim.to) ?: error("missing stop header")
+                            val stopHashInternalHex = stopRow.hashInternalHex
+                            val response = session.getCFHeaders(claim.from, hexToBytes(stopHashInternalHex))
+                            val derived =
+                                verifyCfHeadersBatch(
+                                    chainFrom,
+                                    claim.from,
+                                    claim.to,
+                                    response.previousFilterHeader,
+                                    response.filterHashes,
+                                    checkpointCache!!.second,
+                                ) ?: error("cfheaders verification failed")
+                            val stopNow = ctx.db.headers.get(claim.to)
+                            if (stopNow == null || stopNow.hashInternalHex != stopHashInternalHex) {
+                                error("stale cfheaders stop hash after reorg")
+                            }
+                            val rows = mutableListOf<FilterHeaderRecord>()
+                            if (claim.from == chainFrom && chainFrom > 0) {
+                                val prevHeight = chainFrom - 1
+                                val prevHeader = response.previousFilterHeader
+                                val existing = ctx.db.filterHeaders.get(prevHeight)
+                                if (existing != null) {
+                                    if (!equalBytes(existing.header, prevHeader)) {
+                                        error("cfheaders previous header mismatch")
+                                    }
+                                } else {
+                                    rows.add(FilterHeaderRecord(prevHeight, prevHeader.copyOf()))
+                                }
+                            }
+                            for (i in derived.indices) {
+                                rows.add(FilterHeaderRecord(claim.from + i, derived[i].copyOf()))
+                            }
+                            ctx.db.filterHeaders.append(rows)
+                            ctx.db.peers.markAlive(peer.host, peer.port, true)
+                            diagnosticLog(
+                                "header batch success range=${claim.from}-${claim.to} peer=${peer.host}:${peer.port} received=${response.filterHashes.size} saved=${rows.size} elapsedMs=${max(
+                                    0,
+                                    now() - startedAt,
+                                )}",
+                            )
+                            ok = true
+                        } catch (err: Throwable) {
+                            diagnosticLog(
+                                "header batch failure range=${claim.from}-${claim.to} peer=${peer.host}:${peer.port} elapsedMs=${max(
+                                    0,
+                                    now() - startedAt,
+                                )} error=${formatError(err)}",
+                            )
+                            throw err
                         }
-                        for (i in derived.indices) {
-                            rows.add(FilterHeaderRecord(claim.from + i, derived[i].copyOf()))
-                        }
-                        ctx.db.filterHeaders.append(rows)
-                        ctx.db.peers.markAlive(peer.host, peer.port, true)
-                        diagnosticLog(
-                            "header batch success range=${claim.from}-${claim.to} peer=${peer.host}:${peer.port} received=${response.filterHashes.size} saved=${rows.size} elapsedMs=${max(0, now() - startedAt)}",
-                        )
-                        ok = true
-                    } catch (err: Throwable) {
-                        diagnosticLog(
-                            "header batch failure range=${claim.from}-${claim.to} peer=${peer.host}:${peer.port} elapsedMs=${max(0, now() - startedAt)} error=${formatError(err)}",
-                        )
-                        throw err
                     }
-                }
                 if (leased == null || !ok) {
                     if (refreshPeers().isEmpty()) waitForKick(idleDelayMs) else waitForKick(50)
                     continue
@@ -390,10 +426,13 @@ fun createFiltersDownloadModule(
             val rows = toStore.toList()
             toStore.clear()
             persistLock.withLock {
-                val canonical = rows.filter {
-                    ctx.db.headers.get(it.height)?.hashInternalHex == it.blockHashInternalHex &&
-                        !ctx.db.filters.has(it.height)
-                }
+                val canonical =
+                    rows.filter {
+                        ctx.db.headers
+                            .get(it.height)
+                            ?.hashInternalHex == it.blockHashInternalHex &&
+                            !ctx.db.filters.has(it.height)
+                    }
                 if (canonical.size < rows.size) {
                     diagnosticLog(
                         "filter flush dropped stale range=${range.from}-${range.to} dropped=${rows.size - canonical.size}",
@@ -430,11 +469,12 @@ fun createFiltersDownloadModule(
 
         try {
             var streamed = false
-            val filters = session.getCFilters(range.from, hexToBytes(stopRow.hashInternalHex), expectCount) { msg ->
-                streamed = true
-                accept(msg)
-                if (toStore.size >= persistBatchSize) flushVerified()
-            }
+            val filters =
+                session.getCFilters(range.from, hexToBytes(stopRow.hashInternalHex), expectCount) { msg ->
+                    streamed = true
+                    accept(msg)
+                    if (toStore.size >= persistBatchSize) flushVerified()
+                }
             if (!streamed) {
                 for (msg in filters) {
                     accept(msg)
@@ -444,7 +484,10 @@ fun createFiltersDownloadModule(
             flushVerified()
             persistLock.withLock { ctx.db.peers.markAlive(peer.host, peer.port, true) }
             diagnosticLog(
-                "filter batch success range=${range.from}-${range.to} peer=${peer.host}:${peer.port} received=$received saved=$saved bytes=$receivedBytes elapsedMs=${max(0, now() - startedAt)}",
+                "filter batch success range=${range.from}-${range.to} peer=${peer.host}:${peer.port} received=$received saved=$saved bytes=$receivedBytes elapsedMs=${max(
+                    0,
+                    now() - startedAt,
+                )}",
             )
             return saved
         } catch (err: Throwable) {
@@ -455,7 +498,10 @@ fun createFiltersDownloadModule(
                 persistenceError = flushErr
             }
             diagnosticLog(
-                "filter batch failure range=${range.from}-${range.to} peer=${peer.host}:${peer.port} received=$received saved=$saved bytes=$receivedBytes elapsedMs=${max(0, now() - startedAt)} error=${formatError(err)}" +
+                "filter batch failure range=${range.from}-${range.to} peer=${peer.host}:${peer.port} received=$received saved=$saved bytes=$receivedBytes elapsedMs=${max(
+                    0,
+                    now() - startedAt,
+                )} error=${formatError(err)}" +
                     if (persistenceError == null) "" else " persistenceError=${formatError(persistenceError)}",
             )
             if (persistenceError != null) {
@@ -465,7 +511,10 @@ fun createFiltersDownloadModule(
         }
     }
 
-    suspend fun syncFiltersPhase(chainFrom: Int, tipTo: Int) {
+    suspend fun syncFiltersPhase(
+        chainFrom: Int,
+        tipTo: Int,
+    ) {
         val initial = ctx.db.filters.missingRanges(chainFrom, tipTo, filterBatchSize)
         val queue = ArrayDeque(initial)
         val queueLock = Mutex()
@@ -478,14 +527,16 @@ fun createFiltersDownloadModule(
             repeat(workerCount) {
                 launch {
                     while (!isStopped()) {
-                        val range = queueLock.withLock {
-                            if (queue.isEmpty()) null else queue.removeFirst()
-                        } ?: break
+                        val range =
+                            queueLock.withLock {
+                                if (queue.isEmpty()) null else queue.removeFirst()
+                            } ?: break
                         val key = "${range.from}-${range.to}"
                         try {
-                            val saved = pool.withSession { session, peer ->
-                                downloadFilterRange(session, PeerRef(peer.host, peer.port), range, chainFrom, tipTo)
-                            }
+                            val saved =
+                                pool.withSession { session, peer ->
+                                    downloadFilterRange(session, PeerRef(peer.host, peer.port), range, chainFrom, tipTo)
+                                }
                             if (saved == null) {
                                 queueLock.withLock { queue.addLast(range) }
                                 val coolWait = min(1_000L, pool.coolDelayMs().let { if (it == 0L) 50L else it })
@@ -494,17 +545,27 @@ fun createFiltersDownloadModule(
                             }
                             queueLock.withLock { failures.remove(key) }
                         } catch (_: Throwable) {
-                            val attempts = queueLock.withLock {
-                                val n = (failures[key] ?: 0) + 1
-                                failures[key] = n
-                                n
-                            }
+                            val attempts =
+                                queueLock.withLock {
+                                    val n = (failures[key] ?: 0) + 1
+                                    failures[key] = n
+                                    n
+                                }
                             val remaining =
-                                if (attempts <= 8) ctx.db.filters.missingRanges(range.from, range.to, filterBatchSize)
-                                else emptyList()
+                                if (attempts <= 8) {
+                                    ctx.db.filters.missingRanges(range.from, range.to, filterBatchSize)
+                                } else {
+                                    emptyList()
+                                }
                             if (remaining.isNotEmpty()) queueLock.withLock { queue.addAll(remaining) }
                             diagnosticLog(
-                                "filter batch retry range=$key failure=$attempts/9 action=${if (attempts > 8) "drop" else if (remaining.isNotEmpty()) "requeue" else "complete"} remaining=${remaining.joinToString(",") { "${it.from}-${it.to}" }.ifEmpty { "none" }}",
+                                "filter batch retry range=$key failure=$attempts/9 action=${if (attempts > 8) {
+                                    "drop"
+                                } else if (remaining.isNotEmpty()) {
+                                    "requeue"
+                                } else {
+                                    "complete"
+                                }} remaining=${remaining.joinToString(",") { "${it.from}-${it.to}" }.ifEmpty { "none" }}",
                             )
                             val coolWait = min(1_000L, pool.coolDelayMs().let { if (it == 0L) 50L else it })
                             waitForKick(coolWait)
@@ -525,61 +586,64 @@ fun createFiltersDownloadModule(
         diagnosticLog("run start id=$runId")
         while (!isStopped()) {
             try {
-                    val birthday = inspectWalletBirthday(ctx.db)
-                    if (birthday is WalletBirthdayInspection.Pending) {
-                        ctx.bus.emit(Event.FiltersProgress, FiltersProgressPayload(now(), 0, 0))
-                        waitForKick(idleDelayMs)
-                        continue
+                val birthday = inspectWalletBirthday(ctx.db)
+                if (birthday is WalletBirthdayInspection.Pending) {
+                    ctx.bus.emit(Event.FiltersProgress, FiltersProgressPayload(now(), 0, 0))
+                    waitForKick(idleDelayMs)
+                    continue
+                }
+                val minH = ctx.db.headers.minHeight()
+                val tip = ctx.db.headers.tip()
+                if (minH == null || tip == null) {
+                    ctx.bus.emit(Event.FiltersProgress, FiltersProgressPayload(now(), 0, 0))
+                    break
+                }
+                val filterFrom = compactFilterFrom(ctx.db)
+                if (filterFrom == null) {
+                    ctx.bus.emit(Event.FiltersProgress, FiltersProgressPayload(now(), 0, 0))
+                    break
+                }
+                if (tip.height < filterFrom) {
+                    waitForKick(idleDelayMs)
+                    continue
+                }
+                val chainFrom =
+                    if (birthday is WalletBirthdayInspection.Ok) {
+                        max(minH, (filterFrom / CF_CHECKPT_INTERVAL) * CF_CHECKPT_INTERVAL)
+                    } else {
+                        minH
                     }
-                    val minH = ctx.db.headers.minHeight()
-                    val tip = ctx.db.headers.tip()
-                    if (minH == null || tip == null) {
-                        ctx.bus.emit(Event.FiltersProgress, FiltersProgressPayload(now(), 0, 0))
-                        break
-                    }
-                    val filterFrom = compactFilterFrom(ctx.db)
-                    if (filterFrom == null) {
-                        ctx.bus.emit(Event.FiltersProgress, FiltersProgressPayload(now(), 0, 0))
-                        break
-                    }
-                    if (tip.height < filterFrom) {
-                        waitForKick(idleDelayMs)
-                        continue
-                    }
-                    val chainFrom =
-                        if (birthday is WalletBirthdayInspection.Ok) {
-                            max(minH, (filterFrom / CF_CHECKPT_INTERVAL) * CF_CHECKPT_INTERVAL)
-                        } else {
-                            minH
-                        }
-                    val tipTo = tip.height
-                    reconcileReorg(chainFrom, tipTo)
-                    refreshHaveCached()
-                    emitProgress(filterFrom, tipTo, true)
-                    val peers = refreshPeers()
+                val tipTo = tip.height
+                reconcileReorg(chainFrom, tipTo)
+                refreshHaveCached()
+                emitProgress(filterFrom, tipTo, true)
+                val peers = refreshPeers()
+                diagnosticLog(
+                    "sync plan filterRange=$filterFrom-$tipTo headerRange=$chainFrom-$tipTo cached=${haveCached.load()} peers=${peers.size}",
+                )
+                if (peers.isEmpty()) {
+                    waitForKick(idleDelayMs)
+                    continue
+                }
+                val headersDone = syncFilterHeadersPhase(chainFrom, tipTo, tip.hashInternalHex)
+                if (!headersDone) {
+                    if (isStopped()) break
+                    continue
+                }
+                syncFiltersPhase(filterFrom, tipTo)
+                refreshHaveCached()
+                emitProgress(filterFrom, tipTo, true)
+                if (ctx.db.filters.completeInRange(filterFrom, tipTo)) {
                     diagnosticLog(
-                        "sync plan filterRange=$filterFrom-$tipTo headerRange=$chainFrom-$tipTo cached=${haveCached.load()} peers=${peers.size}",
+                        "run complete id=$runId range=$filterFrom-$tipTo cached=${haveCached.load()} remaining=0 elapsedMs=${max(
+                            0,
+                            now() - runStartedAt,
+                        )}",
                     )
-                    if (peers.isEmpty()) {
-                        waitForKick(idleDelayMs)
-                        continue
-                    }
-                    val headersDone = syncFilterHeadersPhase(chainFrom, tipTo, tip.hashInternalHex)
-                    if (!headersDone) {
-                        if (isStopped()) break
-                        continue
-                    }
-                    syncFiltersPhase(filterFrom, tipTo)
-                    refreshHaveCached()
-                    emitProgress(filterFrom, tipTo, true)
-                    if (ctx.db.filters.completeInRange(filterFrom, tipTo)) {
-                        diagnosticLog(
-                            "run complete id=$runId range=$filterFrom-$tipTo cached=${haveCached.load()} remaining=0 elapsedMs=${max(0, now() - runStartedAt)}",
-                        )
-                        pool.closeAll()
-                        break
-                    }
-                    waitForKick(50)
+                    pool.closeAll()
+                    break
+                }
+                waitForKick(50)
             } catch (err: Throwable) {
                 diagnosticLog(
                     "run failure id=$runId elapsedMs=${max(0, now() - runStartedAt)} error=${formatError(err)}",
@@ -609,32 +673,36 @@ fun createFiltersDownloadModule(
                 "module start concurrency=$concurrency filterBatchSize=$filterBatchSize persistBatchSize=$persistBatchSize headerBatchSize=$headerBatchSize connectTimeoutMs=$connectTimeoutMs syncTimeoutMs=$syncTimeoutMs",
             )
             stopped.store(false)
-            unsubHeaders = ctx.bus.on(Event.HeadersProgress) {
-                kick()
-                requestRun("headers")
-            }
+            unsubHeaders =
+                ctx.bus.on(Event.HeadersProgress) {
+                    kick()
+                    requestRun("headers")
+                }
             unsubIdle = ctx.bus.on(Event.SyncIdle) { quiet = true }
-            unsubCatchup = ctx.bus.on(Event.SyncCatchup) {
-                quiet = false
-                requestRun("peers")
-            }
-            unsubPeers = ctx.bus.on(Event.PeersUpdated) {
-                kick()
-                if (quiet) return@on
-                requestRun("peers")
-            }
+            unsubCatchup =
+                ctx.bus.on(Event.SyncCatchup) {
+                    quiet = false
+                    requestRun("peers")
+                }
+            unsubPeers =
+                ctx.bus.on(Event.PeersUpdated) {
+                    kick()
+                    if (quiet) return@on
+                    requestRun("peers")
+                }
             val job = SupervisorJob()
             parentJob = job
             val scope = CoroutineScope(job + Dispatchers.Default)
             moduleScope = scope
             while (runRequests.tryReceive().isSuccess) {}
-            val launched = scope.launch {
-                while (isActive) {
-                    runRequests.receive()
-                    if (isStopped()) break
-                    runDownload()
+            val launched =
+                scope.launch {
+                    while (isActive) {
+                        runRequests.receive()
+                        if (isStopped()) break
+                        runDownload()
+                    }
                 }
-            }
             loopJob = launched
             detachLoop(ctx, "filters-download", launched)
             requestRun("start")

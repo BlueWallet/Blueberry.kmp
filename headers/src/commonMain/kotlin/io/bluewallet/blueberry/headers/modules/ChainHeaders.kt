@@ -25,7 +25,6 @@ import io.bluewallet.blueberry.peers.net.HeaderSessionPool
 import io.bluewallet.blueberry.peers.net.PlatformNet
 import io.bluewallet.blueberry.peers.net.SESSION_BUSY_ERROR
 import io.bluewallet.blueberry.peers.net.createHeaderSessionPool
-import io.bluewallet.blueberry.storage.HeaderRecord as DbHeaderRecord
 import io.bluewallet.blueberry.storage.HeaderWrite
 import io.bluewallet.blueberry.wallet.maybeFreezeWalletBirthday
 import io.bluewallet.headers.BlockHeader
@@ -45,17 +44,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.concurrent.Volatile
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.concurrent.Volatile
 import kotlin.math.max
+import io.bluewallet.blueberry.storage.HeaderRecord as DbHeaderRecord
 
 class ChainHeadersOptions(
     val net: PlatformNet,
@@ -69,7 +69,10 @@ class ChainHeadersOptions(
     val nowSeconds: (() -> Long)? = null,
 )
 
-private data class PeerRef(val host: String, val port: Int)
+private data class PeerRef(
+    val host: String,
+    val port: Int,
+)
 
 private fun checkpointSeedFromConsensus(consensus: HeaderConsensusParams): DbHeaderRecord {
     val header = decodeBlockHeader(consensus.checkpoint.headerBytes)
@@ -81,7 +84,10 @@ private fun checkpointSeedFromConsensus(consensus: HeaderConsensusParams): DbHea
     )
 }
 
-private fun peerKey(host: String, port: Int) = "$host:$port"
+private fun peerKey(
+    host: String,
+    port: Int,
+) = "$host:$port"
 
 private fun buildLocatorHashes(
     ctx: ModuleContext,
@@ -117,14 +123,15 @@ private fun persistBranch(
     mode: String,
     ancestorHeight: Int,
 ) {
-    val writes = branch.headers.map { record ->
-        HeaderWrite(
-            height = record.height.toInt(),
-            hashInternalHex = record.hashInternalHex,
-            header = hexToBytes(record.headerHex),
-            cumulativeWork = branch.cumulativeWorkByHeight.getValue(record.height),
-        )
-    }
+    val writes =
+        branch.headers.map { record ->
+            HeaderWrite(
+                height = record.height.toInt(),
+                hashInternalHex = record.hashInternalHex,
+                header = hexToBytes(record.headerHex),
+                cumulativeWork = branch.cumulativeWorkByHeight.getValue(record.height),
+            )
+        }
     if (mode == "append") {
         ctx.db.headers.append(writes)
     } else {
@@ -183,8 +190,12 @@ private fun chainAfterBranch(
 }
 
 private sealed class ApplyResult {
-    data class Applied(val chain: ValidatedHeaderChain) : ApplyResult()
+    data class Applied(
+        val chain: ValidatedHeaderChain,
+    ) : ApplyResult()
+
     data object NothingNew : ApplyResult()
+
     data object Weaker : ApplyResult()
 }
 
@@ -201,17 +212,19 @@ private fun applyHeaderBatch(
     val prevHex = bytesToHex(headers[0].previousBlockHash)
     var ancestorHeight = base.heightByHashInternal[prevHex]
     if (ancestorHeight == null) {
-        val fromDb = ctx.db.headers.heightForHashInternal(prevHex) ?: throw HeaderConsensusError(
-            consensus.checkpoint.height + 1,
-            "batch does not link to known chain",
-        )
+        val fromDb =
+            ctx.db.headers.heightForHashInternal(prevHex) ?: throw HeaderConsensusError(
+                consensus.checkpoint.height + 1,
+                "batch does not link to known chain",
+            )
         ancestorHeight = fromDb.toLong()
     }
 
-    val needFrom = max(
-        consensus.checkpoint.height,
-        ancestorHeight - max(consensus.retargetInterval, consensus.medianTimeSpan),
-    )
+    val needFrom =
+        max(
+            consensus.checkpoint.height,
+            ancestorHeight - max(consensus.retargetInterval, consensus.medianTimeSpan),
+        )
     val chain =
         if (base.entriesByHeight.containsKey(ancestorHeight) && base.entriesByHeight.containsKey(needFrom)) {
             base
@@ -220,9 +233,10 @@ private fun applyHeaderBatch(
         }
 
     val builder = HeaderBranchBuilder(chain, ancestorHeight, nowSeconds())
-    val records = headers.mapIndexed { i, h ->
-        storedHeaderFromBlockHeader(ancestorHeight + 1 + i, h)
-    }
+    val records =
+        headers.mapIndexed { i, h ->
+            storedHeaderFromBlockHeader(ancestorHeight + 1 + i, h)
+        }
     builder.append(records)
     val branch = builder.finish()
     if (branch.headers.isEmpty()) return ApplyResult.NothingNew
@@ -236,7 +250,10 @@ private fun applyHeaderBatch(
     return ApplyResult.Applied(chainAfterBranch(chain, branch))
 }
 
-private data class RaceWinner(val peer: PeerRef, val result: HeaderBatchResult.Ok)
+private data class RaceWinner(
+    val peer: PeerRef,
+    val result: HeaderBatchResult.Ok,
+)
 
 private data class RaceOutcome(
     val winner: RaceWinner?,
@@ -246,7 +263,9 @@ private data class RaceOutcome(
 
 private class HeadersState {
     @Volatile var stopped = true
+
     @Volatile var quiet = false
+
     @Volatile var waitingForPeers = false
 }
 
@@ -259,8 +278,10 @@ private class HeadersState {
  */
 internal const val HEADER_WATCHER_FILL_MS = 100L
 
-internal fun atTipWaitMs(pollIntervalMs: Long, hasLiveWatchers: Boolean): Long =
-    if (hasLiveWatchers) pollIntervalMs else HEADER_WATCHER_FILL_MS
+internal fun atTipWaitMs(
+    pollIntervalMs: Long,
+    hasLiveWatchers: Boolean,
+): Long = if (hasLiveWatchers) pollIntervalMs else HEADER_WATCHER_FILL_MS
 
 /**
  * WHY: SyncIdle sets quiet so a chatty peer DB does not spin the loop.
@@ -275,8 +296,10 @@ internal fun ignoreQuietPeerKick(
 ): Boolean = quiet && !waitingForPeers && hasLiveWatchers
 
 /** WHY: last hdr FIN must not leave us in the 10min wait with hdr=0. */
-internal fun lostLastWatcher(prevOpen: Int, nextOpen: Int): Boolean =
-    prevOpen > 0 && nextOpen == 0
+internal fun lostLastWatcher(
+    prevOpen: Int,
+    nextOpen: Int,
+): Boolean = prevOpen > 0 && nextOpen == 0
 
 @OptIn(ExperimentalAtomicApi::class)
 fun createChainHeadersModule(
@@ -332,7 +355,10 @@ fun createChainHeadersModule(
     var sticky: PeerRef? = null
     var chain: ValidatedHeaderChain? = null
 
-    fun pickRacePeers(alive: List<PeerRef>, ignore: Set<String>): List<PeerRef> {
+    fun pickRacePeers(
+        alive: List<PeerRef>,
+        ignore: Set<String>,
+    ): List<PeerRef> {
         val n = minOf(racePeers, alive.size)
         val picked = ArrayList<PeerRef>()
         val seen = HashSet<String>()
@@ -386,27 +412,33 @@ fun createChainHeadersModule(
         }
 
         suspend fun onSettledPeer() {
-            val outcome = lock.withLock {
-                pending--
-                if (pending != 0) null
-                else if (emptyWinner != null) RaceOutcome(emptyWinner, failed.toList(), false)
-                else RaceOutcome(null, failed.toList(), hardFails == 0)
-            }
+            val outcome =
+                lock.withLock {
+                    pending--
+                    if (pending != 0) {
+                        null
+                    } else if (emptyWinner != null) {
+                        RaceOutcome(emptyWinner, failed.toList(), false)
+                    } else {
+                        RaceOutcome(null, failed.toList(), hardFails == 0)
+                    }
+                }
             if (outcome != null) finish(outcome)
         }
 
         for (peer in peers) {
             scope.launch {
                 try {
-                    val result = fetchBatch(
-                        peer.host,
-                        peer.port,
-                        HeaderFetchOptions(
-                            locatorHashes = locatorHashes,
-                            connectTimeoutMs = connectTimeoutMs,
-                            headersTimeoutMs = headersTimeoutMs,
-                        ),
-                    )
+                    val result =
+                        fetchBatch(
+                            peer.host,
+                            peer.port,
+                            HeaderFetchOptions(
+                                locatorHashes = locatorHashes,
+                                connectTimeoutMs = connectTimeoutMs,
+                                headersTimeoutMs = headersTimeoutMs,
+                            ),
+                        )
                     if (done.isCompleted) {
                         // Race already timed out and the loop may be in the 10min
                         // at-tip nap. A late non-empty batch is the missed tip —
@@ -486,7 +518,10 @@ fun createChainHeadersModule(
         if (state.stopped) return
         if (durableWake.exchange(false)) return
         val deferred = CompletableDeferred<Unit>()
-        val complete = { deferred.complete(Unit); Unit }
+        val complete = {
+            deferred.complete(Unit)
+            Unit
+        }
         wake = complete
         if (durableWake.exchange(false)) complete()
         try {
@@ -499,11 +534,12 @@ fun createChainHeadersModule(
 
     fun loadTrustedWindow(throughHeight: Int? = null): ValidatedHeaderChain {
         val tip = ctx.db.headers.tip() ?: error("headers DB has no tip")
-        val to = if (throughHeight == null) {
-            tip.height
-        } else {
-            minOf(tip.height, max(checkpointHeight, throughHeight))
-        }
+        val to =
+            if (throughHeight == null) {
+                tip.height
+            } else {
+                minOf(tip.height, max(checkpointHeight, throughHeight))
+            }
         val from = max(checkpointHeight, to - TRUSTED_CHAIN_WINDOW)
         val rows = ctx.db.headers.loadRange(from, to)
         if (rows.isEmpty()) error("trusted header window is empty")
@@ -525,7 +561,10 @@ fun createChainHeadersModule(
 
     fun emitProgress() {
         if (maxPeerStartHeight <= checkpointHeight) return
-        val tipHeight = chain?.tipHeight?.toInt() ?: ctx.db.headers.tip()!!.height
+        val tipHeight =
+            chain?.tipHeight?.toInt() ?: ctx.db.headers
+                .tip()!!
+                .height
         val peerTip = max(maxPeerStartHeight, tipHeight)
         ctx.bus.emit(
             Event.HeadersProgress,
@@ -540,7 +579,10 @@ fun createChainHeadersModule(
 
     fun tryFreezeBirthday() {
         if (maxPeerStartHeight <= checkpointHeight) return
-        val tipHeight = chain?.tipHeight?.toInt() ?: ctx.db.headers.tip()?.height ?: return
+        val tipHeight =
+            chain?.tipHeight?.toInt() ?: ctx.db.headers
+                .tip()
+                ?.height ?: return
         if (tipHeight < maxPeerStartHeight) return
         maybeFreezeWalletBirthday(ctx.db, tipHeight)
     }
@@ -563,125 +605,130 @@ fun createChainHeadersModule(
         }
 
         while (!state.stopped) {
-          try {
-            val allAlive = ctx.db.peers.listAlive().map { PeerRef(it.host, it.port) }
-            val alive = allAlive.filter { !dead.contains(peerKey(it.host, it.port)) }
-
-            if (alive.isEmpty()) {
-                if (!loggedWaiting) {
-                    loggedWaiting = true
-                    log("chain-headers", "waiting for peers")
-                }
-                state.waitingForPeers = true
-                try {
-                    if (allAlive.isEmpty()) {
-                        waitForKick(pollIntervalMs)
-                    } else {
-                        dead.clear()
-                        skipped.clear()
-                        sticky = null
-                        waitForKick(250)
-                    }
-                } finally {
-                    state.waitingForPeers = false
-                }
-                continue
-            }
-
-            loggedWaiting = false
-            val raced = pickRacePeers(alive, skipped)
-            if (raced.isEmpty()) {
-                val hasUnskipped = alive.any { !skipped.contains(peerKey(it.host, it.port)) }
-                if (!hasUnskipped) skipped.clear()
-                waitForKick(100)
-                continue
-            }
-
-            val tipChain = ensureChain()
-            val locatorHashes = buildLocatorHashes(
-                ctx,
-                tipChain.tipHeight.toInt(),
-                bytesToHex(tipChain.tipHashInternal),
-                checkpointHeight,
-            )
-            val outcome = raceHeaderFetch(raced, locatorHashes)
-            if (state.stopped) break
-
-            for (peer in outcome.failed) {
-                markPeerHardFailed(peer)
-            }
-
-            val winner = outcome.winner
-            if (winner == null) {
-                peerIndex += max(1, raced.size)
-                waitForKick(if (outcome.busyOnly) 100 else 500)
-                continue
-            }
-
-            sticky = winner.peer
-            peerIndex += max(1, raced.size)
-
-            if (winner.result.headers.isEmpty()) {
-                skipped.clear()
-                maxPeerStartHeight = ensureChain().tipHeight.toInt()
-                emitProgress()
-                tryFreezeBirthday()
-                val tipHeight = ensureChain().tipHeight.toInt()
-                if (loggedTipHeight != tipHeight) {
-                    loggedTipHeight = tipHeight
-                    log("chain-headers", "at tip height=$tipHeight")
-                }
-                // HOW: no pool (injected-fetch tests) counts as "watchers exist"
-                // so existing pollIntervalMs backoff tests still hold.
-                waitForKick(atTipWaitMs(pollIntervalMs, pool == null || hdrOpen > 0))
-                continue
-            }
-
             try {
-                when (
-                    val applied = applyHeaderBatch(
-                        ctx,
-                        winner.result.headers,
-                        ensureChain(),
-                        consensus,
-                        nowSeconds,
-                        ::loadTrustedWindow,
-                    )
-                ) {
-                    is ApplyResult.Applied -> {
-                        skipped.clear()
-                        chain = trimChainMemory(applied.chain)
-                        if (winner.result.startHeight > checkpointHeight) {
-                            maxPeerStartHeight = max(maxPeerStartHeight, winner.result.startHeight)
+                val allAlive =
+                    ctx.db.peers
+                        .listAlive()
+                        .map { PeerRef(it.host, it.port) }
+                val alive = allAlive.filter { !dead.contains(peerKey(it.host, it.port)) }
+
+                if (alive.isEmpty()) {
+                    if (!loggedWaiting) {
+                        loggedWaiting = true
+                        log("chain-headers", "waiting for peers")
+                    }
+                    state.waitingForPeers = true
+                    try {
+                        if (allAlive.isEmpty()) {
+                            waitForKick(pollIntervalMs)
+                        } else {
+                            dead.clear()
+                            skipped.clear()
+                            sticky = null
+                            waitForKick(250)
                         }
-                        emitProgress()
-                        tryFreezeBirthday()
+                    } finally {
+                        state.waitingForPeers = false
                     }
-                    ApplyResult.NothingNew, ApplyResult.Weaker -> {
-                        skipped.add(peerKey(winner.peer.host, winner.peer.port))
-                        sticky = null
-                        maxPeerStartHeight = ensureChain().tipHeight.toInt()
-                        emitProgress()
-                    }
+                    continue
                 }
-            } catch (err: HeaderConsensusError) {
-                logError("chain-headers", "peer fail ${peerKey(winner.peer.host, winner.peer.port)}", err)
-                markPeerHardFailed(winner.peer)
-                waitForKick(500)
+
+                loggedWaiting = false
+                val raced = pickRacePeers(alive, skipped)
+                if (raced.isEmpty()) {
+                    val hasUnskipped = alive.any { !skipped.contains(peerKey(it.host, it.port)) }
+                    if (!hasUnskipped) skipped.clear()
+                    waitForKick(100)
+                    continue
+                }
+
+                val tipChain = ensureChain()
+                val locatorHashes =
+                    buildLocatorHashes(
+                        ctx,
+                        tipChain.tipHeight.toInt(),
+                        bytesToHex(tipChain.tipHashInternal),
+                        checkpointHeight,
+                    )
+                val outcome = raceHeaderFetch(raced, locatorHashes)
+                if (state.stopped) break
+
+                for (peer in outcome.failed) {
+                    markPeerHardFailed(peer)
+                }
+
+                val winner = outcome.winner
+                if (winner == null) {
+                    peerIndex += max(1, raced.size)
+                    waitForKick(if (outcome.busyOnly) 100 else 500)
+                    continue
+                }
+
+                sticky = winner.peer
+                peerIndex += max(1, raced.size)
+
+                if (winner.result.headers.isEmpty()) {
+                    skipped.clear()
+                    maxPeerStartHeight = ensureChain().tipHeight.toInt()
+                    emitProgress()
+                    tryFreezeBirthday()
+                    val tipHeight = ensureChain().tipHeight.toInt()
+                    if (loggedTipHeight != tipHeight) {
+                        loggedTipHeight = tipHeight
+                        log("chain-headers", "at tip height=$tipHeight")
+                    }
+                    // HOW: no pool (injected-fetch tests) counts as "watchers exist"
+                    // so existing pollIntervalMs backoff tests still hold.
+                    waitForKick(atTipWaitMs(pollIntervalMs, pool == null || hdrOpen > 0))
+                    continue
+                }
+
+                try {
+                    when (
+                        val applied =
+                            applyHeaderBatch(
+                                ctx,
+                                winner.result.headers,
+                                ensureChain(),
+                                consensus,
+                                nowSeconds,
+                                ::loadTrustedWindow,
+                            )
+                    ) {
+                        is ApplyResult.Applied -> {
+                            skipped.clear()
+                            chain = trimChainMemory(applied.chain)
+                            if (winner.result.startHeight > checkpointHeight) {
+                                maxPeerStartHeight = max(maxPeerStartHeight, winner.result.startHeight)
+                            }
+                            emitProgress()
+                            tryFreezeBirthday()
+                        }
+                        ApplyResult.NothingNew, ApplyResult.Weaker -> {
+                            skipped.add(peerKey(winner.peer.host, winner.peer.port))
+                            sticky = null
+                            maxPeerStartHeight = ensureChain().tipHeight.toInt()
+                            emitProgress()
+                        }
+                    }
+                } catch (err: HeaderConsensusError) {
+                    logError("chain-headers", "peer fail ${peerKey(winner.peer.host, winner.peer.port)}", err)
+                    markPeerHardFailed(winner.peer)
+                    waitForKick(500)
+                } catch (err: kotlinx.coroutines.CancellationException) {
+                    throw err
+                } catch (err: Throwable) {
+                    logError("chain-headers", "persist fail ${peerKey(winner.peer.host, winner.peer.port)}", err)
+                    waitForKick(500)
+                }
             } catch (err: kotlinx.coroutines.CancellationException) {
-                throw err
+                if (state.stopped) break
+                logError("chain-headers", "loop cancelled", err)
+                waitForKick(500)
             } catch (err: Throwable) {
-                logError("chain-headers", "persist fail ${peerKey(winner.peer.host, winner.peer.port)}", err)
+                logError("chain-headers", "loop fail", err)
                 waitForKick(500)
             }
-          } catch (err: kotlinx.coroutines.CancellationException) {
-              if (state.stopped) break
-              logError("chain-headers", "loop cancelled", err)
-              waitForKick(500)
-          } catch (err: Throwable) {
-              logError("chain-headers", "loop fail", err)
-              waitForKick(500)
-          }
         }
     }
 
@@ -698,23 +745,25 @@ fun createChainHeadersModule(
             state.stopped = false
             ctx.db.headers.ensureCheckpoint(checkpointSeedFromConsensus(consensus))
             unsubIdle = ctx.bus.on(Event.SyncIdle) { state.quiet = true }
-            unsubCatchup = ctx.bus.on(Event.SyncCatchup) {
-                state.quiet = false
-                durableKick()
-            }
-            unsubPeers = ctx.bus.on(Event.PeersUpdated) {
-                // hasLiveWatchers: no pool (tests) counts as "watchers exist".
-                if (
-                    ignoreQuietPeerKick(
-                        quiet = state.quiet,
-                        waitingForPeers = state.waitingForPeers,
-                        hasLiveWatchers = pool == null || hdrOpen > 0,
-                    )
-                ) {
-                    return@on
+            unsubCatchup =
+                ctx.bus.on(Event.SyncCatchup) {
+                    state.quiet = false
+                    durableKick()
                 }
-                kick()
-            }
+            unsubPeers =
+                ctx.bus.on(Event.PeersUpdated) {
+                    // hasLiveWatchers: no pool (tests) counts as "watchers exist".
+                    if (
+                        ignoreQuietPeerKick(
+                            quiet = state.quiet,
+                            waitingForPeers = state.waitingForPeers,
+                            hasLiveWatchers = pool == null || hdrOpen > 0,
+                        )
+                    ) {
+                        return@on
+                    }
+                    kick()
+                }
             val job = SupervisorJob()
             parentJob = job
             val scope = CoroutineScope(job + Dispatchers.Default)

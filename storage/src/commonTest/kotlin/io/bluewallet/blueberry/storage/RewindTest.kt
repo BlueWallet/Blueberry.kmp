@@ -60,7 +60,12 @@ class RewindTest {
             )
         }
 
-        assertTrue(db.headers.tip()!!.hashInternalHex.endsWith("b2"))
+        assertTrue(
+            db.headers
+                .tip()!!
+                .hashInternalHex
+                .endsWith("b2"),
+        )
         assertNull(db.filterHeaders.get(h2))
         assertNull(db.filters.get(h2))
         assertNotNull(db.filters.get(h1))

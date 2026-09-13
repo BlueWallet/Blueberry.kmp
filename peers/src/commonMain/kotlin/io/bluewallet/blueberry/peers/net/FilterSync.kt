@@ -40,8 +40,13 @@ import kotlin.concurrent.Volatile
 import kotlin.coroutines.coroutineContext
 
 sealed class FilterBatchResult<out T> {
-    data class Ok<T>(val value: T) : FilterBatchResult<T>()
-    data class Err(val error: String) : FilterBatchResult<Nothing>()
+    data class Ok<T>(
+        val value: T,
+    ) : FilterBatchResult<T>()
+
+    data class Err(
+        val error: String,
+    ) : FilterBatchResult<Nothing>()
 }
 
 data class CFHeadersResult(
@@ -51,18 +56,28 @@ data class CFHeadersResult(
     val filterHashes: List<ByteArray>,
 )
 
-data class CFilterItem(val blockHash: ByteArray, val filterBytes: ByteArray)
+data class CFilterItem(
+    val blockHash: ByteArray,
+    val filterBytes: ByteArray,
+)
 
 interface FilterSessionApi {
     val services: ULong
+
     suspend fun getCFCheckpt(stopHash: ByteArray): List<ByteArray>
-    suspend fun getCFHeaders(startHeight: Int, stopHash: ByteArray): CFHeadersResult
+
+    suspend fun getCFHeaders(
+        startHeight: Int,
+        stopHash: ByteArray,
+    ): CFHeadersResult
+
     suspend fun getCFilters(
         startHeight: Int,
         stopHash: ByteArray,
         expectCount: Int,
         onFilter: (suspend (CFilterItem) -> Unit)? = null,
     ): List<CFilterItem>
+
     suspend fun close()
 }
 
@@ -80,6 +95,7 @@ class InactivityTimeout internal constructor(
 ) {
     @Volatile var expired: Boolean = false
         private set
+
     @Volatile var error: Throwable? = null
         private set
 
@@ -89,14 +105,15 @@ class InactivityTimeout internal constructor(
     fun refresh() {
         if (expiredDeferred.isCompleted) return
         timer?.cancel()
-        timer = scope.launch {
-            delay(ms)
-            val err = Exception("$label inactive for ${ms}ms")
-            if (expiredDeferred.complete(err)) {
-                error = err
-                expired = true
+        timer =
+            scope.launch {
+                delay(ms)
+                val err = Exception("$label inactive for ${ms}ms")
+                if (expiredDeferred.complete(err)) {
+                    error = err
+                    expired = true
+                }
             }
-        }
     }
 
     fun clear() {
@@ -105,7 +122,10 @@ class InactivityTimeout internal constructor(
     }
 }
 
-fun createInactivityTimeout(ms: Long, label: String): InactivityTimeout {
+fun createInactivityTimeout(
+    ms: Long,
+    label: String,
+): InactivityTimeout {
     val timeout = InactivityTimeout(ms, label, CoroutineScope(SupervisorJob() + Dispatchers.Default))
     timeout.refresh()
     return timeout
@@ -120,9 +140,10 @@ suspend fun <T> runWithInactivityTimeout(
     try {
         return coroutineScope {
             val workJob = async { work { timeout.refresh() } }
-            val abortJob = async {
-                throw timeout.expiredDeferred.await()
-            }
+            val abortJob =
+                async {
+                    throw timeout.expiredDeferred.await()
+                }
             try {
                 select {
                     workJob.onAwait { it }
@@ -144,16 +165,17 @@ private suspend fun connectOrAbort(
     port: Int,
 ): ByteDuplex {
     val pending = CompletableDeferred<ByteDuplex>()
-    val connectJob = CoroutineScope(coroutineContext).launch {
-        try {
-            pending.complete(connect(host, port))
-        } catch (e: CancellationException) {
-            pending.cancel(e)
-            throw e
-        } catch (e: Throwable) {
-            pending.completeExceptionally(e)
+    val connectJob =
+        CoroutineScope(coroutineContext).launch {
+            try {
+                pending.complete(connect(host, port))
+            } catch (e: CancellationException) {
+                pending.cancel(e)
+                throw e
+            } catch (e: Throwable) {
+                pending.completeExceptionally(e)
+            }
         }
-    }
     try {
         return pending.await()
     } catch (e: CancellationException) {
@@ -165,24 +187,35 @@ private suspend fun connectOrAbort(
     }
 }
 
-private suspend fun handshake(duplex: ByteDuplex, port: Int): Pair<Protocol, ULong> {
-    val protocol = Protocol.connect(
-        duplex,
-        ProtocolOptions(role = Role.Initiator, network = Networks.mainnet),
-    )
-    val result = completeVersionHandshake(
-        protocol,
-        VersionHandshakeOptions(port = port, name = APP_NAME, version = APP_VERSION),
-    )
+private suspend fun handshake(
+    duplex: ByteDuplex,
+    port: Int,
+): Pair<Protocol, ULong> {
+    val protocol =
+        Protocol.connect(
+            duplex,
+            ProtocolOptions(role = Role.Initiator, network = Networks.mainnet),
+        )
+    val result =
+        completeVersionHandshake(
+            protocol,
+            VersionHandshakeOptions(port = port, name = APP_NAME, version = APP_VERSION),
+        )
     return protocol to result.services
 }
 
-private suspend fun sendBip157(protocol: Protocol, msg: OutboundMessage) {
+private suspend fun sendBip157(
+    protocol: Protocol,
+    msg: OutboundMessage,
+) {
     val encoded = encodeOutbound(msg)
     protocol.writeMessage(Message.Opaque(WireMessageType.Short(encoded.shortId), encoded.payload))
 }
 
-private suspend fun waitForBip157Payload(protocol: Protocol, shortId: Int): ByteArray {
+private suspend fun waitForBip157Payload(
+    protocol: Protocol,
+    shortId: Int,
+): ByteArray {
     while (true) {
         val message = protocol.readMessage()
         val type = (message as? Message.Opaque)?.type
@@ -197,23 +230,24 @@ private fun wrapSessionClose(
     session: FilterSessionApi,
     duplex: ByteDuplex,
     protocol: Protocol?,
-): FilterSessionApi = object : FilterSessionApi by session {
-    override suspend fun close() {
-        session.close()
-        if (protocol != null) {
-            try {
-                protocol.close()
-            } catch (_: Throwable) {
-                duplex.close()
-            }
-        } else {
-            try {
-                duplex.close()
-            } catch (_: Throwable) {
+): FilterSessionApi =
+    object : FilterSessionApi by session {
+        override suspend fun close() {
+            session.close()
+            if (protocol != null) {
+                try {
+                    protocol.close()
+                } catch (_: Throwable) {
+                    duplex.close()
+                }
+            } else {
+                try {
+                    duplex.close()
+                } catch (_: Throwable) {
+                }
             }
         }
     }
-}
 
 private fun createFilterSessionApi(
     protocol: Protocol,
@@ -221,7 +255,10 @@ private fun createFilterSessionApi(
     syncTimeoutMs: Long,
     duplex: ByteDuplex,
 ): FilterSessionApi {
-    suspend fun <T> withSyncTimeout(label: String, work: suspend () -> T): T =
+    suspend fun <T> withSyncTimeout(
+        label: String,
+        work: suspend () -> T,
+    ): T =
         try {
             withTimeout(syncTimeoutMs) { work() }
         } catch (e: TimeoutCancellationException) {
@@ -240,7 +277,10 @@ private fun createFilterSessionApi(
                 decodeCFCheckpt(waitForBip157Payload(protocol, BIP157_SHORT_IDS.cfcheckpt)).filterHeaders
             }
 
-        override suspend fun getCFHeaders(startHeight: Int, stopHash: ByteArray): CFHeadersResult =
+        override suspend fun getCFHeaders(
+            startHeight: Int,
+            stopHash: ByteArray,
+        ): CFHeadersResult =
             withSyncTimeout("cfheaders") {
                 sendBip157(
                     protocol,
@@ -262,23 +302,24 @@ private fun createFilterSessionApi(
             stopHash: ByteArray,
             expectCount: Int,
             onFilter: (suspend (CFilterItem) -> Unit)?,
-        ): List<CFilterItem> = runWithInactivityTimeout(syncTimeoutMs, "cfilters") { activity ->
-            sendBip157(
-                protocol,
-                OutboundMessage.GetCFilters(
-                    GetCFilters(FILTER_TYPE_BASIC, startHeight, stopHash),
-                ),
-            )
-            val filters = ArrayList<CFilterItem>(expectCount)
-            while (filters.size < expectCount) {
-                val decoded = decodeCFilter(waitForBip157Payload(protocol, BIP157_SHORT_IDS.cfilter))
-                activity()
-                val item = CFilterItem(decoded.blockHash, decoded.filterBytes)
-                filters.add(item)
-                if (onFilter != null) onFilter(item)
+        ): List<CFilterItem> =
+            runWithInactivityTimeout(syncTimeoutMs, "cfilters") { activity ->
+                sendBip157(
+                    protocol,
+                    OutboundMessage.GetCFilters(
+                        GetCFilters(FILTER_TYPE_BASIC, startHeight, stopHash),
+                    ),
+                )
+                val filters = ArrayList<CFilterItem>(expectCount)
+                while (filters.size < expectCount) {
+                    val decoded = decodeCFilter(waitForBip157Payload(protocol, BIP157_SHORT_IDS.cfilter))
+                    activity()
+                    val item = CFilterItem(decoded.blockHash, decoded.filterBytes)
+                    filters.add(item)
+                    if (onFilter != null) onFilter(item)
+                }
+                filters
             }
-            filters
-        }
 
         override suspend fun close() {
             try {

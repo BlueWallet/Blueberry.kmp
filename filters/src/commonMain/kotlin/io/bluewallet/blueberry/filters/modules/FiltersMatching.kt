@@ -147,45 +147,46 @@ fun createFiltersMatchingModule(
                         "scan start scanned=$scanScanned total=$scanTotal external=${gaps.external} internal=${gaps.internal}",
                     )
                 }
-                val advanced = scanFiltersForMatches(
-                    ctx.db,
-                    wallet.scripts(),
-                    MatchScanCallbacks(
-                        onMatch = { m ->
-                            matches++
-                            ctx.bus.emit(
-                                Event.FiltersMatch,
-                                FiltersMatchPayload(
-                                    height = m.height,
-                                    blockHashInternalHex = m.blockHashInternalHex,
-                                ),
-                            )
-                        },
-                        onProgress = { p ->
-                            if (p.scanned != scannedCount || p.total != totalCount) {
-                                scannedCount = p.scanned
-                                totalCount = p.total
-                                emitProgress()
-                            }
-                        },
-                    ),
-                    MatchScanOptions(
-                        batchSize = batchSize,
-                        batchGapMs = batchGapMs,
-                        yieldFn = yieldFn,
-                        // Abort when gaps grow mid-scan — stale scripts must not keep
-                        // draining a rematch queue (wasted CPU until the next loop).
-                        shouldContinue = {
-                            if (isStopped()) {
-                                false
-                            } else {
-                                val g = wallet.peekGaps()
-                                g.external == scannedWith.external &&
-                                    g.internal == scannedWith.internal
-                            }
-                        },
-                    ),
-                )
+                val advanced =
+                    scanFiltersForMatches(
+                        ctx.db,
+                        wallet.scripts(),
+                        MatchScanCallbacks(
+                            onMatch = { m ->
+                                matches++
+                                ctx.bus.emit(
+                                    Event.FiltersMatch,
+                                    FiltersMatchPayload(
+                                        height = m.height,
+                                        blockHashInternalHex = m.blockHashInternalHex,
+                                    ),
+                                )
+                            },
+                            onProgress = { p ->
+                                if (p.scanned != scannedCount || p.total != totalCount) {
+                                    scannedCount = p.scanned
+                                    totalCount = p.total
+                                    emitProgress()
+                                }
+                            },
+                        ),
+                        MatchScanOptions(
+                            batchSize = batchSize,
+                            batchGapMs = batchGapMs,
+                            yieldFn = yieldFn,
+                            // Abort when gaps grow mid-scan — stale scripts must not keep
+                            // draining a rematch queue (wasted CPU until the next loop).
+                            shouldContinue = {
+                                if (isStopped()) {
+                                    false
+                                } else {
+                                    val g = wallet.peekGaps()
+                                    g.external == scannedWith.external &&
+                                        g.internal == scannedWith.internal
+                                }
+                            },
+                        ),
+                    )
                 if (advanced > 0) {
                     diagnosticLog(
                         "scan done scanned=${ctx.db.filters.countScanned()} total=${ctx.db.filters.count()} matches=$matches",
@@ -237,14 +238,15 @@ fun createFiltersMatchingModule(
             seedProgress()
             wallet.refresh()
             loadedGaps = wallet.gaps()
-            unsubProgress = ctx.bus.on(Event.FiltersProgress) {
-                if (isStopped()) return@on
-                if (busy.load()) {
-                    needsRun.store(true)
-                    return@on
+            unsubProgress =
+                ctx.bus.on(Event.FiltersProgress) {
+                    if (isStopped()) return@on
+                    if (busy.load()) {
+                        needsRun.store(true)
+                        return@on
+                    }
+                    kick()
                 }
-                kick()
-            }
             ctx.bus.emit(
                 Event.ModuleStatus,
                 ModuleStatusPayload(module = "filters-matching", status = ModuleStatus.RUNNING),
@@ -252,11 +254,12 @@ fun createFiltersMatchingModule(
             val job = SupervisorJob()
             parentJob = job
             val scope = CoroutineScope(job + Dispatchers.Default)
-            val launched = scope.launch {
-                yieldOnce()
-                if (isStopped()) return@launch
-                loop()
-            }
+            val launched =
+                scope.launch {
+                    yieldOnce()
+                    if (isStopped()) return@launch
+                    loop()
+                }
             loopJob = launched
             detachLoop(ctx, "filters-matching", launched)
         }

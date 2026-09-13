@@ -11,10 +11,11 @@ class EncodePsbtUrTest {
      * [BC_UR_PSBT_CAPACITY] max fragment length. Regenerate with a one-off Node script against
      * those packages (e.g. under a helix3 `node_modules` checkout) if this vector ever changes.
      */
-    private val goldenPsbtUrFragments = listOf(
-        "ur:crypto-psbt/1-2/lpadaocsttcyfyckjkbdhdinhdtkjojkidjyzmadaejsaoaeaeaeadbybybybybybybybybybybybybybybybybybybybybybybybybybybybybybybybyaeaeaeaeaezmzmzmzmaogdsraeaeaeaeaeaecmaebbnsmhyteewdgyzsbsihaachjofxvtmhlgolmonllstoryaeaeaeaeaeaecmaebbfmeemkhlsgjlrlcprhfs",
-        "ur:crypto-psbt/2-2/lpaoaocsttcyfyckjkbdhdinutsozoennlfzvesttpvoltfhgmnsaeaeaeaeaeadadctnblnadaeaeaeaeaecmaebbrttorftbsrtesglkkpuohyswdmrngoeobaytbevocpamaxdytlgwtiutfwbkjthelgendkykwffddwplecbskktlwtkpfrykrnwsnsdpmepefnbnzcbwpksoaeaeaeaeaeaeaeaeaeaeaeaeahvwwytt",
-    )
+    private val goldenPsbtUrFragments =
+        listOf(
+            "ur:crypto-psbt/1-2/lpadaocsttcyfyckjkbdhdinhdtkjojkidjyzmadaejsaoaeaeaeadbybybybybybybybybybybybybybybybybybybybybybybybybybybybybybybybyaeaeaeaeaezmzmzmzmaogdsraeaeaeaeaeaecmaebbnsmhyteewdgyzsbsihaachjofxvtmhlgolmonllstoryaeaeaeaeaeaecmaebbfmeemkhlsgjlrlcprhfs",
+            "ur:crypto-psbt/2-2/lpaoaocsttcyfyckjkbdhdinutsozoennlfzvesttpvoltfhgmnsaeaeaeaeaeadadctnblnadaeaeaeaeaecmaebbrttorftbsrtesglkkpuohyswdmrngoeobaytbevocpamaxdytlgwtiutfwbkjthelgendkykwffddwplecbskktlwtkpfrykrnwsnsdpmepefnbnzcbwpksoaeaeaeaeaeaeaeaeaeaeaeaeahvwwytt",
+        )
 
     @Test
     fun encodes_unsigned_psbt_as_ur_crypto_psbt_and_round_trips() {
@@ -22,24 +23,26 @@ class EncodePsbtUrTest {
         val recv = wallet.addresses.first { !it.change }
         val dest = wallet.addresses.first { !it.change && it.index == 1 }
         val change = wallet.addresses.first { it.change }
-        val psbtHex = buildUnsignedSendPsbt(
-            BuildSendTxParams(
-                secret = BLUE_ZPUB,
-                wallet = wallet,
-                utxos = listOf(
-                    SendInputUtxo(
-                        txid = "11".repeat(32),
-                        vout = 0,
-                        valueSats = 100_000L,
-                        scriptPubKey = recv.scriptPubKey,
-                    ),
+        val psbtHex =
+            buildUnsignedSendPsbt(
+                BuildSendTxParams(
+                    secret = BLUE_ZPUB,
+                    wallet = wallet,
+                    utxos =
+                        listOf(
+                            SendInputUtxo(
+                                txid = "11".repeat(32),
+                                vout = 0,
+                                valueSats = 100_000L,
+                                scriptPubKey = recv.scriptPubKey,
+                            ),
+                        ),
+                    toAddress = dest.address,
+                    amountSats = SendAmount.Exact(50_000L),
+                    feeRateSatPerVb = 10.0,
+                    changeAddress = change.address,
                 ),
-                toAddress = dest.address,
-                amountSats = SendAmount.Exact(50_000L),
-                feeRateSatPerVb = 10.0,
-                changeAddress = change.address,
-            ),
-        ).psbtHex
+            ).psbtHex
         assertEquals(GOLDEN_PSBT_HEX, psbtHex.lowercase())
 
         val parts = encodeCryptoPsbtUrFragments(psbtHex, BC_UR_PSBT_CAPACITY)

@@ -40,7 +40,10 @@ import io.github.alexzhirkevich.qrose.rememberQrCodePainter
 import kotlinx.coroutines.launch
 import kotlin.math.max
 
-fun currentReceiveAddress(runtime: PeersRuntime, db: Database): String? {
+fun currentReceiveAddress(
+    runtime: PeersRuntime,
+    db: Database,
+): String? {
     val wallet = runtime.wallet ?: runCatching { createWallet(db) }.getOrNull() ?: return null
     val before = wallet.gaps()
     val address = snapshotReceiveAddress(db, wallet)
@@ -50,8 +53,11 @@ fun currentReceiveAddress(runtime: PeersRuntime, db: Database): String? {
         val filterFrom = compactFilterFrom(db)
         val tip = db.headers.tip()
         val total =
-            if (tip != null && filterFrom != null) max(0, tip.height - filterFrom + 1)
-            else downloaded
+            if (tip != null && filterFrom != null) {
+                max(0, tip.height - filterFrom + 1)
+            } else {
+                downloaded
+            }
         runtime.bus.emit(
             Event.FiltersProgress,
             FiltersProgressPayload(nowMillis(), minOf(downloaded, total), total),
@@ -71,17 +77,19 @@ fun ReceiveScreen(
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     DisposableEffect(runtime.walletTxsStore) {
-        val off = runtime.walletTxsStore.subscribe {
-            scope.launch { address = currentReceiveAddress(runtime, db) }
-        }
+        val off =
+            runtime.walletTxsStore.subscribe {
+                scope.launch { address = currentReceiveAddress(runtime, db) }
+            }
         onDispose { off() }
     }
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BwColors.Paper)
-            .safeDrawingPadding()
-            .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(BwColors.Paper)
+                .safeDrawingPadding()
+                .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         ScreenHeader(title = "Receive", onBack = onBack)
@@ -104,12 +112,13 @@ fun ReceiveScreen(
                     fontSize = BwType.BodySize,
                     fontWeight = BwType.Body,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            clipboard.setText(AnnotatedString(shown))
-                            copied = true
-                        },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                clipboard.setText(AnnotatedString(shown))
+                                copied = true
+                            },
                 )
                 if (copied) {
                     Text(

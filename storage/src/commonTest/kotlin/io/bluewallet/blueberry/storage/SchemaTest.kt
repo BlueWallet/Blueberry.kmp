@@ -31,8 +31,14 @@ class SchemaTest {
             )
             assertEquals(
                 listOf(
-                    "host", "port", "services", "alive", "used_for_blocks",
-                    "last_probed_at", "created_at", "updated_at",
+                    "host",
+                    "port",
+                    "services",
+                    "alive",
+                    "used_for_blocks",
+                    "last_probed_at",
+                    "created_at",
+                    "updated_at",
                 ),
                 columnNames(driver, "peers"),
             )
@@ -57,8 +63,12 @@ class SchemaTest {
             assertEquals(listOf("height"), columnNames(driver, "parsed_blocks"))
             assertEquals(
                 listOf(
-                    "txid", "height", "tx_index", "block_hash_internal_hex",
-                    "tx", "net_delta_sats",
+                    "txid",
+                    "height",
+                    "tx_index",
+                    "block_hash_internal_hex",
+                    "tx",
+                    "net_delta_sats",
                 ),
                 columnNames(driver, "transactions"),
             )
@@ -100,26 +110,34 @@ private fun tableNames(driver: SqlDriver): List<String> =
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'android_%' ORDER BY name",
     )
 
-private fun columnNames(driver: SqlDriver, table: String): List<String> =
-    queryStrings(driver, "SELECT name FROM pragma_table_info('$table') ORDER BY cid")
+private fun columnNames(
+    driver: SqlDriver,
+    table: String,
+): List<String> = queryStrings(driver, "SELECT name FROM pragma_table_info('$table') ORDER BY cid")
 
-private fun indexColumns(driver: SqlDriver, index: String): List<String> =
+private fun indexColumns(
+    driver: SqlDriver,
+    index: String,
+): List<String> =
     queryStrings(
         driver,
         "SELECT COALESCE(name, '<expression>') FROM pragma_index_info('$index') ORDER BY seqno",
     )
 
-private fun queryStrings(driver: SqlDriver, sql: String): List<String> {
-    return driver.executeQuery(
-        identifier = null,
-        sql = sql,
-        mapper = { cursor ->
-            val out = mutableListOf<String>()
-            while (cursor.next().value) {
-                out.add(cursor.getString(0)!!)
-            }
-            QueryResult.Value(out)
-        },
-        parameters = 0,
-    ).value
-}
+private fun queryStrings(
+    driver: SqlDriver,
+    sql: String,
+): List<String> =
+    driver
+        .executeQuery(
+            identifier = null,
+            sql = sql,
+            mapper = { cursor ->
+                val out = mutableListOf<String>()
+                while (cursor.next().value) {
+                    out.add(cursor.getString(0)!!)
+                }
+                QueryResult.Value(out)
+            },
+            parameters = 0,
+        ).value

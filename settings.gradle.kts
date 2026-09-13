@@ -32,13 +32,14 @@ plugins {
 }
 
 fun androidSdkDir(): String? {
-    val fromLocal = file("local.properties")
-        .takeIf { it.isFile }
-        ?.readLines()
-        ?.firstOrNull { it.startsWith("sdk.dir=") }
-        ?.substringAfter("sdk.dir=")
-        ?.trim()
-        ?.takeIf { it.isNotEmpty() }
+    val fromLocal =
+        file("local.properties")
+            .takeIf { it.isFile }
+            ?.readLines()
+            ?.firstOrNull { it.startsWith("sdk.dir=") }
+            ?.substringAfter("sdk.dir=")
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
     return fromLocal
         ?: System.getenv("ANDROID_HOME")?.trim()?.takeIf { it.isNotEmpty() }
         ?: System.getenv("ANDROID_SDK_ROOT")?.trim()?.takeIf { it.isNotEmpty() }
@@ -57,7 +58,11 @@ fun File.writeSdkDir(sdkDir: String) {
     writeText(lines.joinToString("\n", postfix = "\n"))
 }
 
-fun includeVendorBuild(dirName: String, module: String, projectPath: String) {
+fun includeVendorBuild(
+    dirName: String,
+    module: String,
+    projectPath: String,
+) {
     val dir = file("vendor/$dirName")
     require(dir.resolve("settings.gradle.kts").isFile) {
         "Missing vendor/$dirName. Run: git submodule update --init"

@@ -4,23 +4,35 @@ import io.bluewallet.blueberry.storage.Database
 import kotlin.math.floor
 import kotlin.math.max
 
-data class CreateWalletOptions(val secret: String? = null, val addressGap: Int? = null) {
-    override fun toString(): String =
-        "CreateWalletOptions(secret=${if (secret == null) "null" else "[redacted]"}, addressGap=$addressGap)"
+data class CreateWalletOptions(
+    val secret: String? = null,
+    val addressGap: Int? = null,
+) {
+    override fun toString(): String = "CreateWalletOptions(secret=${if (secret == null) "null" else "[redacted]"}, addressGap=$addressGap)"
 }
 
-data class SyncFromDbResult(val grew: Boolean)
+data class SyncFromDbResult(
+    val grew: Boolean,
+)
 
 interface Wallet {
     fun snapshot(): WatchWallet
+
     fun scripts(): List<ByteArray>
+
     fun gaps(): WatchGaps
+
     fun peekGaps(): WatchGaps
+
     fun refresh(): WatchWallet
+
     fun syncFromDb(): SyncFromDbResult
 }
 
-fun createWallet(db: Database, options: CreateWalletOptions = CreateWalletOptions()): Wallet {
+fun createWallet(
+    db: Database,
+    options: CreateWalletOptions = CreateWalletOptions(),
+): Wallet {
     val raw = options.secret ?: loadWalletSecret(db)
     val secret = parseWalletSecret(raw).value
 

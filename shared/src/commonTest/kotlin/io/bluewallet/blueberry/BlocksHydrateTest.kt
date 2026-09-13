@@ -1,7 +1,7 @@
 package io.bluewallet.blueberry
 
-import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.BlocksProgressPayload
+import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.FiltersMatchPayload
 import io.bluewallet.blueberry.bus.createMessageBus
 import io.bluewallet.blueberry.storage.DownloadedBlock

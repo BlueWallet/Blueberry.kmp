@@ -8,17 +8,26 @@ import io.bluewallet.blueberry.storage.Database
 
 enum class WalletSecretKind { MNEMONIC, ZPUB, WIF, ADDRESS }
 
-data class ParsedWalletSecret(val kind: WalletSecretKind, val value: String) {
+data class ParsedWalletSecret(
+    val kind: WalletSecretKind,
+    val value: String,
+) {
     /** Redacts [value] (mnemonic/WIF/zpub/address) so it never lands in logs or crash reports. */
     override fun toString(): String = "ParsedWalletSecret(kind=$kind, value=[redacted])"
 }
 
 sealed class WalletSecretInspection {
     data object Missing : WalletSecretInspection()
-    data class Ok(val value: String) : WalletSecretInspection() {
+
+    data class Ok(
+        val value: String,
+    ) : WalletSecretInspection() {
         override fun toString(): String = "Ok(value=[redacted])"
     }
-    data class Invalid(val detail: String) : WalletSecretInspection()
+
+    data class Invalid(
+        val detail: String,
+    ) : WalletSecretInspection()
 }
 
 private fun looksLikeWifCandidate(value: String): Boolean {
@@ -60,11 +69,12 @@ fun parseWalletSecret(raw: String): ParsedWalletSecret {
     val value = raw.trim()
     if (value.isEmpty()) throw IllegalArgumentException("wallet secret is empty")
     if (value.startsWith("zpub")) {
-        val decoded = try {
-            DeterministicWallet.ExtendedPublicKey.decode(value)
-        } catch (_: Exception) {
-            throw IllegalArgumentException("invalid zpub")
-        }
+        val decoded =
+            try {
+                DeterministicWallet.ExtendedPublicKey.decode(value)
+            } catch (_: Exception) {
+                throw IllegalArgumentException("invalid zpub")
+            }
         if (decoded.second.depth != 3) {
             throw IllegalArgumentException("zpub must be account-level (m/84'/0'/0')")
         }
@@ -115,7 +125,10 @@ fun loadWalletSecret(db: Database): String {
     return v.trim()
 }
 
-fun saveWalletSecret(db: Database, raw: String): ParsedWalletSecret {
+fun saveWalletSecret(
+    db: Database,
+    raw: String,
+): ParsedWalletSecret {
     val parsed = parseWalletSecret(raw)
     db.keyValue.set(WALLET_SECRET_KEY, parsed.value)
     return parsed

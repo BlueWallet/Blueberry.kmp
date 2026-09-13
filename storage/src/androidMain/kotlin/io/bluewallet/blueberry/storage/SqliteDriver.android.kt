@@ -29,11 +29,12 @@ private fun isAndroidFrameworkSqliteAvailable(): Boolean = androidFrameworkSqlit
 private fun openJdbcSqliteDriver(path: String): SqlDriver {
     try {
         if (path == ":memory:") {
-            val properties = Properties().apply {
-                setProperty("journal_mode", "WAL")
-                setProperty("synchronous", "NORMAL")
-                setProperty("wal_autocheckpoint", "10000")
-            }
+            val properties =
+                Properties().apply {
+                    setProperty("journal_mode", "WAL")
+                    setProperty("synchronous", "NORMAL")
+                    setProperty("wal_autocheckpoint", "10000")
+                }
             return JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, properties)
         }
         return JdbcSqliteDriver(
@@ -78,11 +79,12 @@ private class PathSqliteOpenHelper(
     }
 
     private fun openDatabase(): SupportSQLiteDatabase {
-        val sqlite = if (path == ":memory:") {
-            SQLiteDatabase.create(null)
-        } else {
-            SQLiteDatabase.openOrCreateDatabase(path, null)
-        }
+        val sqlite =
+            if (path == ":memory:") {
+                SQLiteDatabase.create(null)
+            } else {
+                SQLiteDatabase.openOrCreateDatabase(path, null)
+            }
         val db = wrapFrameworkDatabase(sqlite)
         if (writeAheadLoggingEnabled) {
             db.enableWriteAheadLogging()
@@ -93,20 +95,22 @@ private class PathSqliteOpenHelper(
 
 private fun wrapFrameworkDatabase(sqlite: SQLiteDatabase): SupportSQLiteDatabase {
     val className = "androidx.sqlite.db.framework.FrameworkSQLiteDatabase"
-    val clazz = try {
-        Class.forName(className)
-    } catch (_: ClassNotFoundException) {
-        throw IllegalStateException(
-            "$className: AndroidX SQLite framework constructor could not be found.",
-        )
-    }
-    val ctor = try {
-        clazz.getDeclaredConstructor(SQLiteDatabase::class.java)
-    } catch (_: ReflectiveOperationException) {
-        throw IllegalStateException(
-            "$className: AndroidX SQLite framework constructor could not be found.",
-        )
-    }
+    val clazz =
+        try {
+            Class.forName(className)
+        } catch (_: ClassNotFoundException) {
+            throw IllegalStateException(
+                "$className: AndroidX SQLite framework constructor could not be found.",
+            )
+        }
+    val ctor =
+        try {
+            clazz.getDeclaredConstructor(SQLiteDatabase::class.java)
+        } catch (_: ReflectiveOperationException) {
+            throw IllegalStateException(
+                "$className: AndroidX SQLite framework constructor could not be found.",
+            )
+        }
     ctor.isAccessible = true
     return try {
         @Suppress("UNCHECKED_CAST")

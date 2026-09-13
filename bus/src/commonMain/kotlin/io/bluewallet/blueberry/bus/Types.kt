@@ -1,7 +1,9 @@
 package io.bluewallet.blueberry.bus
 
 /** Module lifecycle and short incident notes for `module:status`. */
-enum class ModuleStatus(val wireName: String) {
+enum class ModuleStatus(
+    val wireName: String,
+) {
     STARTING("starting"),
     RUNNING("running"),
     STOPPED("stopped"),
@@ -9,7 +11,9 @@ enum class ModuleStatus(val wireName: String) {
 }
 
 /** Peer work kind for `peers:sockets` counts. */
-enum class PeerSocketKind(val wireName: String) {
+enum class PeerSocketKind(
+    val wireName: String,
+) {
     PROBE("probe"),
     HDR("hdr"),
     FILT("filt"),
@@ -17,7 +21,9 @@ enum class PeerSocketKind(val wireName: String) {
 }
 
 /** Why the sync evaluator left idle. */
-enum class SyncCatchupReason(val wireName: String) {
+enum class SyncCatchupReason(
+    val wireName: String,
+) {
     HEADERS("headers"),
     FILTERS("filters"),
     BLOCKS("blocks"),
@@ -29,7 +35,9 @@ enum class SyncCatchupReason(val wireName: String) {
  *
  * Final outcome still arrives on `broadcast:done`.
  */
-enum class BroadcastPhase(val wireName: String) {
+enum class BroadcastPhase(
+    val wireName: String,
+) {
     WAITING_PEERS("waiting-peers"),
     ATTEMPT("attempt"),
     FAILED_ATTEMPT("failed-attempt"),
@@ -44,7 +52,9 @@ data class ModuleStatusPayload(
 )
 
 /** Recount known peers from SQLite. */
-data class PeersUpdatedPayload(val at: Long)
+data class PeersUpdatedPayload(
+    val at: Long,
+)
 
 /**
  * Active peer work for one kind.
@@ -138,7 +148,9 @@ data class BlocksProgressPayload(
 )
 
 /** Sync evaluator entered idle (settled). */
-data class SyncIdlePayload(val at: Long)
+data class SyncIdlePayload(
+    val at: Long,
+)
 
 /** Sync evaluator left idle; resume catch-up work. */
 data class SyncCatchupPayload(
@@ -153,7 +165,9 @@ data class SyncCatchupPayload(
  *
  * The wallet store rebuilds its snapshot from SQLite.
  */
-data class WalletTxsPayload(val at: Long)
+data class WalletTxsPayload(
+    val at: Long,
+)
 
 /** Start broadcasting one raw transaction. */
 data class BroadcastRequestPayload(
@@ -162,7 +176,9 @@ data class BroadcastRequestPayload(
 )
 
 /** Cancel the broadcast job with this [id], if it is active. */
-data class BroadcastCancelPayload(val id: String)
+data class BroadcastCancelPayload(
+    val id: String,
+)
 
 /**
  * Broadcast job progress.
@@ -188,9 +204,15 @@ data class BroadcastProgressPayload(
 sealed class BroadcastDonePayload {
     abstract val id: String
 
-    data class Ok(override val id: String, val peer: String) : BroadcastDonePayload()
+    data class Ok(
+        override val id: String,
+        val peer: String,
+    ) : BroadcastDonePayload()
 
-    data class Error(override val id: String, val error: String) : BroadcastDonePayload()
+    data class Error(
+        override val id: String,
+        val error: String,
+    ) : BroadcastDonePayload()
 }
 
 /**
@@ -204,7 +226,9 @@ sealed class BroadcastDonePayload {
  *
  * Each [name] matches helix3 `EventMap` keys.
  */
-sealed class Event<T>(val name: String) {
+sealed class Event<T>(
+    val name: String,
+) {
     /**
      * One module status update.
      *
@@ -329,7 +353,13 @@ sealed class Event<T>(val name: String) {
  * `on` / `emit` / unsubscribe are safe to call from concurrent module loops.
  */
 interface MessageBus {
-    fun <T> on(event: Event<T>, handler: (T) -> Unit): () -> Unit
+    fun <T> on(
+        event: Event<T>,
+        handler: (T) -> Unit,
+    ): () -> Unit
 
-    fun <T> emit(event: Event<T>, payload: T)
+    fun <T> emit(
+        event: Event<T>,
+        payload: T,
+    )
 }

@@ -9,7 +9,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class VendorLibrariesTest {
-
     @Test
     fun vendorLibraryStatus_is_ok_when_every_unit_passes() {
         assertEquals(listOf("ok"), vendorLibraryStatus())

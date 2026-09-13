@@ -20,11 +20,20 @@ data class SendBuildParams(
 )
 
 sealed class PickUtxos<out T> {
-    data class Ok<T>(val selected: List<T>) : PickUtxos<T>()
-    data class Error(val error: String) : PickUtxos<Nothing>()
+    data class Ok<T>(
+        val selected: List<T>,
+    ) : PickUtxos<T>()
+
+    data class Error(
+        val error: String,
+    ) : PickUtxos<Nothing>()
 }
 
-fun <T> pickUtxosByKeys(utxos: List<T>, keys: List<String>, keyOf: (T) -> String): PickUtxos<T> {
+fun <T> pickUtxosByKeys(
+    utxos: List<T>,
+    keys: List<String>,
+    keyOf: (T) -> String,
+): PickUtxos<T> {
     if (keys.isEmpty()) return PickUtxos.Error("no UTXOs selected")
     val selected = utxos.filter { keyOf(it) in keys.toSet() }
     if (selected.isEmpty()) return PickUtxos.Error("no UTXOs selected")
@@ -34,7 +43,10 @@ fun <T> pickUtxosByKeys(utxos: List<T>, keys: List<String>, keyOf: (T) -> String
     return PickUtxos.Ok(selected)
 }
 
-private fun attachNonWitnessUtxos(db: Database, utxos: List<SendInputUtxo>): List<SendInputUtxo> =
+private fun attachNonWitnessUtxos(
+    db: Database,
+    utxos: List<SendInputUtxo>,
+): List<SendInputUtxo> =
     utxos.map { utxo ->
         if (utxo.nonWitnessUtxo != null) return@map utxo
         val prev = db.transactions.get(utxo.txid) ?: return@map utxo
@@ -47,27 +59,35 @@ private fun attachNonWitnessUtxos(db: Database, utxos: List<SendInputUtxo>): Lis
  * Address: the sole watched address.
  * MAX: change address is unused (builder sends all to dest).
  */
-fun buildActiveSendTx(db: Database, wallet: Wallet, params: SendBuildParams): BuildSendResult {
+fun buildActiveSendTx(
+    db: Database,
+    wallet: Wallet,
+    params: SendBuildParams,
+): BuildSendResult {
     wallet.syncFromDb()
     val watch = wallet.snapshot()
-    val changeAddress = when {
-        params.amountSats is SendAmount.Max -> params.toAddress
-        watch.kind == WatchWalletKind.WIF -> preferredWifReceiveAddress(
-            watch,
-            db.transactions.list().map { WifReceiveTxRow(it.height, it.txIndex, it.tx) },
-        ).address
-        watch.kind == WatchWalletKind.ADDRESS -> {
-            val addr = watch.addresses.firstOrNull()
-                ?: throw IllegalArgumentException("address wallet missing watched address")
-            addr.address
+    val changeAddress =
+        when {
+            params.amountSats is SendAmount.Max -> params.toAddress
+            watch.kind == WatchWalletKind.WIF ->
+                preferredWifReceiveAddress(
+                    watch,
+                    db.transactions.list().map { WifReceiveTxRow(it.height, it.txIndex, it.tx) },
+                ).address
+            watch.kind == WatchWalletKind.ADDRESS -> {
+                val addr =
+                    watch.addresses.firstOrNull()
+                        ?: throw IllegalArgumentException("address wallet missing watched address")
+                addr.address
+            }
+            else -> {
+                val used = usedWatchIndexes(db.transactions.list().map { it.tx }, watch)
+                val change =
+                    firstUnusedInternalAddress(watch, used.internal)
+                        ?: throw IllegalArgumentException("no unused change address in watch window")
+                change.address
+            }
         }
-        else -> {
-            val used = usedWatchIndexes(db.transactions.list().map { it.tx }, watch)
-            val change = firstUnusedInternalAddress(watch, used.internal)
-                ?: throw IllegalArgumentException("no unused change address in watch window")
-            change.address
-        }
-    }
     return buildSend(
         io.bluewallet.blueberry.wallet.BuildSendTxParams(
             secret = loadWalletSecret(db),

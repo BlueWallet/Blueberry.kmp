@@ -13,8 +13,11 @@ fun setUtxoName(
     name: String,
 ) {
     val trimmed = name.trim()
-    if (trimmed.isEmpty()) db.utxoNames.delete(outpoint)
-    else db.utxoNames.upsert(outpoint, trimmed)
+    if (trimmed.isEmpty()) {
+        db.utxoNames.delete(outpoint)
+    } else {
+        db.utxoNames.upsert(outpoint, trimmed)
+    }
     val at = nowMillis()
     walletTxsStore.apply(snapshotFromDb(db, at, at, wallet))
 }

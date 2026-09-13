@@ -22,13 +22,24 @@ data class HeadersProgress(
 
 interface HeadersProgressStore {
     fun get(): HeadersProgress
-    fun applyEvent(at: Long, downloaded: Int, total: Int, height: Int, tipTimeS: Long? = null)
+
+    fun applyEvent(
+        at: Long,
+        downloaded: Int,
+        total: Int,
+        height: Int,
+        tipTimeS: Long? = null,
+    )
+
     fun subscribe(listener: () -> Unit): () -> Unit
 }
 
 private const val MAX_SAMPLES = 8
 
-private data class ProgressSample(val at: Long, val downloaded: Int)
+private data class ProgressSample(
+    val at: Long,
+    val downloaded: Int,
+)
 
 private data class HeadersStoreState(
     val progress: HeadersProgress = HeadersProgress(),
@@ -61,7 +72,10 @@ private fun nextProgressSamples(
     return addAdvancingSample(samples, ProgressSample(at, downloaded))
 }
 
-private fun estimateEtaMs(samples: List<ProgressSample>, total: Int): Long? {
+private fun estimateEtaMs(
+    samples: List<ProgressSample>,
+    total: Int,
+): Long? {
     if (samples.size < 2) return null
     val first = samples.first()
     val last = samples.last()
@@ -85,24 +99,34 @@ private class HeadersProgressStoreImpl : HeadersProgressStore {
 
     override fun get() = state.load().progress
 
-    override fun applyEvent(at: Long, downloaded: Int, total: Int, height: Int, tipTimeS: Long?) {
+    override fun applyEvent(
+        at: Long,
+        downloaded: Int,
+        total: Int,
+        height: Int,
+        tipTimeS: Long?,
+    ) {
         val nextHeight = max(0, height)
         while (true) {
             val cur = state.load()
             val prev = cur.progress
-            val nextSamples = nextProgressSamples(
-                cur.samples,
-                prev.downloaded,
-                prev.total,
-                at,
-                downloaded,
-                total,
-            )
+            val nextSamples =
+                nextProgressSamples(
+                    cur.samples,
+                    prev.downloaded,
+                    prev.total,
+                    at,
+                    downloaded,
+                    total,
+                )
             val nextPercent =
                 if (total == 0) 0 else min(100, (100 * downloaded) / total)
             val nextEta =
-                if (total > 0 && downloaded >= total) 0L
-                else estimateEtaMs(nextSamples, total)
+                if (total > 0 && downloaded >= total) {
+                    0L
+                } else {
+                    estimateEtaMs(nextSamples, total)
+                }
             if (
                 prev.downloaded == downloaded &&
                 prev.total == total &&
@@ -114,18 +138,20 @@ private class HeadersProgressStoreImpl : HeadersProgressStore {
             ) {
                 return
             }
-            val next = HeadersStoreState(
-                progress = HeadersProgress(
-                    downloaded = downloaded,
-                    total = total,
-                    height = nextHeight,
-                    at = at,
-                    etaMs = nextEta,
-                    percent = nextPercent,
-                    tipTimeS = tipTimeS,
-                ),
-                samples = nextSamples,
-            )
+            val next =
+                HeadersStoreState(
+                    progress =
+                        HeadersProgress(
+                            downloaded = downloaded,
+                            total = total,
+                            height = nextHeight,
+                            at = at,
+                            etaMs = nextEta,
+                            percent = nextPercent,
+                            tipTimeS = tipTimeS,
+                        ),
+                    samples = nextSamples,
+                )
             if (state.compareAndSet(cur, next)) {
                 emitChange()
                 return
@@ -151,7 +177,11 @@ private class HeadersProgressStoreImpl : HeadersProgressStore {
 
 fun createHeadersProgressStore(): HeadersProgressStore = HeadersProgressStoreImpl()
 
-private fun sessionOrDurableTotal(incoming: Int?, previous: Int, downloaded: Int): Int {
+private fun sessionOrDurableTotal(
+    incoming: Int?,
+    previous: Int,
+    downloaded: Int,
+): Int {
     if (incoming != null && incoming > 0) return incoming
     if (previous > 0) return previous
     return downloaded
@@ -167,11 +197,12 @@ fun hydrateHeaders(
     val minH = db.headers.minHeight() ?: return
     val downloaded = max(0, tip.height - minH)
     val total = sessionOrDurableTotal(peerTotal, store.get().total, downloaded)
-    val tipTimeS = try {
-        decodeBlockHeader(tip.header).timestamp
-    } catch (_: Throwable) {
-        null
-    }
+    val tipTimeS =
+        try {
+            decodeBlockHeader(tip.header).timestamp
+        } catch (_: Throwable) {
+            null
+        }
     store.applyEvent(at, downloaded, total, tip.height, tipTimeS)
 }
 
@@ -179,5 +210,4 @@ fun bindHeaderProgressEvents(
     bus: MessageBus,
     db: Database,
     store: HeadersProgressStore,
-): () -> Unit =
-    bus.on(Event.HeadersProgress) { hydrateHeaders(db, store, it.total, it.at) }
+): () -> Unit = bus.on(Event.HeadersProgress) { hydrateHeaders(db, store, it.total, it.at) }

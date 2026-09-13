@@ -7,7 +7,11 @@ import io.bluewallet.blueberry.peers.logError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 
-fun detachLoop(ctx: ModuleContext, module: String, task: Job) {
+fun detachLoop(
+    ctx: ModuleContext,
+    module: String,
+    task: Job,
+) {
     task.invokeOnCompletion { err ->
         if (err == null || err is CancellationException) return@invokeOnCompletion
         val detail = err.message ?: err.toString()

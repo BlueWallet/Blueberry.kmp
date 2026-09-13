@@ -40,11 +40,12 @@ fun SettingsScreen(
         return
     }
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BwColors.Paper)
-            .safeDrawingPadding()
-            .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(BwColors.Paper)
+                .safeDrawingPadding()
+                .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         ScreenHeader(title = "Settings", onBack = onBack)

@@ -1,11 +1,18 @@
 package io.bluewallet.blueberry.peers
 
-fun log(scope: String, message: String) {
+fun log(
+    scope: String,
+    message: String,
+) {
     if (!logged(scope)) return
     println("blueberry[$scope] $message")
 }
 
-fun logError(scope: String, message: String, err: Throwable? = null) {
+fun logError(
+    scope: String,
+    message: String,
+    err: Throwable? = null,
+) {
     if (!logged(scope)) return
     if (err == null) {
         println("blueberry[$scope] ERROR $message")

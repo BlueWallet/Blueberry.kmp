@@ -15,21 +15,30 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.NonCancellable
 import kotlin.coroutines.coroutineContext
 
 private const val MAX_CRAWL_ADDRS = 1_000
 
 sealed class ProbeResult {
-    data class Ok(val peers: List<PeerCandidate>, val services: ULong) : ProbeResult()
-    data class Err(val error: String) : ProbeResult()
+    data class Ok(
+        val peers: List<PeerCandidate>,
+        val services: ULong,
+    ) : ProbeResult()
+
+    data class Err(
+        val error: String,
+    ) : ProbeResult()
 }
 
-data class HandshakeResult(val peers: List<PeerCandidate>, val services: ULong)
+data class HandshakeResult(
+    val peers: List<PeerCandidate>,
+    val services: ULong,
+)
 
 class ProbeOptions(
     val timeoutMs: Long? = null,
@@ -39,24 +48,38 @@ class ProbeOptions(
     val handshakeAndGetAddr: (suspend (ByteDuplex, Int) -> HandshakeResult)? = null,
 )
 
-private class OpenHandshake(val services: ULong, val protocol: Protocol)
+private class OpenHandshake(
+    val services: ULong,
+    val protocol: Protocol,
+)
 
-private class ParsedAddrs(val peers: List<PeerCandidate>, val rawCount: Int)
+private class ParsedAddrs(
+    val peers: List<PeerCandidate>,
+    val rawCount: Int,
+)
 
 /** Version/verack only. Address collection is a later, optional phase. */
-private suspend fun defaultHandshake(duplex: ByteDuplex, port: Int): OpenHandshake {
-    val protocol = Protocol.connect(
-        duplex,
-        ProtocolOptions(role = Role.Initiator, network = Networks.mainnet),
-    )
-    val result = completeVersionHandshake(
-        protocol,
-        VersionHandshakeOptions(port = port, name = APP_NAME, version = APP_VERSION),
-    )
+private suspend fun defaultHandshake(
+    duplex: ByteDuplex,
+    port: Int,
+): OpenHandshake {
+    val protocol =
+        Protocol.connect(
+            duplex,
+            ProtocolOptions(role = Role.Initiator, network = Networks.mainnet),
+        )
+    val result =
+        completeVersionHandshake(
+            protocol,
+            VersionHandshakeOptions(port = port, name = APP_NAME, version = APP_VERSION),
+        )
     return OpenHandshake(result.services, protocol)
 }
 
-private fun peersFromAddrMessage(message: Message, limit: Int): ParsedAddrs? =
+private fun peersFromAddrMessage(
+    message: Message,
+    limit: Int,
+): ParsedAddrs? =
     when (message) {
         is Message.AddrV2 -> {
             val rows = message.payload.addresses
@@ -112,16 +135,17 @@ private suspend fun connectOrAbort(
     port: Int,
 ): ByteDuplex {
     val pending = CompletableDeferred<ByteDuplex>()
-    val connectJob = CoroutineScope(coroutineContext).launch {
-        try {
-            pending.complete(connect(host, port))
-        } catch (e: CancellationException) {
-            pending.cancel(e)
-            throw e
-        } catch (e: Throwable) {
-            pending.completeExceptionally(e)
+    val connectJob =
+        CoroutineScope(coroutineContext).launch {
+            try {
+                pending.complete(connect(host, port))
+            } catch (e: CancellationException) {
+                pending.cancel(e)
+                throw e
+            } catch (e: Throwable) {
+                pending.completeExceptionally(e)
+            }
         }
-    }
     try {
         return pending.await()
     } catch (e: CancellationException) {
@@ -133,30 +157,40 @@ private suspend fun connectOrAbort(
     }
 }
 
-suspend fun probePeer(host: String, port: Int, options: ProbeOptions): ProbeResult {
+suspend fun probePeer(
+    host: String,
+    port: Int,
+    options: ProbeOptions,
+): ProbeResult {
     val timeoutMs = options.timeoutMs ?: Config.peerProbeTimeoutMs
     val addrTimeoutMs = options.addrTimeoutMs ?: Config.peerAddrTimeoutMs
     val wantAddr = options.wantAddr
     var duplex: ByteDuplex? = null
     return try {
-        data class HandshakePhase(val peers: List<PeerCandidate>, val services: ULong, val protocol: Protocol?)
-        val phase = withTimeout(timeoutMs) {
-            val connected = connectOrAbort(options.connect, host, port)
-            duplex = connected
-            val injected = options.handshakeAndGetAddr
-            if (injected != null) {
-                val hs = injected(connected, port)
-                HandshakePhase(hs.peers, hs.services, null)
-            } else {
-                val open = defaultHandshake(connected, port)
-                HandshakePhase(emptyList(), open.services, open.protocol)
+        data class HandshakePhase(
+            val peers: List<PeerCandidate>,
+            val services: ULong,
+            val protocol: Protocol?,
+        )
+        val phase =
+            withTimeout(timeoutMs) {
+                val connected = connectOrAbort(options.connect, host, port)
+                duplex = connected
+                val injected = options.handshakeAndGetAddr
+                if (injected != null) {
+                    val hs = injected(connected, port)
+                    HandshakePhase(hs.peers, hs.services, null)
+                } else {
+                    val open = defaultHandshake(connected, port)
+                    HandshakePhase(emptyList(), open.services, open.protocol)
+                }
             }
-        }
-        val peers = if (phase.protocol != null && wantAddr) {
-            collectAddrAfterHandshake(phase.protocol, addrTimeoutMs)
-        } else {
-            phase.peers
-        }
+        val peers =
+            if (phase.protocol != null && wantAddr) {
+                collectAddrAfterHandshake(phase.protocol, addrTimeoutMs)
+            } else {
+                phase.peers
+            }
         ProbeResult.Ok(peers, phase.services)
     } catch (e: TimeoutCancellationException) {
         ProbeResult.Err("probe timed out after ${timeoutMs}ms")

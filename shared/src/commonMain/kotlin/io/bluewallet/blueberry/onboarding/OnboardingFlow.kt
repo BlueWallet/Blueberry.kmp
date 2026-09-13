@@ -15,33 +15,55 @@ data class OnboardingState(
     val selectedYear: Int = DEFAULT_CHECKPOINT_YEAR,
     val busy: Boolean = false,
 ) {
-    override fun toString(): String =
-        "OnboardingState(step=$step, importValue=[redacted], error=$error, mnemonic=[redacted], selectedYear=$selectedYear, busy=$busy)"
+    override fun toString(): String = "OnboardingState(step=$step, importValue=[redacted], error=$error, mnemonic=[redacted], selectedYear=$selectedYear, busy=$busy)"
 }
 
 sealed class OnboardingEvent {
     data object ChooseCreate : OnboardingEvent()
+
     data object ChooseImport : OnboardingEvent()
+
     data object Back : OnboardingEvent()
-    data class ImportChanged(val value: String) : OnboardingEvent() {
+
+    data class ImportChanged(
+        val value: String,
+    ) : OnboardingEvent() {
         override fun toString(): String = "ImportChanged(value=[redacted])"
     }
+
     data object SubmitImport : OnboardingEvent()
+
     data object ConfirmCreate : OnboardingEvent()
-    data class SelectYear(val year: Int) : OnboardingEvent()
+
+    data class SelectYear(
+        val year: Int,
+    ) : OnboardingEvent()
+
     data object ConfirmYear : OnboardingEvent()
-    data class PersistFailed(val message: String) : OnboardingEvent()
+
+    data class PersistFailed(
+        val message: String,
+    ) : OnboardingEvent()
+
     data object PersistImportOk : OnboardingEvent()
 }
 
 sealed class OnboardingEffect {
-    data class PersistImportedSecret(val raw: String) : OnboardingEffect() {
+    data class PersistImportedSecret(
+        val raw: String,
+    ) : OnboardingEffect() {
         override fun toString(): String = "PersistImportedSecret(raw=[redacted])"
     }
-    data class PersistCreatedWallet(val mnemonic: String) : OnboardingEffect() {
+
+    data class PersistCreatedWallet(
+        val mnemonic: String,
+    ) : OnboardingEffect() {
         override fun toString(): String = "PersistCreatedWallet(mnemonic=[redacted])"
     }
-    data class PersistYear(val year: Int) : OnboardingEffect()
+
+    data class PersistYear(
+        val year: Int,
+    ) : OnboardingEffect()
 }
 
 data class OnboardingReduction(
@@ -50,10 +72,16 @@ data class OnboardingReduction(
 )
 
 fun initialOnboardingState(startAtYearStep: Boolean): OnboardingState =
-    if (startAtYearStep) OnboardingState(step = OnboardingStep.Year)
-    else OnboardingState(step = OnboardingStep.Choose)
+    if (startAtYearStep) {
+        OnboardingState(step = OnboardingStep.Year)
+    } else {
+        OnboardingState(step = OnboardingStep.Choose)
+    }
 
-fun reduceOnboarding(state: OnboardingState, event: OnboardingEvent): OnboardingReduction {
+fun reduceOnboarding(
+    state: OnboardingState,
+    event: OnboardingEvent,
+): OnboardingReduction {
     if (state.busy && event !is OnboardingEvent.PersistFailed && event !is OnboardingEvent.PersistImportOk) {
         return OnboardingReduction(state)
     }

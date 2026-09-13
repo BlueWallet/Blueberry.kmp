@@ -6,7 +6,11 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 
 class WalletTxsStoreEtaTest {
-    private fun snap(at: Long, parsed: Int, total: Int): WalletTxsSnapshot =
+    private fun snap(
+        at: Long,
+        parsed: Int,
+        total: Int,
+    ): WalletTxsSnapshot =
         emptyWalletTxsSnapshot.copy(
             at = at,
             blocksParsed = parsed,
@@ -56,17 +60,18 @@ class WalletTxsStoreEtaTest {
                 at = 1,
                 blocksParsed = 0,
                 blocksTotal = 2,
-                txs = listOf(
-                    WalletTxRow(
-                        txid = "ab",
-                        shortTxid = "ab",
-                        height = 1,
-                        timeLabel = "#1".padEnd(16),
-                        netDeltaSats = 1,
-                        netDeltaLabel = "+1",
-                        paymentLabel = null,
+                txs =
+                    listOf(
+                        WalletTxRow(
+                            txid = "ab",
+                            shortTxid = "ab",
+                            height = 1,
+                            timeLabel = "#1".padEnd(16),
+                            netDeltaSats = 1,
+                            netDeltaLabel = "+1",
+                            paymentLabel = null,
+                        ),
                     ),
-                ),
             ),
         )
         val txs = store.get().txs

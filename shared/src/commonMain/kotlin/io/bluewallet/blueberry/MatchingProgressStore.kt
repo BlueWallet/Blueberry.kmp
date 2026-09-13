@@ -18,7 +18,13 @@ data class MatchingProgress(
 
 interface MatchingProgressStore {
     fun get(): MatchingProgress
-    fun applyEvent(at: Long, scanned: Int, total: Int)
+
+    fun applyEvent(
+        at: Long,
+        scanned: Int,
+        total: Int,
+    )
+
     fun subscribe(listener: () -> Unit): () -> Unit
 }
 
@@ -60,7 +66,11 @@ private class MatchingProgressStoreImpl : MatchingProgressStore {
 
     override fun get() = state.load().progress
 
-    override fun applyEvent(at: Long, scanned: Int, total: Int) {
+    override fun applyEvent(
+        at: Long,
+        scanned: Int,
+        total: Int,
+    ) {
         while (true) {
             val cur = state.load()
             val nextPercent = progressPercent(scanned, total)
@@ -91,13 +101,14 @@ private class MatchingProgressStoreImpl : MatchingProgressStore {
                     }
                     nextEta = null
                 } else {
-                    nextEta = etaFor(
-                        nextOriginAt,
-                        nextOriginScanned!!,
-                        scanned,
-                        total,
-                        at,
-                    )
+                    nextEta =
+                        etaFor(
+                            nextOriginAt,
+                            nextOriginScanned!!,
+                            scanned,
+                            total,
+                            at,
+                        )
                 }
             }
 
@@ -111,21 +122,23 @@ private class MatchingProgressStoreImpl : MatchingProgressStore {
                 return
             }
 
-            val next = MatchingStoreState(
-                scanned = scanned,
-                total = total,
-                at = at,
-                originAt = nextOriginAt,
-                originScanned = nextOriginScanned,
-                seeded = nextSeeded,
-                progress = MatchingProgress(
+            val next =
+                MatchingStoreState(
                     scanned = scanned,
                     total = total,
                     at = at,
-                    etaMs = nextEta,
-                    percent = nextPercent,
-                ),
-            )
+                    originAt = nextOriginAt,
+                    originScanned = nextOriginScanned,
+                    seeded = nextSeeded,
+                    progress =
+                        MatchingProgress(
+                            scanned = scanned,
+                            total = total,
+                            at = at,
+                            etaMs = nextEta,
+                            percent = nextPercent,
+                        ),
+                )
             if (state.compareAndSet(cur, next)) {
                 emitChange()
                 return

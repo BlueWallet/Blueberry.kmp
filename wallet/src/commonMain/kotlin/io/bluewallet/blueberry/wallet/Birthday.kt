@@ -8,7 +8,9 @@ sealed class WalletBirthdayInspection {
 
     data object Pending : WalletBirthdayInspection()
 
-    data class Ok(val height: Int) : WalletBirthdayInspection()
+    data class Ok(
+        val height: Int,
+    ) : WalletBirthdayInspection()
 }
 
 fun markWalletBirthdayPending(db: Database) {
@@ -37,7 +39,10 @@ fun compactFilterFrom(db: Database): Int? {
 }
 
 /** Freeze pending birthday to [height]. No-op if not pending. Returns whether written. */
-fun maybeFreezeWalletBirthday(db: Database, height: Int): Boolean {
+fun maybeFreezeWalletBirthday(
+    db: Database,
+    height: Int,
+): Boolean {
     if (height < 0) return false
     if (inspectWalletBirthday(db) != WalletBirthdayInspection.Pending) return false
     db.keyValue.set(WALLET_BIRTHDAY_HEIGHT_KEY, height.toString())

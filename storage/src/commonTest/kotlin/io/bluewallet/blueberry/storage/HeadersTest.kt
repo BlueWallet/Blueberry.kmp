@@ -19,11 +19,12 @@ class HeadersTest {
         assertTrue(db.headers.tip()!!.cumulativeWork > BigInteger.ZERO)
         db.headers.ensureCheckpoint(checkpointDbRecord())
         assertEquals(1, db.headers.count())
-        val ex = assertFailsWith<IllegalStateException> {
-            db.headers.ensureCheckpoint(
-                checkpointDbRecord().copy(hashInternalHex = "00".repeat(32)),
-            )
-        }
+        val ex =
+            assertFailsWith<IllegalStateException> {
+                db.headers.ensureCheckpoint(
+                    checkpointDbRecord().copy(hashInternalHex = "00".repeat(32)),
+                )
+            }
         assertTrue(ex.message!!.contains("checkpoint mismatch"))
         assertTrue(ex.message!!.contains("Delete blueberry.data/blueberry.sqlite"))
         db.close()
@@ -53,11 +54,17 @@ class HeadersTest {
             ),
         )
         assertEquals(4, db.headers.count())
-        assertTrue(db.headers.tip()!!.hashInternalHex.endsWith("b3"))
+        assertTrue(
+            db.headers
+                .tip()!!
+                .hashInternalHex
+                .endsWith("b3"),
+        )
         assertEquals(base + BigInteger.fromInt(30), db.headers.tip()!!.cumulativeWork)
         assertEquals(
             listOf(seed.height.toInt() + 1, seed.height.toInt() + 2, seed.height.toInt() + 3),
-            db.headers.loadRange(seed.height.toInt() + 1, seed.height.toInt() + 3)
+            db.headers
+                .loadRange(seed.height.toInt() + 1, seed.height.toInt() + 3)
                 .map { it.height },
         )
         assertEquals(

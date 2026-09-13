@@ -30,17 +30,25 @@ const val BIP341_TAPROOT = "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hc
 const val DEST_LEGACY = "1GX36PGBUrF8XahZEGQqHqnJGW2vCZteoB"
 const val GENESIS_P2PKH = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
 
-data class TestFundingTx(val txid: String, val bytes: ByteArray)
+data class TestFundingTx(
+    val txid: String,
+    val bytes: ByteArray,
+)
 
 /** One-output v2 funding transaction; `salt` makes each fixture a distinct txid. */
-fun testFundingTx(scriptPubKey: ByteArray, valueSats: Long, salt: Int = 1): TestFundingTx {
+fun testFundingTx(
+    scriptPubKey: ByteArray,
+    valueSats: Long,
+    salt: Int = 1,
+): TestFundingTx {
     val prevHash = ByteArray(32)
     prevHash[0] = salt.toByte()
-    val tx = Transaction(
-        2L,
-        listOf(TxIn(OutPoint(TxHash(prevHash), 0L), 0xffffffffL)),
-        listOf(TxOut(Satoshi(valueSats), scriptPubKey)),
-        0L,
-    )
+    val tx =
+        Transaction(
+            2L,
+            listOf(TxIn(OutPoint(TxHash(prevHash), 0L), 0xffffffffL)),
+            listOf(TxOut(Satoshi(valueSats), scriptPubKey)),
+            0L,
+        )
     return TestFundingTx(tx.txid.toString(), Transaction.write(tx))
 }

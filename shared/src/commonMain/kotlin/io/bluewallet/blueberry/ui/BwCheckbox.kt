@@ -16,10 +16,11 @@ fun BwCheckbox(
         checked = checked,
         onCheckedChange = onCheckedChange,
         modifier = modifier,
-        colors = CheckboxDefaults.colors(
-            checkedColor = BwColors.Accent,
-            uncheckedColor = BwColors.InkMuted,
-            checkmarkColor = BwColors.OnAccent,
-        ),
+        colors =
+            CheckboxDefaults.colors(
+                checkedColor = BwColors.Accent,
+                uncheckedColor = BwColors.InkMuted,
+                checkmarkColor = BwColors.OnAccent,
+            ),
     )
 }

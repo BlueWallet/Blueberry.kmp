@@ -13,11 +13,14 @@ fun checkpointDbRecord(): HeaderRecord {
     )
 }
 
-fun testHeader(height: Int, suffix: String, cumulativeWork: BigInteger): HeaderWrite {
-    return HeaderWrite(
+fun testHeader(
+    height: Int,
+    suffix: String,
+    cumulativeWork: BigInteger,
+): HeaderWrite =
+    HeaderWrite(
         height = height,
         hashInternalHex = "i".repeat(64 - suffix.length) + suffix,
         header = ByteArray(80) { 0xab.toByte() },
         cumulativeWork = cumulativeWork,
     )
-}

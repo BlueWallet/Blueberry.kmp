@@ -16,15 +16,23 @@ data class PeerSocketCounts(
 
 interface PeerSocketsStore {
     fun get(): PeerSocketCounts
+
     fun setKnown(known: Int)
-    fun applyEvent(kind: PeerSocketKind, open: Int)
+
+    fun applyEvent(
+        kind: PeerSocketKind,
+        open: Int,
+    )
+
     fun subscribe(listener: () -> Unit): () -> Unit
 }
 
-fun formatPeerSockets(counts: PeerSocketCounts): String =
-    "probe ${counts.probe} · hdr ${counts.hdr} · filt ${counts.filt} · blk ${counts.blk}"
+fun formatPeerSockets(counts: PeerSocketCounts): String = "probe ${counts.probe} · hdr ${counts.hdr} · filt ${counts.filt} · blk ${counts.blk}"
 
-fun hydratePeers(db: Database, store: PeerSocketsStore) {
+fun hydratePeers(
+    db: Database,
+    store: PeerSocketsStore,
+) {
     store.setKnown(db.peers.count())
 }
 
@@ -55,23 +63,31 @@ private class PeerSocketsStoreImpl : PeerSocketsStore {
         }
     }
 
-    override fun applyEvent(kind: PeerSocketKind, open: Int) {
+    override fun applyEvent(
+        kind: PeerSocketKind,
+        open: Int,
+    ) {
         val next = max(0, open)
-        val changed = replaceSnapshot { cur ->
-            val curValue = when (kind) {
-                PeerSocketKind.PROBE -> cur.probe
-                PeerSocketKind.HDR -> cur.hdr
-                PeerSocketKind.FILT -> cur.filt
-                PeerSocketKind.BLK -> cur.blk
+        val changed =
+            replaceSnapshot { cur ->
+                val curValue =
+                    when (kind) {
+                        PeerSocketKind.PROBE -> cur.probe
+                        PeerSocketKind.HDR -> cur.hdr
+                        PeerSocketKind.FILT -> cur.filt
+                        PeerSocketKind.BLK -> cur.blk
+                    }
+                if (curValue == next) {
+                    cur
+                } else {
+                    when (kind) {
+                        PeerSocketKind.PROBE -> cur.copy(probe = next)
+                        PeerSocketKind.HDR -> cur.copy(hdr = next)
+                        PeerSocketKind.FILT -> cur.copy(filt = next)
+                        PeerSocketKind.BLK -> cur.copy(blk = next)
+                    }
+                }
             }
-            if (curValue == next) cur
-            else when (kind) {
-                PeerSocketKind.PROBE -> cur.copy(probe = next)
-                PeerSocketKind.HDR -> cur.copy(hdr = next)
-                PeerSocketKind.FILT -> cur.copy(filt = next)
-                PeerSocketKind.BLK -> cur.copy(blk = next)
-            }
-        }
         if (changed) emitChange()
     }
 

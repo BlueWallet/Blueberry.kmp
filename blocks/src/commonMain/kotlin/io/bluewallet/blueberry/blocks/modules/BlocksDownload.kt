@@ -3,8 +3,8 @@ package io.bluewallet.blueberry.blocks.modules
 import io.bluewallet.bip324.assertBlockPayload
 import io.bluewallet.bip324.encodeBlock
 import io.bluewallet.bip324.hexToBytes
-import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.BlocksProgressPayload
+import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.ModuleStatus
 import io.bluewallet.blueberry.bus.ModuleStatusPayload
 import io.bluewallet.blueberry.bus.PeerSocketKind
@@ -38,8 +38,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.AtomicLong
@@ -53,6 +53,7 @@ private val NODE_NETWORK = 1uL
 
 private const val UI_MIN_MS = 100L
 private const val PEER_COOL_MS = 3_000L
+
 /** Poll while pending work remains but peers are scarce. */
 private const val PEER_WAIT_MS = 1_000L
 
@@ -68,7 +69,10 @@ class BlocksDownloadOptions(
     val log: ((String) -> Unit)? = null,
 )
 
-private data class PeerRef(val host: String, val port: Int)
+private data class PeerRef(
+    val host: String,
+    val port: Int,
+)
 
 private fun peerKey(peer: PeerRef): String = "${peer.host}:${peer.port}"
 
@@ -162,44 +166,52 @@ fun createBlocksDownloadModule(
         for (key in stale) peerCoolUntil.remove(key)
     }
 
-    suspend fun leasePeer(): PeerRef? = lock.withLock {
-        pruneCooldownsLocked()
-        val candidates = ctx.db.peers
-            .listAliveWithServices(NODE_NETWORK, 512, AliveServiceOptions(unusedForBlocks = true))
-            .filter { p ->
-                val key = peerKey(PeerRef(p.host, p.port))
-                !leasedPeers.contains(key) && !peerCoolUntil.containsKey(key)
-            }
-        if (candidates.isEmpty()) return@withLock null
-        val peer = PeerRef(candidates[0].host, candidates[0].port)
-        leasedPeers.add(peerKey(peer))
-        peer
-    }
+    suspend fun leasePeer(): PeerRef? =
+        lock.withLock {
+            pruneCooldownsLocked()
+            val candidates =
+                ctx.db.peers
+                    .listAliveWithServices(NODE_NETWORK, 512, AliveServiceOptions(unusedForBlocks = true))
+                    .filter { p ->
+                        val key = peerKey(PeerRef(p.host, p.port))
+                        !leasedPeers.contains(key) && !peerCoolUntil.containsKey(key)
+                    }
+            if (candidates.isEmpty()) return@withLock null
+            val peer = PeerRef(candidates[0].host, candidates[0].port)
+            leasedPeers.add(peerKey(peer))
+            peer
+        }
 
     suspend fun coolPeer(peer: PeerRef) {
         lock.withLock { peerCoolUntil[peerKey(peer)] = now() + PEER_COOL_MS }
     }
 
-    suspend fun downloadOne(job: MatchedBlock, peer: PeerRef): Boolean {
+    suspend fun downloadOne(
+        job: MatchedBlock,
+        peer: PeerRef,
+    ): Boolean {
         val startedAt = now()
         val attempt = attemptSequence.incrementAndFetch()
         var session: BlockSessionApi? = null
         var phase = "session"
         try {
             diagnosticLog("block start attempt=$attempt peer=${peerKey(peer)}")
-            val opened = openSession(
-                peer.host,
-                peer.port,
-                BlockSyncOptions(
-                    connect = options.net.connect,
-                    connectTimeoutMs = connectTimeoutMs,
-                    syncTimeoutMs = syncTimeoutMs,
-                ),
-            )
+            val opened =
+                openSession(
+                    peer.host,
+                    peer.port,
+                    BlockSyncOptions(
+                        connect = options.net.connect,
+                        connectTimeoutMs = connectTimeoutMs,
+                        syncTimeoutMs = syncTimeoutMs,
+                    ),
+                )
             if (opened is BlockBatchResult.Err) {
                 coolPeer(peer)
                 diagnosticLog(
-                    "session open failure attempt=$attempt peer=${peerKey(peer)} elapsedMs=${max(0, now() - startedAt)} cooldownMs=$PEER_COOL_MS error=${opened.error}",
+                    "session open failure attempt=$attempt peer=${peerKey(
+                        peer,
+                    )} elapsedMs=${max(0, now() - startedAt)} cooldownMs=$PEER_COOL_MS error=${opened.error}",
                 )
                 return false
             }
@@ -212,13 +224,16 @@ fun createBlocksDownloadModule(
             assertBlockPayload(payload, hashDisplay)
             val blockBytes = encodeBlock(payload)
             phase = "persist"
-            val inserted = ctx.db.blocks.insertIfMatched(
-                DownloadedBlock(job.height, job.blockHashInternalHex, blockBytes),
-            )
+            val inserted =
+                ctx.db.blocks.insertIfMatched(
+                    DownloadedBlock(job.height, job.blockHashInternalHex, blockBytes),
+                )
             val stored = if (inserted) null else ctx.db.blocks.get(job.height)
             if (!inserted && stored?.blockHashInternalHex != job.blockHashInternalHex) {
                 diagnosticLog(
-                    "block discarded stale attempt=$attempt peer=${peerKey(peer)} height=${job.height} elapsedMs=${max(0, now() - startedAt)}",
+                    "block discarded stale attempt=$attempt peer=${peerKey(
+                        peer,
+                    )} height=${job.height} elapsedMs=${max(0, now() - startedAt)}",
                 )
                 return false
             }
@@ -235,7 +250,9 @@ fun createBlocksDownloadModule(
         } catch (err: Throwable) {
             coolPeer(peer)
             diagnosticLog(
-                "block failure attempt=$attempt peer=${peerKey(peer)} phase=$phase elapsedMs=${max(0, now() - startedAt)} cooldownMs=$PEER_COOL_MS error=${formatError(err)}",
+                "block failure attempt=$attempt peer=${peerKey(
+                    peer,
+                )} phase=$phase elapsedMs=${max(0, now() - startedAt)} cooldownMs=$PEER_COOL_MS error=${formatError(err)}",
             )
             return false
         } finally {
@@ -248,21 +265,25 @@ fun createBlocksDownloadModule(
         }
     }
 
-    suspend fun launchDownload(job: MatchedBlock, peer: PeerRef) {
+    suspend fun launchDownload(
+        job: MatchedBlock,
+        peer: PeerRef,
+    ) {
         val scope = downloadScope ?: return
-        val task = scope.launch(start = CoroutineStart.LAZY) {
-            try {
-                downloadOne(job, peer)
-            } finally {
-                withContext(NonCancellable) {
-                    lock.withLock {
-                        leasedPeers.remove(peerKey(peer))
-                        inFlight.remove(job.height)
+        val task =
+            scope.launch(start = CoroutineStart.LAZY) {
+                try {
+                    downloadOne(job, peer)
+                } finally {
+                    withContext(NonCancellable) {
+                        lock.withLock {
+                            leasedPeers.remove(peerKey(peer))
+                            inFlight.remove(job.height)
+                        }
+                        emitSockets()
                     }
-                    emitSockets()
                 }
             }
-        }
         lock.withLock { inFlight[job.height] = task }
         task.start()
         emitSockets()
@@ -274,24 +295,27 @@ fun createBlocksDownloadModule(
 
     suspend fun inFlightHeights(): Set<Int> = lock.withLock { inFlight.keys.toSet() }
 
-    suspend fun leasedAndCoolingCounts(): Pair<Int, Int> = lock.withLock {
-        leasedPeers.size to peerCoolUntil.size
-    }
+    suspend fun leasedAndCoolingCounts(): Pair<Int, Int> =
+        lock.withLock {
+            leasedPeers.size to peerCoolUntil.size
+        }
 
     suspend fun waitForAnyInFlightOrKick() {
         val jobs = snapshotInFlight()
         val done = CompletableDeferred<Unit>()
         val scope = downloadScope ?: return
-        val watchers = jobs.map { job ->
+        val watchers =
+            jobs.map { job ->
+                scope.launch {
+                    job.join()
+                    done.complete(Unit)
+                }
+            }
+        val kickWaiter =
             scope.launch {
-                job.join()
+                waitForKick(PEER_WAIT_MS)
                 done.complete(Unit)
             }
-        }
-        val kickWaiter = scope.launch {
-            waitForKick(PEER_WAIT_MS)
-            done.complete(Unit)
-        }
         try {
             done.await()
         } finally {
@@ -305,9 +329,10 @@ fun createBlocksDownloadModule(
         emitProgress(true)
         while (!isStopped()) {
             val flying = inFlightHeights()
-            val pending = ctx.db.matchedBlocks
-                .listNeedingDownload(concurrency)
-                .filter { !flying.contains(it.height) }
+            val pending =
+                ctx.db.matchedBlocks
+                    .listNeedingDownload(concurrency)
+                    .filter { !flying.contains(it.height) }
 
             if (pending.isEmpty() && inFlightSize() == 0) {
                 lastQueueDiagnostic.store("")
@@ -375,22 +400,25 @@ fun createBlocksDownloadModule(
             emitProgress(true)
             unsubMatch = ctx.bus.on(Event.FiltersMatch) { kick() }
             unsubIdle = ctx.bus.on(Event.SyncIdle) { quiet.store(true) }
-            unsubCatchup = ctx.bus.on(Event.SyncCatchup) {
-                quiet.store(false)
-                kick()
-            }
-            unsubPeers = ctx.bus.on(Event.PeersUpdated) {
-                if (quiet.load()) return@on
-                kick()
-            }
+            unsubCatchup =
+                ctx.bus.on(Event.SyncCatchup) {
+                    quiet.store(false)
+                    kick()
+                }
+            unsubPeers =
+                ctx.bus.on(Event.PeersUpdated) {
+                    if (quiet.load()) return@on
+                    kick()
+                }
             val job = SupervisorJob()
             parentJob = job
             val scope = CoroutineScope(job + Dispatchers.Default)
             downloadScope = scope
-            val launched = scope.launch {
-                if (isStopped()) return@launch
-                loop()
-            }
+            val launched =
+                scope.launch {
+                    if (isStopped()) return@launch
+                    loop()
+                }
             loopJob = launched
             detachLoop(ctx, "blocks-download", launched)
             ctx.bus.emit(

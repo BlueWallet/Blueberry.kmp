@@ -10,6 +10,8 @@ data class ModuleContext(
 
 interface Module {
     val name: String
+
     suspend fun start()
+
     fun stop()
 }

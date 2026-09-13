@@ -35,8 +35,14 @@ const val SESSION_BUSY_ERROR = "session busy"
 private val ZERO_HASH = ByteArray(32)
 
 sealed class HeaderBatchResult {
-    data class Ok(val startHeight: Int, val headers: List<BlockHeader>) : HeaderBatchResult()
-    data class Err(val error: String) : HeaderBatchResult()
+    data class Ok(
+        val startHeight: Int,
+        val headers: List<BlockHeader>,
+    ) : HeaderBatchResult()
+
+    data class Err(
+        val error: String,
+    ) : HeaderBatchResult()
 }
 
 class HeaderRequestResult(
@@ -78,25 +84,48 @@ class HeaderSessionPoolOptions(
 
 private const val MSG_CMPCT_BLOCK: UInt = 4u
 
-fun headerMessageSuggestsNewTip(message: Message): Boolean = when (message) {
-    is Message.Headers -> message.payload.headers.isNotEmpty()
-    is Message.Inv -> message.payload.inventory.any { item ->
-        val base = item.type and 0x3fffffffu
-        base == MSG_BLOCK || item.type == MSG_WITNESS_BLOCK || base == MSG_CMPCT_BLOCK
+fun headerMessageSuggestsNewTip(message: Message): Boolean =
+    when (message) {
+        is Message.Headers -> message.payload.headers.isNotEmpty()
+        is Message.Inv ->
+            message.payload.inventory.any { item ->
+                val base = item.type and 0x3fffffffu
+                base == MSG_BLOCK || item.type == MSG_WITNESS_BLOCK || base == MSG_CMPCT_BLOCK
+            }
+        else -> false
     }
-    else -> false
-}
 
 interface HeaderSessionPool {
-    fun has(host: String, port: Int): Boolean
-    fun isBusy(host: String, port: Int): Boolean
+    fun has(
+        host: String,
+        port: Int,
+    ): Boolean
+
+    fun isBusy(
+        host: String,
+        port: Int,
+    ): Boolean
+
     fun isFull(): Boolean
-    suspend fun fetchBatch(host: String, port: Int, options: HeaderFetchOptions): HeaderBatchResult
-    suspend fun drop(host: String, port: Int)
+
+    suspend fun fetchBatch(
+        host: String,
+        port: Int,
+        options: HeaderFetchOptions,
+    ): HeaderBatchResult
+
+    suspend fun drop(
+        host: String,
+        port: Int,
+    )
+
     suspend fun closeAll()
 }
 
-private fun peerKey(host: String, port: Int) = "$host:$port"
+private fun peerKey(
+    host: String,
+    port: Int,
+) = "$host:$port"
 
 private fun wireToLib(header: io.bluewallet.bip324.BlockHeader): BlockHeader =
     BlockHeader(
@@ -114,16 +143,17 @@ private suspend fun connectOrAbort(
     port: Int,
 ): ByteDuplex {
     val pending = CompletableDeferred<ByteDuplex>()
-    val connectJob = CoroutineScope(coroutineContext).launch {
-        try {
-            pending.complete(connect(host, port))
-        } catch (e: CancellationException) {
-            pending.cancel(e)
-            throw e
-        } catch (e: Throwable) {
-            pending.completeExceptionally(e)
+    val connectJob =
+        CoroutineScope(coroutineContext).launch {
+            try {
+                pending.complete(connect(host, port))
+            } catch (e: CancellationException) {
+                pending.cancel(e)
+                throw e
+            } catch (e: Throwable) {
+                pending.completeExceptionally(e)
+            }
         }
-    }
     try {
         return pending.await()
     } catch (e: CancellationException) {
@@ -135,15 +165,20 @@ private suspend fun connectOrAbort(
     }
 }
 
-private suspend fun handshake(duplex: ByteDuplex, port: Int): Pair<Protocol, Int> {
-    val protocol = Protocol.connect(
-        duplex,
-        ProtocolOptions(role = Role.Initiator, network = Networks.mainnet),
-    )
-    val result = completeVersionHandshake(
-        protocol,
-        VersionHandshakeOptions(port = port, name = APP_NAME, version = APP_VERSION),
-    )
+private suspend fun handshake(
+    duplex: ByteDuplex,
+    port: Int,
+): Pair<Protocol, Int> {
+    val protocol =
+        Protocol.connect(
+            duplex,
+            ProtocolOptions(role = Role.Initiator, network = Networks.mainnet),
+        )
+    val result =
+        completeVersionHandshake(
+            protocol,
+            VersionHandshakeOptions(port = port, name = APP_NAME, version = APP_VERSION),
+        )
     return protocol to result.startHeight
 }
 
@@ -170,7 +205,10 @@ private suspend fun requestHeaderBatch(
     }
 }
 
-private fun timeoutMessage(label: String, ms: Long) = "$label timed out after ${ms}ms"
+private fun timeoutMessage(
+    label: String,
+    ms: Long,
+) = "$label timed out after ${ms}ms"
 
 suspend fun fetchHeadersBatch(
     host: String,
@@ -187,17 +225,20 @@ suspend fun fetchHeadersBatch(
         }
         val live = duplex!!
         if (options.requestHeaders != null) {
-            val result = withTimeout(headersTimeoutMs) {
-                options.requestHeaders.invoke(live, port, options.locatorHashes, stopHash)
-            }
+            val result =
+                withTimeout(headersTimeoutMs) {
+                    options.requestHeaders.invoke(live, port, options.locatorHashes, stopHash)
+                }
             HeaderBatchResult.Ok(result.startHeight, result.headers)
         } else {
-            val (protocol, startHeight) = withTimeout(connectTimeoutMs) {
-                handshake(live, port)
-            }
-            val result = withTimeout(headersTimeoutMs) {
-                requestHeaderBatch(protocol, startHeight, options.locatorHashes, stopHash)
-            }
+            val (protocol, startHeight) =
+                withTimeout(connectTimeoutMs) {
+                    handshake(live, port)
+                }
+            val result =
+                withTimeout(headersTimeoutMs) {
+                    requestHeaderBatch(protocol, startHeight, options.locatorHashes, stopHash)
+                }
             HeaderBatchResult.Ok(result.startHeight, result.headers)
         }
     } catch (e: TimeoutCancellationException) {
@@ -237,9 +278,7 @@ private class PoolSnapshotBox {
 }
 
 @OptIn(ExperimentalAtomicApi::class)
-fun createHeaderSessionPool(
-    poolOptions: HeaderSessionPoolOptions = HeaderSessionPoolOptions(),
-): HeaderSessionPool {
+fun createHeaderSessionPool(poolOptions: HeaderSessionPoolOptions = HeaderSessionPoolOptions()): HeaderSessionPool {
     val defaultConnectTimeoutMs = poolOptions.connectTimeoutMs ?: Config.peerProbeTimeoutMs
     val defaultHeadersTimeoutMs = poolOptions.headersTimeoutMs ?: Config.headerSyncTimeoutMs
     val max = maxOf(1, poolOptions.max ?: Config.headerRacePeers * 2)
@@ -262,12 +301,13 @@ fun createHeaderSessionPool(
         for ((key, session) in sessions) {
             if (session.busy) busy.add(key)
         }
-        snap.value = PoolSnapshot(
-            live = sessions.keys.toSet(),
-            connecting = connecting.toSet(),
-            busy = busy,
-            open = openCountLocked(),
-        )
+        snap.value =
+            PoolSnapshot(
+                live = sessions.keys.toSet(),
+                connecting = connecting.toSet(),
+                busy = busy,
+                open = openCountLocked(),
+            )
     }
 
     fun notifyOpenCountLocked() {
@@ -278,13 +318,17 @@ fun createHeaderSessionPool(
         onOpenCount.invoke(n)
     }
 
-    suspend fun dropSession(host: String, port: Int) {
-        val session = mutex.withLock {
-            val removed = sessions.remove(peerKey(host, port)) ?: return@withLock null
-            publishLocked()
-            notifyOpenCountLocked()
-            removed
-        } ?: return
+    suspend fun dropSession(
+        host: String,
+        port: Int,
+    ) {
+        val session =
+            mutex.withLock {
+                val removed = sessions.remove(peerKey(host, port)) ?: return@withLock null
+                publishLocked()
+                notifyOpenCountLocked()
+                removed
+            } ?: return
         try {
             session.pumpJob?.cancel()
             session.close()
@@ -292,7 +336,11 @@ fun createHeaderSessionPool(
         }
     }
 
-    suspend fun openLive(host: String, port: Int, connectTimeoutMs: Long): LiveSession {
+    suspend fun openLive(
+        host: String,
+        port: Int,
+        connectTimeoutMs: Long,
+    ): LiveSession {
         val opened = poolOptions.openSession
         if (opened != null) {
             val session = opened(host, port)
@@ -312,40 +360,41 @@ fun createHeaderSessionPool(
                 val liveDuplex = duplex!!
                 val (protocol, startHeight) = handshake(liveDuplex, port)
                 val headersWaiter = AtomicReference<CompletableDeferred<HeaderRequestResult>?>(null)
-                val pumpJob = pumpScope.launch {
-                    try {
-                        while (true) {
-                            val message = protocol.readMessage()
-                            if (message is Message.Headers) {
-                                val waiter = headersWaiter.load()
-                                if (waiter != null) {
-                                    // Deliver by waiter, not the expecting flag: the flag
-                                    // can still be false in the store-waiter / store-flag window.
-                                    waiter.complete(
-                                        HeaderRequestResult(
-                                            startHeight = startHeight,
-                                            headers = message.payload.headers.map(::wireToLib),
-                                        ),
-                                    )
-                                } else if (headerMessageSuggestsNewTip(message)) {
-                                    onTipHint?.invoke()
+                val pumpJob =
+                    pumpScope.launch {
+                        try {
+                            while (true) {
+                                val message = protocol.readMessage()
+                                if (message is Message.Headers) {
+                                    val waiter = headersWaiter.load()
+                                    if (waiter != null) {
+                                        // Deliver by waiter, not the expecting flag: the flag
+                                        // can still be false in the store-waiter / store-flag window.
+                                        waiter.complete(
+                                            HeaderRequestResult(
+                                                startHeight = startHeight,
+                                                headers = message.payload.headers.map(::wireToLib),
+                                            ),
+                                        )
+                                    } else if (headerMessageSuggestsNewTip(message)) {
+                                        onTipHint?.invoke()
+                                    }
+                                } else {
+                                    answerPing(protocol, message)
+                                    // Inv during getheaders still hints: a lone watcher
+                                    // may get inv-then-empty-headers and would otherwise
+                                    // 10min-nap on a block the peer will not re-announce.
+                                    if (headerMessageSuggestsNewTip(message)) onTipHint?.invoke()
                                 }
-                            } else {
-                                answerPing(protocol, message)
-                                // Inv during getheaders still hints: a lone watcher
-                                // may get inv-then-empty-headers and would otherwise
-                                // 10min-nap on a block the peer will not re-announce.
-                                if (headerMessageSuggestsNewTip(message)) onTipHint?.invoke()
                             }
+                        } catch (e: CancellationException) {
+                            headersWaiter.load()?.completeExceptionally(e)
+                            throw e
+                        } catch (e: Throwable) {
+                            headersWaiter.load()?.completeExceptionally(e)
+                            dropSession(host, port)
                         }
-                    } catch (e: CancellationException) {
-                        headersWaiter.load()?.completeExceptionally(e)
-                        throw e
-                    } catch (e: Throwable) {
-                        headersWaiter.load()?.completeExceptionally(e)
-                        dropSession(host, port)
                     }
-                }
                 LiveSession(
                     host = host,
                     port = port,
@@ -391,13 +440,19 @@ fun createHeaderSessionPool(
     }
 
     return object : HeaderSessionPool {
-        override fun has(host: String, port: Int): Boolean {
+        override fun has(
+            host: String,
+            port: Int,
+        ): Boolean {
             val key = peerKey(host, port)
             val view = snap.value
             return view.live.contains(key) || view.connecting.contains(key)
         }
 
-        override fun isBusy(host: String, port: Int): Boolean {
+        override fun isBusy(
+            host: String,
+            port: Int,
+        ): Boolean {
             val key = peerKey(host, port)
             return snap.value.busy.contains(key)
         }
@@ -417,23 +472,25 @@ fun createHeaderSessionPool(
             var session: LiveSession? = mutex.withLock { sessions[key] }
             try {
                 if (session == null) {
-                    val busy = mutex.withLock {
-                        if (connecting.contains(key)) return@withLock true
-                        if (openCountLocked() >= max) return@withLock true
-                        connecting.add(key)
-                        opening++
-                        publishLocked()
-                        notifyOpenCountLocked()
-                        false
-                    }
+                    val busy =
+                        mutex.withLock {
+                            if (connecting.contains(key)) return@withLock true
+                            if (openCountLocked() >= max) return@withLock true
+                            connecting.add(key)
+                            opening++
+                            publishLocked()
+                            notifyOpenCountLocked()
+                            false
+                        }
                     if (busy) return HeaderBatchResult.Err(SESSION_BUSY_ERROR)
                     try {
                         session = openLive(host, port, connectTimeoutMs)
-                        val closed = mutex.withLock {
-                            sessions[key] = session!!
-                            publishLocked()
-                            epoch != started
-                        }
+                        val closed =
+                            mutex.withLock {
+                                sessions[key] = session!!
+                                publishLocked()
+                                epoch != started
+                            }
                         if (closed) {
                             dropSession(host, port)
                             return HeaderBatchResult.Err("session closed")
@@ -448,20 +505,22 @@ fun createHeaderSessionPool(
                     }
                 }
                 val live = session!!
-                val claimed = mutex.withLock {
-                    if (live.busy) {
-                        false
-                    } else {
-                        live.busy = true
-                        publishLocked()
-                        true
+                val claimed =
+                    mutex.withLock {
+                        if (live.busy) {
+                            false
+                        } else {
+                            live.busy = true
+                            publishLocked()
+                            true
+                        }
                     }
-                }
                 if (!claimed) return HeaderBatchResult.Err(SESSION_BUSY_ERROR)
                 try {
-                    val result = withTimeout(headersTimeoutMs) {
-                        live.requestHeaders(options.locatorHashes, stopHash)
-                    }
+                    val result =
+                        withTimeout(headersTimeoutMs) {
+                            live.requestHeaders(options.locatorHashes, stopHash)
+                        }
                     return HeaderBatchResult.Ok(result.startHeight, result.headers)
                 } finally {
                     mutex.withLock {
@@ -482,16 +541,20 @@ fun createHeaderSessionPool(
             }
         }
 
-        override suspend fun drop(host: String, port: Int) {
+        override suspend fun drop(
+            host: String,
+            port: Int,
+        ) {
             dropSession(host, port)
         }
 
         override suspend fun closeAll() {
-            val open = mutex.withLock {
-                epoch++
-                publishLocked()
-                sessions.values.toList()
-            }
+            val open =
+                mutex.withLock {
+                    epoch++
+                    publishLocked()
+                    sessions.values.toList()
+                }
             for (session in open) {
                 dropSession(session.host, session.port)
             }

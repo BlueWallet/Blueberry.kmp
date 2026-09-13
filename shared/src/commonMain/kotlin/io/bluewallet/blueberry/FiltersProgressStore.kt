@@ -18,13 +18,22 @@ data class FiltersProgress(
 
 interface FiltersProgressStore {
     fun get(): FiltersProgress
-    fun applyEvent(at: Long, downloaded: Int, total: Int)
+
+    fun applyEvent(
+        at: Long,
+        downloaded: Int,
+        total: Int,
+    )
+
     fun subscribe(listener: () -> Unit): () -> Unit
 }
 
 private const val MAX_SAMPLES = 8
 
-private data class FilterProgressSample(val at: Long, val downloaded: Int)
+private data class FilterProgressSample(
+    val at: Long,
+    val downloaded: Int,
+)
 
 private data class FiltersStoreState(
     val progress: FiltersProgress = FiltersProgress(),
@@ -57,7 +66,10 @@ private fun nextProgressSamples(
     return addAdvancingSample(samples, FilterProgressSample(at, downloaded))
 }
 
-private fun estimateEtaMs(samples: List<FilterProgressSample>, total: Int): Long? {
+private fun estimateEtaMs(
+    samples: List<FilterProgressSample>,
+    total: Int,
+): Long? {
     if (samples.size < 2) return null
     val first = samples.first()
     val last = samples.last()
@@ -81,22 +93,30 @@ private class FiltersProgressStoreImpl : FiltersProgressStore {
 
     override fun get() = state.load().progress
 
-    override fun applyEvent(at: Long, downloaded: Int, total: Int) {
+    override fun applyEvent(
+        at: Long,
+        downloaded: Int,
+        total: Int,
+    ) {
         while (true) {
             val cur = state.load()
             val prev = cur.progress
-            val nextSamples = nextProgressSamples(
-                cur.samples,
-                prev.downloaded,
-                prev.total,
-                at,
-                downloaded,
-                total,
-            )
+            val nextSamples =
+                nextProgressSamples(
+                    cur.samples,
+                    prev.downloaded,
+                    prev.total,
+                    at,
+                    downloaded,
+                    total,
+                )
             val nextPercent = progressPercent(downloaded, total)
             val nextEta =
-                if (total > 0 && downloaded >= total) 0L
-                else estimateEtaMs(nextSamples, total)
+                if (total > 0 && downloaded >= total) {
+                    0L
+                } else {
+                    estimateEtaMs(nextSamples, total)
+                }
             if (
                 prev.downloaded == downloaded &&
                 prev.total == total &&
@@ -106,16 +126,18 @@ private class FiltersProgressStoreImpl : FiltersProgressStore {
             ) {
                 return
             }
-            val next = FiltersStoreState(
-                progress = FiltersProgress(
-                    downloaded = downloaded,
-                    total = total,
-                    at = at,
-                    etaMs = nextEta,
-                    percent = nextPercent,
-                ),
-                samples = nextSamples,
-            )
+            val next =
+                FiltersStoreState(
+                    progress =
+                        FiltersProgress(
+                            downloaded = downloaded,
+                            total = total,
+                            at = at,
+                            etaMs = nextEta,
+                            percent = nextPercent,
+                        ),
+                    samples = nextSamples,
+                )
             if (state.compareAndSet(cur, next)) {
                 emitChange()
                 return
@@ -141,7 +163,11 @@ private class FiltersProgressStoreImpl : FiltersProgressStore {
 
 fun createFiltersProgressStore(): FiltersProgressStore = FiltersProgressStoreImpl()
 
-private fun sessionOrDurableTotal(incoming: Int?, previous: Int, downloaded: Int): Int {
+private fun sessionOrDurableTotal(
+    incoming: Int?,
+    previous: Int,
+    downloaded: Int,
+): Int {
     if (incoming != null && incoming > 0) return incoming
     if (previous > 0) return previous
     return downloaded

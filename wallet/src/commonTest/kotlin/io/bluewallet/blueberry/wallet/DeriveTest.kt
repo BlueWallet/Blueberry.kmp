@@ -11,10 +11,12 @@ class DeriveTest {
     fun abandon_mnemonic_matches_bluewallet_addresses() {
         val wallet = deriveWatchWallet(ABANDON)
         val seed = MnemonicCode.toSeed(ABANDON, "")
-        val zpub = DeterministicWallet.generate(seed)
-            .derivePrivateKey(BIP84_ACCOUNT_PATH)
-            .extendedPublicKey
-            .encode(DeterministicWallet.zpub)
+        val zpub =
+            DeterministicWallet
+                .generate(seed)
+                .derivePrivateKey(BIP84_ACCOUNT_PATH)
+                .extendedPublicKey
+                .encode(DeterministicWallet.zpub)
         assertEquals(BLUE_ZPUB, zpub)
         assertEquals(INITIAL_WATCH_COUNT * 2, wallet.addresses.size)
         assertEquals(BLUE_EXTERNAL_0, wallet.addresses[0].address)
@@ -47,7 +49,12 @@ class DeriveTest {
         assertEquals(ADDR_BECH32, w.addresses.first { it.scriptType == AddressScriptType.P2WPKH }.address)
         assertEquals("1DVNNDU4sooWp6St9baaM8XQC9VYpwVcDi", w.addresses.first { it.scriptType == AddressScriptType.P2PKH }.address)
         assertEquals("3QS6GoKXFCyhTRi7MqQ8vCGp8qxDRyk43J", w.addresses.first { it.scriptType == AddressScriptType.P2SH_P2WPKH }.address)
-        assertTrue(w.addresses.first { it.scriptType == AddressScriptType.P2TR }.address.startsWith("bc1p"))
+        assertTrue(
+            w.addresses
+                .first { it.scriptType == AddressScriptType.P2TR }
+                .address
+                .startsWith("bc1p"),
+        )
         assertEquals(ADDR_LEGACY, deriveWatchWallet(WIF_LEGACY).addresses.first { it.scriptType == AddressScriptType.P2PKH }.address)
         assertEquals(ADDR_P2SH, deriveWatchWallet(WIF_P2SH).addresses.first { it.scriptType == AddressScriptType.P2SH_P2WPKH }.address)
         assertEquals(ADDR_TAPROOT, deriveWatchWallet(WIF_TAPROOT).addresses.first { it.scriptType == AddressScriptType.P2TR }.address)

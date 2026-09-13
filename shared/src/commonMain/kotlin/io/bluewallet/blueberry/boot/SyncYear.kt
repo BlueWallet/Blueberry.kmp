@@ -7,7 +7,10 @@ const val DEFAULT_CHECKPOINT_YEAR = 2019
 
 sealed class SyncFromYearInspection {
     data object Missing : SyncFromYearInspection()
-    data class Ok(val year: Int) : SyncFromYearInspection()
+
+    data class Ok(
+        val year: Int,
+    ) : SyncFromYearInspection()
 }
 
 fun listCheckpointYears(): List<Int> = (2009..2026).toList()
@@ -37,7 +40,10 @@ fun loadSyncFromYear(db: Database): Int {
     return inspected.year
 }
 
-fun saveSyncFromYear(db: Database, year: Int) {
+fun saveSyncFromYear(
+    db: Database,
+    year: Int,
+) {
     if (year !in listCheckpointYears()) {
         throw IllegalArgumentException("unknown sync_from_year: $year")
     }

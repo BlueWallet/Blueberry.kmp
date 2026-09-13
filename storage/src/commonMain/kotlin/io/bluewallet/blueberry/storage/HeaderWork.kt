@@ -6,12 +6,11 @@ import io.bluewallet.headers.decodeBlockHeader
 import io.bluewallet.headers.decodeCompactTarget
 import io.bluewallet.headers.headerWork
 
-internal fun headerWorkFromBytes(header: ByteArray): BigInteger {
-    return try {
+internal fun headerWorkFromBytes(header: ByteArray): BigInteger =
+    try {
         val decoded = decodeBlockHeader(header)
         val target = decodeCompactTarget(decoded.bits, MAINNET_POW_LIMIT)
         headerWork(target)
     } catch (_: Exception) {
         BigInteger.ONE
     }
-}

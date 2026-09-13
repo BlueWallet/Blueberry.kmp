@@ -39,13 +39,14 @@ fun CoinsPanel(
 ) {
     val shape = RoundedCornerShape(BwSpace.Radius)
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(BwColors.Card, shape)
-            .border(BwSpace.Hairline, BwColors.Border, shape)
-            .clickable(onClick = onClick)
-            .padding(BwSpace.Card),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(BwColors.Card, shape)
+                .border(BwSpace.Hairline, BwColors.Border, shape)
+                .clickable(onClick = onClick)
+                .padding(BwSpace.Card),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
@@ -61,11 +62,12 @@ fun CoinsPanel(
             contentAlignment = Alignment.CenterEnd,
         ) {
             val density = LocalDensity.current
-            val maxFit = maxUtxoCirclesThatFit(
-                available = constraints.maxWidth.toFloat(),
-                diameter = with(density) { CircleSize.toPx() },
-                step = with(density) { CircleStep.toPx() },
-            )
+            val maxFit =
+                maxUtxoCirclesThatFit(
+                    available = constraints.maxWidth.toFloat(),
+                    diameter = with(density) { CircleSize.toPx() },
+                    step = with(density) { CircleStep.toPx() },
+                )
             val n = visibleUtxoCircleCount(utxos.size, maxFit)
             if (n > 0) {
                 Box(
@@ -74,12 +76,13 @@ fun CoinsPanel(
                 ) {
                     utxos.take(n).forEachIndexed { i, u ->
                         Box(
-                            modifier = Modifier
-                                .offset(x = CircleStep * i)
-                                .size(CircleSize)
-                                .zIndex(i.toFloat())
-                                .clip(CircleShape)
-                                .background(Color(utxoCircleArgb(u.key))),
+                            modifier =
+                                Modifier
+                                    .offset(x = CircleStep * i)
+                                    .size(CircleSize)
+                                    .zIndex(i.toFloat())
+                                    .clip(CircleShape)
+                                    .background(Color(utxoCircleArgb(u.key))),
                         )
                     }
                 }

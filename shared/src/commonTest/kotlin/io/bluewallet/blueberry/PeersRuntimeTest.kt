@@ -16,44 +16,46 @@ import kotlin.test.assertTrue
 
 class PeersRuntimeTest {
     @Test
-    fun start_is_idempotent() = runBlocking {
-        val db = createSqliteDatabase(":memory:")
-        val runtime = PeersRuntime(db)
-        var blockStarts = 0
-        val starts = mutableListOf<String>()
-        runtime.bus.on(Event.ModuleStatus) {
-            if (it.status != ModuleStatus.STARTING) return@on
-            starts.add(it.module)
-            if (it.module == "blocks-download") blockStarts++
+    fun start_is_idempotent() =
+        runBlocking {
+            val db = createSqliteDatabase(":memory:")
+            val runtime = PeersRuntime(db)
+            var blockStarts = 0
+            val starts = mutableListOf<String>()
+            runtime.bus.on(Event.ModuleStatus) {
+                if (it.status != ModuleStatus.STARTING) return@on
+                starts.add(it.module)
+                if (it.module == "blocks-download") blockStarts++
+            }
+
+            runtime.start()
+            runtime.start()
+
+            assertEquals(1, blockStarts)
+            assertTrue(starts.indexOf("sync-idle") < starts.indexOf("peers-discovery"))
+            runtime.stop()
+            db.close()
         }
-
-        runtime.start()
-        runtime.start()
-
-        assertEquals(1, blockStarts)
-        assertTrue(starts.indexOf("sync-idle") < starts.indexOf("peers-discovery"))
-        runtime.stop()
-        db.close()
-    }
 
     @Test
-    fun starts_parse_blocks_when_wallet_secret_is_present() = runBlocking {
-        val db = createSqliteDatabase(":memory:")
-        saveWalletSecret(
-            db,
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-        )
-        val runtime = PeersRuntime(db)
-        val starts = mutableListOf<String>()
-        runtime.bus.on(Event.ModuleStatus) {
-            if (it.status == ModuleStatus.STARTING) starts.add(it.module)
+    fun starts_parse_blocks_when_wallet_secret_is_present() =
+        runBlocking {
+            val db = createSqliteDatabase(":memory:")
+            saveWalletSecret(
+                db,
+                "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            )
+            val runtime = PeersRuntime(db)
+            val starts = mutableListOf<String>()
+            runtime.bus.on(Event.ModuleStatus) {
+                if (it.status == ModuleStatus.STARTING) starts.add(it.module)
+            }
+            runtime.start()
+            assertTrue(starts.contains("parse-blocks"))
+            assertTrue(starts.indexOf("parse-blocks") < starts.indexOf("filters-matching"))
+            runtime.stop()
+            db.close()
         }
-        runtime.start()
-        assertTrue(starts.contains("parse-blocks"))
-        assertTrue(starts.indexOf("parse-blocks") < starts.indexOf("filters-matching"))
-        runtime.stop()
-        db.close()
-    }
 
     @Test
     fun current_receive_address_reads_secret_before_start() {
@@ -69,20 +71,25 @@ class PeersRuntimeTest {
     }
 
     @Test
-    fun start_exposes_wallet_when_secret_is_present() = runBlocking {
-        val db = createSqliteDatabase(":memory:")
-        saveWalletSecret(
-            db,
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-        )
-        val runtime = PeersRuntime(db)
-        runtime.start()
-        val first = runtime.wallet!!.snapshot().addresses.first { !it.change && it.index == 0 }
-        assertEquals("bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", first.address)
-        assertEquals(first.address, currentReceiveAddress(runtime, db))
-        runtime.stop()
-        db.close()
-    }
+    fun start_exposes_wallet_when_secret_is_present() =
+        runBlocking {
+            val db = createSqliteDatabase(":memory:")
+            saveWalletSecret(
+                db,
+                "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            )
+            val runtime = PeersRuntime(db)
+            runtime.start()
+            val first =
+                runtime.wallet!!
+                    .snapshot()
+                    .addresses
+                    .first { !it.change && it.index == 0 }
+            assertEquals("bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", first.address)
+            assertEquals(first.address, currentReceiveAddress(runtime, db))
+            runtime.stop()
+            db.close()
+        }
 
     @Test
     fun bindPeerSocketEvents_hydrates_and_applies() {
@@ -114,13 +121,17 @@ class PeersRuntimeTest {
                     height = 10,
                     hashInternalHex = "aa".repeat(32),
                     header = ByteArray(80),
-                    cumulativeWork = com.ionspin.kotlin.bignum.integer.BigInteger.fromInt(10),
+                    cumulativeWork =
+                        com.ionspin.kotlin.bignum.integer.BigInteger
+                            .fromInt(10),
                 ),
                 io.bluewallet.blueberry.storage.HeaderWrite(
                     height = 11,
                     hashInternalHex = "bb".repeat(32),
                     header = ByteArray(80),
-                    cumulativeWork = com.ionspin.kotlin.bignum.integer.BigInteger.fromInt(11),
+                    cumulativeWork =
+                        com.ionspin.kotlin.bignum.integer.BigInteger
+                            .fromInt(11),
                 ),
             ),
         )
@@ -132,7 +143,8 @@ class PeersRuntimeTest {
         assertEquals(11, store.get().height)
         bus.emit(
             Event.HeadersProgress,
-            io.bluewallet.blueberry.bus.HeadersProgressPayload(3, 1, 500, 11),
+            io.bluewallet.blueberry.bus
+                .HeadersProgressPayload(3, 1, 500, 11),
         )
         assertEquals(1, store.get().downloaded)
         assertEquals(500, store.get().total)
@@ -166,7 +178,8 @@ class PeersRuntimeTest {
         assertEquals(2, store.get().total)
         bus.emit(
             Event.FiltersProgress,
-            io.bluewallet.blueberry.bus.FiltersProgressPayload(3, 1, 500),
+            io.bluewallet.blueberry.bus
+                .FiltersProgressPayload(3, 1, 500),
         )
         assertEquals(2, store.get().downloaded)
         assertEquals(500, store.get().total)
@@ -201,7 +214,8 @@ class PeersRuntimeTest {
         db.filters.markScanned(listOf(2))
         bus.emit(
             Event.MatchingProgress,
-            io.bluewallet.blueberry.bus.MatchingProgressPayload(3, 0, 0),
+            io.bluewallet.blueberry.bus
+                .MatchingProgressPayload(3, 0, 0),
         )
         assertEquals(2, store.get().scanned)
         assertEquals(2, store.get().total)
@@ -214,7 +228,8 @@ class PeersRuntimeTest {
         val bus = createMessageBus()
         val db = createSqliteDatabase(":memory:")
         db.matchedBlocks.insert(
-            io.bluewallet.blueberry.storage.MatchedBlock(1, "11".repeat(32)),
+            io.bluewallet.blueberry.storage
+                .MatchedBlock(1, "11".repeat(32)),
         )
         val store = createBlocksMatchedStore()
         val off = bindBlocksProgressEvents(bus, db, store)
@@ -222,11 +237,13 @@ class PeersRuntimeTest {
         assertEquals(0, store.get().downloaded)
         assertEquals(1, store.get().matched)
         db.blocks.insert(
-            io.bluewallet.blueberry.storage.DownloadedBlock(1, "11".repeat(32), byteArrayOf(1)),
+            io.bluewallet.blueberry.storage
+                .DownloadedBlock(1, "11".repeat(32), byteArrayOf(1)),
         )
         bus.emit(
             Event.BlocksProgress,
-            io.bluewallet.blueberry.bus.BlocksProgressPayload(3, 0, 0),
+            io.bluewallet.blueberry.bus
+                .BlocksProgressPayload(3, 0, 0),
         )
         assertEquals(1, store.get().downloaded)
         assertEquals(1, store.get().matched)

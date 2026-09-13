@@ -3,8 +3,7 @@ package io.bluewallet.blueberry.peers.net
 import io.bluewallet.bip324.NetworkAddressV2
 import io.bluewallet.bip324.TimedNetworkAddress
 
-fun ipv4BytesToHost(bytes: ByteArray): String =
-    "${bytes[0].toUByte()}.${bytes[1].toUByte()}.${bytes[2].toUByte()}.${bytes[3].toUByte()}"
+fun ipv4BytesToHost(bytes: ByteArray): String = "${bytes[0].toUByte()}.${bytes[1].toUByte()}.${bytes[2].toUByte()}.${bytes[3].toUByte()}"
 
 fun ipv6BytesToHost(bytes: ByteArray): String {
     val groups = ArrayList<Int>(8)
@@ -36,9 +35,11 @@ fun addrV2ToCandidate(address: NetworkAddressV2): PeerCandidate? {
 fun legacyAddrToCandidate(address: TimedNetworkAddress): PeerCandidate? {
     if (address.port <= 0 || address.port > 65535) return null
     val ip = address.ip
-    val mapped = ip.size >= 16 && ip.take(12).withIndex().all { (i, b) ->
-        b == if (i < 10) 0.toByte() else 0xff.toByte()
-    }
+    val mapped =
+        ip.size >= 16 &&
+            ip.take(12).withIndex().all { (i, b) ->
+                b == if (i < 10) 0.toByte() else 0xff.toByte()
+            }
     if (mapped) {
         return PeerCandidate(
             host = ipv4BytesToHost(ip.copyOfRange(12, 16)),

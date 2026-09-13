@@ -4,7 +4,10 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 
-suspend fun waitFor(timeoutMs: Long = 3000, predicate: () -> Boolean) {
+suspend fun waitFor(
+    timeoutMs: Long = 3000,
+    predicate: () -> Boolean,
+) {
     try {
         withTimeout(timeoutMs) {
             while (!predicate()) delay(10)

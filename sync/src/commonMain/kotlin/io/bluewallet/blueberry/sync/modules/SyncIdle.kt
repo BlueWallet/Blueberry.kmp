@@ -96,25 +96,33 @@ fun createSyncIdleModule(
 
         val alivePeerCount =
             if (
-                ctx.db.peers.listAliveWithServices(NODE_NETWORK, 1).isNotEmpty() ||
-                ctx.db.peers.listAliveWithServices(NODE_COMPACT_FILTERS.toULong(), 1).isNotEmpty()
+                ctx.db.peers
+                    .listAliveWithServices(NODE_NETWORK, 1)
+                    .isNotEmpty() ||
+                ctx.db.peers
+                    .listAliveWithServices(NODE_COMPACT_FILTERS.toULong(), 1)
+                    .isNotEmpty()
             ) {
                 1
             } else {
                 0
             }
 
-        val needingDownloadCount = ctx.db.matchedBlocks.listNeedingDownload(1).size
+        val needingDownloadCount =
+            ctx.db.matchedBlocks
+                .listNeedingDownload(1)
+                .size
         val matchingBehind = ctx.db.filters.hasUnscanned()
         // CF pool size only changes the catchup *reason* when leaving idle with
         // filter work. Skip the extra scan on the catchup/idle-complete path.
         val filterWorkNeedsPeers =
             cur.mode == SyncMode.IDLE &&
                 filterMissingRangeCount > 0 &&
-                ctx.db.peers.listAliveWithServices(
-                    NODE_COMPACT_FILTERS.toULong(),
-                    minAliveCompactFilters,
-                ).size < minAliveCompactFilters
+                ctx.db.peers
+                    .listAliveWithServices(
+                        NODE_COMPACT_FILTERS.toULong(),
+                        minAliveCompactFilters,
+                    ).size < minAliveCompactFilters
 
         return SyncSnapshot(
             headersDownloaded = cur.headersDownloaded,
@@ -131,7 +139,10 @@ fun createSyncIdleModule(
         )
     }
 
-    fun applyEvaluation(cur: SyncIdleState, evalResult: SyncEvaluation): Pair<SyncIdleState, SyncEvaluation?> {
+    fun applyEvaluation(
+        cur: SyncIdleState,
+        evalResult: SyncEvaluation,
+    ): Pair<SyncIdleState, SyncEvaluation?> {
         if (evalResult is SyncEvaluation.Idle) {
             val idleStreak = cur.idleStreak + 1
             if (cur.mode == SyncMode.CATCHUP && idleStreak >= 2) {
@@ -229,48 +240,54 @@ fun createSyncIdleModule(
                     headersTotal = headersTotal,
                 ),
             )
-            unsubs += ctx.bus.on(Event.HeadersProgress) { p ->
-                requestEvaluation(
-                    EvaluationRequest(
-                        update = {
-                            it.copy(headersDownloaded = p.downloaded, headersTotal = p.total)
-                        },
-                    ),
-                )
-            }
+            unsubs +=
+                ctx.bus.on(Event.HeadersProgress) { p ->
+                    requestEvaluation(
+                        EvaluationRequest(
+                            update = {
+                                it.copy(headersDownloaded = p.downloaded, headersTotal = p.total)
+                            },
+                        ),
+                    )
+                }
             unsubs += ctx.bus.on(Event.BlocksProgress) { requestEvaluation() }
             unsubs += ctx.bus.on(Event.FiltersProgress) { requestEvaluation() }
-            unsubs += ctx.bus.on(Event.MatchingProgress) {
-                requestEvaluation(EvaluationRequest(churnOnly = ctx.db.filters.hasUnscanned()))
-            }
-            unsubs += ctx.bus.on(Event.FiltersMatch) {
-                requestEvaluation(EvaluationRequest(churnOnly = true))
-            }
-            unsubs += ctx.bus.on(Event.PeersUpdated) {
-                requestEvaluation(EvaluationRequest(churnOnly = true))
-            }
+            unsubs +=
+                ctx.bus.on(Event.MatchingProgress) {
+                    requestEvaluation(EvaluationRequest(churnOnly = ctx.db.filters.hasUnscanned()))
+                }
+            unsubs +=
+                ctx.bus.on(Event.FiltersMatch) {
+                    requestEvaluation(EvaluationRequest(churnOnly = true))
+                }
+            unsubs +=
+                ctx.bus.on(Event.PeersUpdated) {
+                    requestEvaluation(EvaluationRequest(churnOnly = true))
+                }
 
             val job = SupervisorJob()
             parentJob = job
-            val launched = CoroutineScope(job + Dispatchers.Default).launch {
-                while (isActive) {
-                    val request = withTimeoutOrNull(evalIntervalMs) {
-                        evaluationRequests.receive()
-                    }
-                    if (request != null) {
-                        update(request.update)
-                        val cur = state.load()
-                        if (
-                            request.churnOnly &&
-                            cur.mode == SyncMode.CATCHUP &&
-                            cur.idleStreak == 0
-                        ) {
-                            continue
+            val launched =
+                CoroutineScope(job + Dispatchers.Default).launch {
+                    while (isActive) {
+                        val request =
+                            withTimeoutOrNull(evalIntervalMs) {
+                                evaluationRequests.receive()
+                            }
+                        if (request != null) {
+                            update(request.update)
+                            val cur = state.load()
+                            if (
+                                request.churnOnly &&
+                                cur.mode == SyncMode.CATCHUP &&
+                                cur.idleStreak == 0
+                            ) {
+                                continue
+                            }
                         }
+                        evaluateOnce()
                     }
-                    evaluateOnce()
                 }
-            }
             loopJob = launched
             detachLoop(ctx, "sync-idle", launched)
             ctx.bus.emit(

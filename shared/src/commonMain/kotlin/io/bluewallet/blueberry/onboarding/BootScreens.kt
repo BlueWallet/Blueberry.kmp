@@ -12,10 +12,11 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun InvalidSecretScreen(detail: String) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeContentPadding()
-            .padding(16.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .safeContentPadding()
+                .padding(16.dp),
     ) {
         Text("wallet_secret is present but invalid: $detail")
         Text("Fix or delete the wallet_secret key in the database, then restart.")
@@ -25,10 +26,11 @@ fun InvalidSecretScreen(detail: String) {
 @Composable
 fun DatabaseOpenErrorScreen(message: String) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeContentPadding()
-            .padding(16.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .safeContentPadding()
+                .padding(16.dp),
     ) {
         Text(message)
     }

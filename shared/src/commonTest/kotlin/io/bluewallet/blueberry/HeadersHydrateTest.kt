@@ -20,24 +20,28 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-private fun stubNet(): PlatformNet = PlatformNet(
-    connect = { _, _ -> error("stub PlatformNet.connect unused") },
-    dns = object : DnsResolver {
-        override suspend fun resolve4(host: String) = emptyList<String>()
-        override suspend fun resolve6(host: String) = emptyList<String>()
-    },
-)
+private fun stubNet(): PlatformNet =
+    PlatformNet(
+        connect = { _, _ -> error("stub PlatformNet.connect unused") },
+        dns =
+            object : DnsResolver {
+                override suspend fun resolve4(host: String) = emptyList<String>()
 
-private fun dummyHeader(timestamp: Long = 1): ByteArray = encodeBlockHeader(
-    BlockHeader(
-        version = 1,
-        previousBlockHash = ByteArray(32),
-        merkleRoot = ByteArray(32),
-        timestamp = timestamp,
-        bits = 0x1d00ffff,
-        nonce = 0,
-    ),
-)
+                override suspend fun resolve6(host: String) = emptyList<String>()
+            },
+    )
+
+private fun dummyHeader(timestamp: Long = 1): ByteArray =
+    encodeBlockHeader(
+        BlockHeader(
+            version = 1,
+            previousBlockHash = ByteArray(32),
+            merkleRoot = ByteArray(32),
+            timestamp = timestamp,
+            bits = 0x1d00ffff,
+            nonce = 0,
+        ),
+    )
 
 private fun addHeader(
     db: io.bluewallet.blueberry.storage.Database,
@@ -125,51 +129,53 @@ class HeadersHydrateTest {
     }
 
     @Test
-    fun chain_headers_start_does_not_clobber_db_seeded_progress() = runBlocking {
-        val bus = createMessageBus()
-        val db = createSqliteDatabase(":memory:")
-        val seed = checkpointSeedRecord()
-        db.headers.ensureCheckpoint(checkpointDbRecord())
-        val base = db.headers.tip()!!.cumulativeWork
-        db.headers.append(
-            listOf(
-                HeaderWrite(
-                    height = seed.height + 1,
-                    hashInternalHex = "aa".repeat(32),
-                    header = dummyHeader(),
-                    cumulativeWork = base + BigInteger.ONE,
+    fun chain_headers_start_does_not_clobber_db_seeded_progress() =
+        runBlocking {
+            val bus = createMessageBus()
+            val db = createSqliteDatabase(":memory:")
+            val seed = checkpointSeedRecord()
+            db.headers.ensureCheckpoint(checkpointDbRecord())
+            val base = db.headers.tip()!!.cumulativeWork
+            db.headers.append(
+                listOf(
+                    HeaderWrite(
+                        height = seed.height + 1,
+                        hashInternalHex = "aa".repeat(32),
+                        header = dummyHeader(),
+                        cumulativeWork = base + BigInteger.ONE,
+                    ),
                 ),
-            ),
-        )
-        val store = createHeadersProgressStore()
-        val off = bindHeaderProgressEvents(bus, db, store)
-        hydrateHeaders(db, store)
-        val seeded = store.get()
-        assertEquals(seed.height + 1, seeded.height)
-        assertEquals(1, seeded.downloaded)
-        assertEquals(1, seeded.total)
+            )
+            val store = createHeadersProgressStore()
+            val off = bindHeaderProgressEvents(bus, db, store)
+            hydrateHeaders(db, store)
+            val seeded = store.get()
+            assertEquals(seed.height + 1, seeded.height)
+            assertEquals(1, seeded.downloaded)
+            assertEquals(1, seeded.total)
 
-        val headers = createChainHeadersModule(
-            ModuleContext(bus, db),
-            ChainHeadersOptions(
-                net = stubNet(),
-                connectTimeoutMs = 50,
-                headersTimeoutMs = 50,
-                pollIntervalMs = 10_000,
-                fetchBatch = { _, _, _ ->
-                    HeaderBatchResult.Ok(0, emptyList())
-                },
-            ),
-        )
-        headers.start()
-        val after = store.get()
-        assertEquals(seeded.downloaded, after.downloaded)
-        assertEquals(seeded.total, after.total)
-        assertEquals(seeded.percent, after.percent)
-        headers.stop()
-        off()
-        db.close()
-    }
+            val headers =
+                createChainHeadersModule(
+                    ModuleContext(bus, db),
+                    ChainHeadersOptions(
+                        net = stubNet(),
+                        connectTimeoutMs = 50,
+                        headersTimeoutMs = 50,
+                        pollIntervalMs = 10_000,
+                        fetchBatch = { _, _, _ ->
+                            HeaderBatchResult.Ok(0, emptyList())
+                        },
+                    ),
+                )
+            headers.start()
+            val after = store.get()
+            assertEquals(seeded.downloaded, after.downloaded)
+            assertEquals(seeded.total, after.total)
+            assertEquals(seeded.percent, after.percent)
+            headers.stop()
+            off()
+            db.close()
+        }
 
     @Test
     fun hydrate_reads_tip_timestamp_from_header() {

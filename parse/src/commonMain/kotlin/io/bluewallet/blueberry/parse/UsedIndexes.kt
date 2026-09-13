@@ -25,7 +25,10 @@ fun usedWatchIndexes(
     val externalUsed = mutableSetOf<Int>()
     val internalUsed = mutableSetOf<Int>()
 
-    fun markUsed(change: Boolean, index: Int) {
+    fun markUsed(
+        change: Boolean,
+        index: Int,
+    ) {
         if (change) internalUsed.add(index) else externalUsed.add(index)
     }
 
@@ -62,13 +65,19 @@ fun usedWatchIndexes(
     )
 }
 
-fun receiveAddressFromWallet(wallet: WatchWallet, txs: List<StoredTx>): String? {
+fun receiveAddressFromWallet(
+    wallet: WatchWallet,
+    txs: List<StoredTx>,
+): String? {
     val used = usedWatchIndexes(txs.map { it.tx }, wallet)
     val wifTxs = txs.map { WifReceiveTxRow(it.height, it.txIndex, it.tx) }
     return resolveReceiveAddress(wallet, used.external, wifTxs)?.address
 }
 
-fun snapshotReceiveAddress(db: Database, wallet: Wallet): String? {
+fun snapshotReceiveAddress(
+    db: Database,
+    wallet: Wallet,
+): String? {
     wallet.refresh()
     val txs = db.transactions.list()
     val unused = receiveAddressFromWallet(wallet.snapshot(), txs)

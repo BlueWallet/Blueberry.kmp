@@ -68,9 +68,10 @@ fun createParseBlocksModule(
     val now = options.now ?: { nowMillis() }
     val onParseBatch = options.onParseBatch
     val diagnosticLog = options.log ?: { message -> log("parse-blocks", message) }
-    val diagnosticError = options.logError ?: { message, err ->
-        logError("parse-blocks", message, err)
-    }
+    val diagnosticError =
+        options.logError ?: { message, err ->
+            logError("parse-blocks", message, err)
+        }
 
     val stopped = AtomicBoolean(true)
     val allowed = AtomicBoolean(false)
@@ -126,8 +127,7 @@ fun createParseBlocksModule(
         yield()
     }
 
-    fun storedToRows(rows: List<StoredTx>): List<TxRow> =
-        rows.map { TxRow(it.txid, it.height, it.txIndex, it.tx) }
+    fun storedToRows(rows: List<StoredTx>): List<TxRow> = rows.map { TxRow(it.txid, it.height, it.txIndex, it.tx) }
 
     fun refreshNetDeltasAndEmit() {
         val snap = wallet.snapshot()
@@ -145,7 +145,13 @@ fun createParseBlocksModule(
     fun maybeGrowWatch(): Boolean {
         val snap = wallet.snapshot()
         if (snap.kind == WatchWalletKind.WIF || snap.kind == WatchWalletKind.ADDRESS) return false
-        val used = usedWatchIndexes(ctx.db.transactions.list().map { it.tx }, snap)
+        val used =
+            usedWatchIndexes(
+                ctx.db.transactions
+                    .list()
+                    .map { it.tx },
+                snap,
+            )
         val result = growWatchGapsIfNeeded(loadWatchGaps(ctx.db), used.external, used.internal)
         if (!result.grew) {
             wallet.syncFromDb()
@@ -169,8 +175,11 @@ fun createParseBlocksModule(
         val downloaded = ctx.db.filters.count()
         val filterFrom = compactFilterFrom(ctx.db)
         val total =
-            if (tip != null && filterFrom != null) max(0, tip.height - filterFrom + 1)
-            else downloaded
+            if (tip != null && filterFrom != null) {
+                max(0, tip.height - filterFrom + 1)
+            } else {
+                downloaded
+            }
         ctx.bus.emit(
             Event.FiltersProgress,
             FiltersProgressPayload(
@@ -212,23 +221,24 @@ fun createParseBlocksModule(
             val block = ctx.db.blocks.get(heights[i]) ?: continue
             yieldOnce()
             if (isStopped() || !allowed.load()) return
-            val watchTxs = try {
-                extractWatchTxs(decodeBlockTxs(block.block), scripts, utxos)
-            } catch (err: CancellationException) {
-                throw err
-            } catch (err: Throwable) {
-                diagnosticError("decode height=${block.height}", err)
-                failedHeights.add(block.height)
-                ctx.bus.emit(
-                    Event.ModuleStatus,
-                    ModuleStatusPayload(
-                        module = "parse-blocks",
-                        status = ModuleStatus.ERROR,
-                        detail = "height ${block.height}: ${err.message ?: err.toString()}",
-                    ),
-                )
-                null
-            }
+            val watchTxs =
+                try {
+                    extractWatchTxs(decodeBlockTxs(block.block), scripts, utxos)
+                } catch (err: CancellationException) {
+                    throw err
+                } catch (err: Throwable) {
+                    diagnosticError("decode height=${block.height}", err)
+                    failedHeights.add(block.height)
+                    ctx.bus.emit(
+                        Event.ModuleStatus,
+                        ModuleStatusPayload(
+                            module = "parse-blocks",
+                            status = ModuleStatus.ERROR,
+                            detail = "height ${block.height}: ${err.message ?: err.toString()}",
+                        ),
+                    )
+                    null
+                }
             if (watchTxs != null) {
                 try {
                     for (tx in watchTxs) {
@@ -270,8 +280,11 @@ fun createParseBlocksModule(
             }
             if (!allowed.load()) return
             if (i + 1 < heights.size) {
-                if (blockGapMs > 0) delay(blockGapMs)
-                else yieldOnce()
+                if (blockGapMs > 0) {
+                    delay(blockGapMs)
+                } else {
+                    yieldOnce()
+                }
                 if (isStopped() || !allowed.load()) return
             }
         }
@@ -338,26 +351,31 @@ fun createParseBlocksModule(
 
             val onParseWake = {
                 if (!isStopped()) {
-                    if (busy.load()) needsRun.store(true)
-                    else kick()
+                    if (busy.load()) {
+                        needsRun.store(true)
+                    } else {
+                        kick()
+                    }
                 }
             }
             unsubProgress = ctx.bus.on(Event.BlocksProgress) { onParseWake() }
             unsubFilters = ctx.bus.on(Event.FiltersProgress) { onParseWake() }
-            unsubIdle = ctx.bus.on(Event.SyncIdle) {
-                if (isStopped()) return@on
-                allowed.store(true)
-                diagnosticLog("allowed")
-                if (busy.load()) {
-                    needsRun.store(true)
-                    return@on
+            unsubIdle =
+                ctx.bus.on(Event.SyncIdle) {
+                    if (isStopped()) return@on
+                    allowed.store(true)
+                    diagnosticLog("allowed")
+                    if (busy.load()) {
+                        needsRun.store(true)
+                        return@on
+                    }
+                    kick()
                 }
-                kick()
-            }
-            unsubCatchup = ctx.bus.on(Event.SyncCatchup) {
-                allowed.store(false)
-                diagnosticLog("paused")
-            }
+            unsubCatchup =
+                ctx.bus.on(Event.SyncCatchup) {
+                    allowed.store(false)
+                    diagnosticLog("paused")
+                }
 
             ctx.bus.emit(
                 Event.ModuleStatus,
@@ -367,11 +385,12 @@ fun createParseBlocksModule(
             val job = SupervisorJob()
             parentJob = job
             val scope = CoroutineScope(job + Dispatchers.Default)
-            val launched = scope.launch {
-                yieldOnce()
-                if (isStopped()) return@launch
-                loop()
-            }
+            val launched =
+                scope.launch {
+                    yieldOnce()
+                    if (isStopped()) return@launch
+                    loop()
+                }
             loopJob = launched
             detachLoop(ctx, "parse-blocks", launched)
         }

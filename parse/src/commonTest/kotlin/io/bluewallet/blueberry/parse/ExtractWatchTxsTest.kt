@@ -23,11 +23,12 @@ class ExtractWatchTxsTest {
         val receive = coinbaseLikeReceive(script, 1000)
         val unrelated = coinbaseLikeReceive(unrelatedScript(), 500, prevSalt = 1)
 
-        val foundReceive = extractWatchTxs(
-            decodeBlockTxs(wrapBlock(receive, unrelated)),
-            listOf(script),
-            mutableMapOf(),
-        )
+        val foundReceive =
+            extractWatchTxs(
+                decodeBlockTxs(wrapBlock(receive, unrelated)),
+                listOf(script),
+                mutableMapOf(),
+            )
         assertEquals(listOf(receive.txid.toString()), foundReceive.map { it.txid })
 
         val witness = witnessSpend(pubkey.value.toByteArray())
@@ -36,15 +37,17 @@ class ExtractWatchTxsTest {
             extractWatchTxs(decodeBlockTxs(wrapBlock(witness)), listOf(script), mutableMapOf()).size,
         )
 
-        val prior = mutableMapOf(
-            outpointKey(receive.txid.toString(), 0) to WatchUtxo(1000, script),
-        )
+        val prior =
+            mutableMapOf(
+                outpointKey(receive.txid.toString(), 0) to WatchUtxo(1000, script),
+            )
         val knownSpend = knownOutpointSpend(receive.txid.toString())
-        val foundSpend = extractWatchTxs(
-            decodeBlockTxs(wrapBlock(knownSpend)),
-            listOf(script),
-            prior,
-        )
+        val foundSpend =
+            extractWatchTxs(
+                decodeBlockTxs(wrapBlock(knownSpend)),
+                listOf(script),
+                prior,
+            )
         assertEquals(1, foundSpend.size)
         assertFalse(prior.containsKey(outpointKey(receive.txid.toString(), 0)))
     }
@@ -53,19 +56,20 @@ class ExtractWatchTxsTest {
     fun detects_p2pkh_spend_from_scriptSig_without_prior_utxo() {
         val pubkey = watchKey0()
         val script = p2pkhScript(pubkey)
-        val spend = Transaction(
-            2L,
-            listOf(
-                TxIn(
-                    OutPoint(TxHash(ByteArray(32) { 1 }), 0L),
-                    ByteVector(compilePushes(ByteArray(71) { 2 }, pubkey.value.toByteArray())),
-                    0xffffffffL,
-                    ScriptWitness.empty,
+        val spend =
+            Transaction(
+                2L,
+                listOf(
+                    TxIn(
+                        OutPoint(TxHash(ByteArray(32) { 1 }), 0L),
+                        ByteVector(compilePushes(ByteArray(71) { 2 }, pubkey.value.toByteArray())),
+                        0xffffffffL,
+                        ScriptWitness.empty,
+                    ),
                 ),
-            ),
-            listOf(TxOut(Satoshi(900), unrelatedScript())),
-            0L,
-        )
+                listOf(TxOut(Satoshi(900), unrelatedScript())),
+                0L,
+            )
         assertEquals(
             1,
             extractWatchTxs(decodeBlockTxs(wrapBlock(spend)), listOf(script), mutableMapOf()).size,
@@ -88,19 +92,20 @@ class ExtractWatchTxsTest {
         val watched = p2pkhScript(watchKey0())
         val other = ByteArray(33) { 3 }
         other[0] = 0x02
-        val spend = Transaction(
-            2L,
-            listOf(
-                TxIn(
-                    OutPoint(TxHash(ByteArray(32) { 1 }), 0L),
-                    ByteVector(compilePushes(ByteArray(71) { 2 }, other)),
-                    0xffffffffL,
-                    ScriptWitness(listOf(ByteVector(ByteArray(64)), ByteVector(other))),
+        val spend =
+            Transaction(
+                2L,
+                listOf(
+                    TxIn(
+                        OutPoint(TxHash(ByteArray(32) { 1 }), 0L),
+                        ByteVector(compilePushes(ByteArray(71) { 2 }, other)),
+                        0xffffffffL,
+                        ScriptWitness(listOf(ByteVector(ByteArray(64)), ByteVector(other))),
+                    ),
                 ),
-            ),
-            listOf(TxOut(Satoshi(900), unrelatedScript())),
-            0L,
-        )
+                listOf(TxOut(Satoshi(900), unrelatedScript())),
+                0L,
+            )
         assertTrue(
             extractWatchTxs(decodeBlockTxs(wrapBlock(spend)), listOf(watched), mutableMapOf()).isEmpty(),
         )

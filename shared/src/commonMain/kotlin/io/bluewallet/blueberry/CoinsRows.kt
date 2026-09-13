@@ -12,7 +12,10 @@ data class CoinsRowModel(
     val ageLabel: String,
 )
 
-fun coinsRowCaption(ageLabel: String, name: String?): String? {
+fun coinsRowCaption(
+    ageLabel: String,
+    name: String?,
+): String? {
     val age = ageLabel.trim().takeIf { it.isNotEmpty() }
     val parts = listOfNotNull(age, name)
     return if (parts.isEmpty()) null else parts.joinToString("  ")

@@ -26,14 +26,15 @@ fun BtcAmountText(
 ) {
     val parts = styleBtc(sats, plus)
     Text(
-        text = buildAnnotatedString {
-            withStyle(SpanStyle(color = color, fontWeight = fontWeight)) {
-                append(parts.significant)
-            }
-            withStyle(SpanStyle(color = trailingColor, fontWeight = fontWeight)) {
-                append(parts.trailing)
-            }
-        },
+        text =
+            buildAnnotatedString {
+                withStyle(SpanStyle(color = color, fontWeight = fontWeight)) {
+                    append(parts.significant)
+                }
+                withStyle(SpanStyle(color = trailingColor, fontWeight = fontWeight)) {
+                    append(parts.trailing)
+                }
+            },
         modifier = modifier,
         fontFamily = BwFontFamily,
         fontSize = fontSize,

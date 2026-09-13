@@ -43,18 +43,20 @@ actual fun QrCameraPreview(
                 PackageManager.PERMISSION_GRANTED,
         )
     }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        granted = it
-    }
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+            granted = it
+        }
     LaunchedEffect(Unit) {
         if (!granted) launcher.launch(Manifest.permission.CAMERA)
     }
     var cameraError by remember { mutableStateOf<String?>(null) }
-    val message = when {
-        !granted -> "Camera permission required"
-        cameraError != null -> cameraError
-        else -> null
-    }
+    val message =
+        when {
+            !granted -> "Camera permission required"
+            cameraError != null -> cameraError
+            else -> null
+        }
     if (message != null) {
         Text(
             text = message,
@@ -80,21 +82,25 @@ actual fun QrCameraPreview(
             val future = ProcessCameraProvider.getInstance(ctx)
             future.addListener(
                 {
-                    val provider = try {
-                        future.get()
-                    } catch (_: Exception) {
-                        cameraError = "No camera"
-                        return@addListener
-                    }
+                    val provider =
+                        try {
+                            future.get()
+                        } catch (_: Exception) {
+                            cameraError = "No camera"
+                            return@addListener
+                        }
                     if (executor.isShutdown) return@addListener
                     providerRef[0] = provider
-                    val preview = Preview.Builder().build().also { useCase ->
-                        useCase.surfaceProvider = previewView.surfaceProvider
-                    }
-                    val analysis = ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
-                        .build()
+                    val preview =
+                        Preview.Builder().build().also { useCase ->
+                            useCase.surfaceProvider = previewView.surfaceProvider
+                        }
+                    val analysis =
+                        ImageAnalysis
+                            .Builder()
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
+                            .build()
                     analysis.setAnalyzer(executor) { image ->
                         try {
                             callback(image.width, image.height, yPlane(image))
@@ -102,16 +108,17 @@ actual fun QrCameraPreview(
                             image.close()
                         }
                     }
-                    val selector = when {
-                        provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA) ->
-                            CameraSelector.DEFAULT_BACK_CAMERA
-                        provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) ->
-                            CameraSelector.DEFAULT_FRONT_CAMERA
-                        else -> {
-                            cameraError = "No camera"
-                            return@addListener
+                    val selector =
+                        when {
+                            provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA) ->
+                                CameraSelector.DEFAULT_BACK_CAMERA
+                            provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) ->
+                                CameraSelector.DEFAULT_FRONT_CAMERA
+                            else -> {
+                                cameraError = "No camera"
+                                return@addListener
+                            }
                         }
-                    }
                     try {
                         provider.unbindAll()
                         provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)

@@ -8,7 +8,11 @@ import io.bluewallet.blueberry.storage.createSqliteDatabase
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-private fun addFilter(db: io.bluewallet.blueberry.storage.Database, height: Int, nibble: String) {
+private fun addFilter(
+    db: io.bluewallet.blueberry.storage.Database,
+    height: Int,
+    nibble: String,
+) {
     db.filters.append(
         listOf(
             FilterRecord(

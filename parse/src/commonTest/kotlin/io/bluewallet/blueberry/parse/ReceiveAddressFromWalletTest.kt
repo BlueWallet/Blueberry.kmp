@@ -1,5 +1,6 @@
 package io.bluewallet.blueberry.parse
 
+import fr.acinq.bitcoin.Transaction
 import io.bluewallet.blueberry.storage.FilterRecord
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.storage.createSqliteDatabase
@@ -7,7 +8,6 @@ import io.bluewallet.blueberry.wallet.CreateWalletOptions
 import io.bluewallet.blueberry.wallet.WatchGaps
 import io.bluewallet.blueberry.wallet.createWallet
 import io.bluewallet.blueberry.wallet.deriveWatchWallet
-import fr.acinq.bitcoin.Transaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -28,31 +28,33 @@ class ReceiveAddressFromWalletTest {
         val first = wallet.addresses.first { !it.change && it.index == 0 }
         val second = wallet.addresses.first { !it.change && it.index == 1 }
         val receive = coinbaseLikeReceive(first.scriptPubKey, 1000)
-        val row = StoredTx(
-            txid = receive.txid.toString(),
-            height = 100,
-            txIndex = 0,
-            blockHashInternalHex = "11".repeat(32),
-            tx = Transaction.write(receive),
-            netDeltaSats = 1000,
-        )
+        val row =
+            StoredTx(
+                txid = receive.txid.toString(),
+                height = 100,
+                txIndex = 0,
+                blockHashInternalHex = "11".repeat(32),
+                tx = Transaction.write(receive),
+                netDeltaSats = 1000,
+            )
         assertEquals(second.address, receiveAddressFromWallet(wallet, listOf(row)))
     }
 
     @Test
     fun all_watched_externals_used_is_null() {
         val wallet = deriveWatchWallet(ABANDON_MNEMONIC, WatchGaps(2, 1))
-        val rows = wallet.addresses.filter { !it.change }.mapIndexed { i, addr ->
-            val receive = coinbaseLikeReceive(addr.scriptPubKey, 1000, prevSalt = i.toByte())
-            StoredTx(
-                txid = receive.txid.toString(),
-                height = 100 + i,
-                txIndex = 0,
-                blockHashInternalHex = "11".repeat(32),
-                tx = Transaction.write(receive),
-                netDeltaSats = 1000,
-            )
-        }
+        val rows =
+            wallet.addresses.filter { !it.change }.mapIndexed { i, addr ->
+                val receive = coinbaseLikeReceive(addr.scriptPubKey, 1000, prevSalt = i.toByte())
+                StoredTx(
+                    txid = receive.txid.toString(),
+                    height = 100 + i,
+                    txIndex = 0,
+                    blockHashInternalHex = "11".repeat(32),
+                    tx = Transaction.write(receive),
+                    netDeltaSats = 1000,
+                )
+            }
         assertEquals(null, receiveAddressFromWallet(wallet, rows))
     }
 

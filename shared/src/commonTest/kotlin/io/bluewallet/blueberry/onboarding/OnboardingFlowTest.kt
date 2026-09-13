@@ -28,25 +28,28 @@ class OnboardingFlowTest {
 
     @Test
     fun choose_import_and_back() {
-        val imported = reduceOnboarding(
-            initialOnboardingState(false),
-            OnboardingEvent.ChooseImport,
-        )
+        val imported =
+            reduceOnboarding(
+                initialOnboardingState(false),
+                OnboardingEvent.ChooseImport,
+            )
         assertEquals(OnboardingStep.Import, imported.state.step)
         assertEquals("", imported.state.importValue)
 
-        val created = reduceOnboarding(
-            initialOnboardingState(false),
-            OnboardingEvent.ChooseCreate,
-        )
+        val created =
+            reduceOnboarding(
+                initialOnboardingState(false),
+                OnboardingEvent.ChooseCreate,
+            )
         val backFromCreate = reduceOnboarding(created.state, OnboardingEvent.Back)
         assertEquals(OnboardingStep.Choose, backFromCreate.state.step)
         assertNull(backFromCreate.state.mnemonic)
 
-        val typed = reduceOnboarding(
-            imported.state,
-            OnboardingEvent.ImportChanged("abc"),
-        )
+        val typed =
+            reduceOnboarding(
+                imported.state,
+                OnboardingEvent.ImportChanged("abc"),
+            )
         val backFromImport = reduceOnboarding(typed.state, OnboardingEvent.Back)
         assertEquals(OnboardingStep.Choose, backFromImport.state.step)
         assertEquals("", backFromImport.state.importValue)
@@ -54,10 +57,11 @@ class OnboardingFlowTest {
 
     @Test
     fun submit_import_good_then_year_after_persist_ok() {
-        var state = reduceOnboarding(
-            initialOnboardingState(false),
-            OnboardingEvent.ChooseImport,
-        ).state
+        var state =
+            reduceOnboarding(
+                initialOnboardingState(false),
+                OnboardingEvent.ChooseImport,
+            ).state
         state = reduceOnboarding(state, OnboardingEvent.ImportChanged(abandon)).state
         val submitted = reduceOnboarding(state, OnboardingEvent.SubmitImport)
         assertEquals(OnboardingStep.Import, submitted.state.step)
@@ -74,16 +78,18 @@ class OnboardingFlowTest {
 
     @Test
     fun submit_import_bad_stays_with_parse_error() {
-        var state = reduceOnboarding(
-            initialOnboardingState(false),
-            OnboardingEvent.ChooseImport,
-        ).state
-        state = reduceOnboarding(
-            state,
-            OnboardingEvent.ImportChanged(
-                "zzzz zzzz zzzz zzzz zzzz zzzz zzzz zzzz zzzz zzzz zzzz zzzz",
-            ),
-        ).state
+        var state =
+            reduceOnboarding(
+                initialOnboardingState(false),
+                OnboardingEvent.ChooseImport,
+            ).state
+        state =
+            reduceOnboarding(
+                state,
+                OnboardingEvent.ImportChanged(
+                    "zzzz zzzz zzzz zzzz zzzz zzzz zzzz zzzz zzzz zzzz zzzz zzzz",
+                ),
+            ).state
         val submitted = reduceOnboarding(state, OnboardingEvent.SubmitImport)
         assertEquals(OnboardingStep.Import, submitted.state.step)
         assertEquals("invalid BIP39 mnemonic", submitted.state.error)
@@ -93,10 +99,11 @@ class OnboardingFlowTest {
 
     @Test
     fun confirm_create_emits_persist_created_not_year() {
-        val created = reduceOnboarding(
-            initialOnboardingState(false),
-            OnboardingEvent.ChooseCreate,
-        )
+        val created =
+            reduceOnboarding(
+                initialOnboardingState(false),
+                OnboardingEvent.ChooseCreate,
+            )
         val confirmed = reduceOnboarding(created.state, OnboardingEvent.ConfirmCreate)
         assertEquals(OnboardingStep.Create, confirmed.state.step)
         assertTrue(confirmed.state.busy)
@@ -125,10 +132,11 @@ class OnboardingFlowTest {
 
     @Test
     fun confirm_while_busy_is_ignored() {
-        var state = reduceOnboarding(
-            initialOnboardingState(false),
-            OnboardingEvent.ChooseImport,
-        ).state
+        var state =
+            reduceOnboarding(
+                initialOnboardingState(false),
+                OnboardingEvent.ChooseImport,
+            ).state
         state = reduceOnboarding(state, OnboardingEvent.ImportChanged(abandon)).state
         val busy = reduceOnboarding(state, OnboardingEvent.SubmitImport)
         assertTrue(busy.state.busy)
@@ -142,16 +150,17 @@ class OnboardingFlowTest {
 
     @Test
     fun secret_values_are_redacted_in_to_string() {
-        val values = listOf(
-            OnboardingState(
-                step = OnboardingStep.Create,
-                importValue = abandon,
-                mnemonic = abandon,
-            ),
-            OnboardingEvent.ImportChanged(abandon),
-            OnboardingEffect.PersistImportedSecret(abandon),
-            OnboardingEffect.PersistCreatedWallet(abandon),
-        )
+        val values =
+            listOf(
+                OnboardingState(
+                    step = OnboardingStep.Create,
+                    importValue = abandon,
+                    mnemonic = abandon,
+                ),
+                OnboardingEvent.ImportChanged(abandon),
+                OnboardingEffect.PersistImportedSecret(abandon),
+                OnboardingEffect.PersistCreatedWallet(abandon),
+            )
 
         values.forEach { value ->
             assertFalse(value.toString().contains(abandon))

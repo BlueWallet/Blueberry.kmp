@@ -2,7 +2,10 @@ package io.bluewallet.blueberry.wallet
 
 import fr.acinq.bitcoin.Transaction
 
-fun firstUnusedExternalAddress(wallet: WatchWallet, usedExternal: List<Int>): WatchAddress? {
+fun firstUnusedExternalAddress(
+    wallet: WatchWallet,
+    usedExternal: List<Int>,
+): WatchAddress? {
     val used = usedExternal.toSet()
     return wallet.addresses
         .filter { !it.change }
@@ -10,7 +13,10 @@ fun firstUnusedExternalAddress(wallet: WatchWallet, usedExternal: List<Int>): Wa
         .firstOrNull { it.index !in used }
 }
 
-fun firstUnusedInternalAddress(wallet: WatchWallet, usedInternal: List<Int>): WatchAddress? {
+fun firstUnusedInternalAddress(
+    wallet: WatchWallet,
+    usedInternal: List<Int>,
+): WatchAddress? {
     val used = usedInternal.toSet()
     return wallet.addresses
         .filter { it.change }
@@ -32,14 +38,20 @@ fun preferredWifReceiveAddress(
         "preferredWifReceiveAddress requires a WIF wallet"
     }
     val byScript = wallet.addresses.associateBy { scriptHex(it.scriptPubKey) }
-    val native = wallet.addresses.firstOrNull { it.scriptType == AddressScriptType.P2WPKH }
-        ?: error("WIF wallet missing native segwit address")
+    val native =
+        wallet.addresses.firstOrNull { it.scriptType == AddressScriptType.P2WPKH }
+            ?: error("WIF wallet missing native segwit address")
 
-    data class DecodedRow(val height: Int, val txIndex: Int, val decoded: Transaction)
+    data class DecodedRow(
+        val height: Int,
+        val txIndex: Int,
+        val decoded: Transaction,
+    )
 
-    val decodedRows = txs.map { row ->
-        DecodedRow(row.height, row.txIndex, Transaction.read(row.tx))
-    }
+    val decodedRows =
+        txs.map { row ->
+            DecodedRow(row.height, row.txIndex, Transaction.read(row.tx))
+        }
 
     val watchOutpoints = mutableMapOf<String, WatchAddress>()
     for (row in decodedRows) {
@@ -60,7 +72,9 @@ fun preferredWifReceiveAddress(
         }
         if (!Transaction.isCoinbase(decoded)) {
             for (inn in decoded.txIn) {
-                val hashBytes = inn.outPoint.hash.value.toByteArray()
+                val hashBytes =
+                    inn.outPoint.hash.value
+                        .toByteArray()
                 watchOutpoints[outpointKey(prevoutTxidDisplay(hashBytes), inn.outPoint.index.toInt())]
                     ?.let { return it }
             }
@@ -74,10 +88,9 @@ fun resolveReceiveAddress(
     wallet: WatchWallet,
     usedExternal: List<Int> = emptyList(),
     wifTxs: List<WifReceiveTxRow> = emptyList(),
-): WatchAddress? {
-    return when (wallet.kind) {
+): WatchAddress? =
+    when (wallet.kind) {
         WatchWalletKind.BIP84 -> firstUnusedExternalAddress(wallet, usedExternal)
         WatchWalletKind.WIF -> preferredWifReceiveAddress(wallet, wifTxs)
         WatchWalletKind.ADDRESS -> wallet.addresses.firstOrNull()
     }
-}
