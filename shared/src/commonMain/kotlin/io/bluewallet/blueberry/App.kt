@@ -53,6 +53,7 @@ fun App(databasePath: String) {
         var showReceive by remember { mutableStateOf(false) }
         var showSend by remember { mutableStateOf(false) }
         var showCoins by remember { mutableStateOf(false) }
+        var showTxid by remember { mutableStateOf<String?>(null) }
         val opened = remember(databasePath, session) { OpenedDatabase(databasePath) }
         DisposableEffect(opened) {
             onDispose { opened.close() }
@@ -110,6 +111,16 @@ fun App(databasePath: String) {
             )
             return@BwTheme
         }
+        val openTxid = showTxid
+        if (openTxid != null && runtime != null) {
+            TxDetailsScreen(
+                runtime = runtime,
+                db = db,
+                txid = openTxid,
+                onBack = { showTxid = null },
+            )
+            return@BwTheme
+        }
         if (showSettings) {
             SettingsScreen(
                 databaseSize =
@@ -152,6 +163,7 @@ fun App(databasePath: String) {
                     onOpenReceive = { showReceive = true },
                     onOpenSend = { showSend = true },
                     onOpenCoins = { showCoins = true },
+                    onOpenTx = { showTxid = it },
                     onDetailedSyncChange = { value ->
                         scope.launch(Dispatchers.Default) { saveHomeDetailedSync(db, value) }
                     },

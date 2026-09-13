@@ -3,12 +3,13 @@ package io.bluewallet.blueberry
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.MessageBus
 import io.bluewallet.blueberry.headers.nowMillis
+import io.bluewallet.blueberry.parse.TxFee
 import io.bluewallet.blueberry.parse.TxRow
-import io.bluewallet.blueberry.parse.buildUtxoMap
 import io.bluewallet.blueberry.parse.formatBlockTimeLabel
 import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.parse.formatNetDelta
 import io.bluewallet.blueberry.parse.padBlockTimeLabel
+import io.bluewallet.blueberry.parse.scanWatchTxs
 import io.bluewallet.blueberry.parse.shortOutpoint
 import io.bluewallet.blueberry.parse.shortTxid
 import io.bluewallet.blueberry.parse.utxoValueBar
@@ -27,6 +28,7 @@ data class WalletTxRow(
     val netDeltaSats: Long,
     val netDeltaLabel: String,
     val paymentLabel: String? = null,
+    val fee: TxFee? = null,
 )
 
 data class WalletUtxoRow(
@@ -170,13 +172,16 @@ fun snapshotFromDb(
     val labelByTxid = db.txPaymentLabels.list().associate { it.txid to it.label }
 
     var utxos = emptyList<WalletUtxoRow>()
+    var fees = emptyMap<String, TxFee>()
     if (wallet != null) {
         wallet.syncFromDb()
-        val map =
-            buildUtxoMap(
+        val scan =
+            scanWatchTxs(
                 stored.map { TxRow(it.txid, it.height, it.txIndex, it.tx) },
                 wallet.scripts(),
             )
+        fees = scan.fees
+        val map = scan.utxos
         var maxValue = 0L
         for (u in map.values) {
             if (u.value > maxValue) maxValue = u.value
@@ -231,6 +236,7 @@ fun snapshotFromDb(
                     netDeltaSats = tx.netDeltaSats,
                     netDeltaLabel = formatNetDelta(tx.netDeltaSats),
                     paymentLabel = labelByTxid[tx.txid],
+                    fee = fees[tx.txid],
                 )
             },
         utxos = utxos,

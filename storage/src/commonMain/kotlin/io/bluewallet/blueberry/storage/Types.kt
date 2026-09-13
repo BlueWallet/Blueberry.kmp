@@ -247,6 +247,8 @@ interface TxPaymentLabelsRepository {
 
     fun upsert(row: TxPaymentLabelRow)
 
+    fun delete(txid: String)
+
     fun list(): List<TxPaymentLabelRow>
 }
 

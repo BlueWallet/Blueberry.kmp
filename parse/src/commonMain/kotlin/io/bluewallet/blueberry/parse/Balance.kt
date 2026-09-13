@@ -4,7 +4,7 @@ import fr.acinq.bitcoin.Transaction
 
 private fun sortTxRows(txs: List<TxRow>): List<TxRow> = txs.sortedWith(compareBy({ it.height }, { it.txIndex }))
 
-private fun applyTxToState(
+internal fun applyTxToState(
     tx: Transaction,
     watch: Set<String>,
     utxos: MutableMap<String, WatchUtxo>,
@@ -42,13 +42,21 @@ fun prevoutKey(input: fr.acinq.bitcoin.TxIn): String {
 fun buildUtxoMap(
     txs: List<TxRow>,
     watchScripts: List<ByteArray>,
-): MutableMap<String, WatchUtxo> {
+): MutableMap<String, WatchUtxo> = scanWatchTxs(txs, watchScripts).utxos
+
+fun scanWatchTxs(
+    txs: List<TxRow>,
+    watchScripts: List<ByteArray>,
+): WatchScan {
     val watch = watchScripts.map(::scriptHex).toSet()
     val utxos = mutableMapOf<String, WatchUtxo>()
+    val fees = mutableMapOf<String, TxFee>()
     for (row in sortTxRows(txs)) {
-        applyTxToState(Transaction.read(row.tx), watch, utxos, row.height)
+        val tx = Transaction.read(row.tx)
+        feeFromKnownInputs(tx, utxos)?.let { fees[row.txid] = it }
+        applyTxToState(tx, watch, utxos, row.height)
     }
-    return utxos
+    return WatchScan(utxos, fees)
 }
 
 fun netDeltasForTxs(

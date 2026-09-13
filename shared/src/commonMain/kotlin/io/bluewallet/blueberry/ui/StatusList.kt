@@ -2,6 +2,7 @@ package io.bluewallet.blueberry.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -18,7 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -61,11 +64,16 @@ fun StatusRow(
     valueColor: Color = BwColors.Link,
     dotColor: Color = BwColors.Accent,
     valueContent: (@Composable () -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+    secondaryColor: Color = BwColors.InkMuted,
+    secondaryFontSize: TextUnit = 12.sp,
+    secondaryFontWeight: FontWeight = FontWeight.Normal,
 ) {
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                 .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -88,9 +96,10 @@ fun StatusRow(
         if (secondary != null) {
             Text(
                 text = secondary,
-                color = BwColors.InkMuted,
+                color = secondaryColor,
                 fontFamily = BwFontFamily,
-                fontSize = 12.sp,
+                fontSize = secondaryFontSize,
+                fontWeight = secondaryFontWeight,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),

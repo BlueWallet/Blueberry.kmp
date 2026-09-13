@@ -19,4 +19,15 @@ class TxPaymentLabelsTest {
         assertEquals(1, db.txPaymentLabels.list().size)
         db.close()
     }
+
+    @Test
+    fun delete_removes_label_for_txid() {
+        val db = createSqliteDatabase(":memory:")
+        val txid = "aa".repeat(32)
+        db.txPaymentLabels.upsert(TxPaymentLabelRow(txid, "rent"))
+        db.txPaymentLabels.delete(txid)
+        assertNull(db.txPaymentLabels.get(txid))
+        assertEquals(emptyList(), db.txPaymentLabels.list())
+        db.close()
+    }
 }
