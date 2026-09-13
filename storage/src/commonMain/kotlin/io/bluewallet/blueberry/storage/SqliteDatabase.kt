@@ -72,6 +72,10 @@ internal class SqliteDatabase(
                 storageDb.txPaymentLabelsQueries.upsert(row.txid, row.label)
             }
 
+            override fun delete(txid: String) {
+                storageDb.txPaymentLabelsQueries.delete(txid)
+            }
+
             override fun list(): List<TxPaymentLabelRow> =
                 storageDb.txPaymentLabelsQueries
                     .list()

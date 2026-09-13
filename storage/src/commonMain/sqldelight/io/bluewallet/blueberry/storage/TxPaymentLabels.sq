@@ -5,5 +5,8 @@ upsert:
 INSERT INTO tx_payment_labels(txid, label) VALUES (?, ?)
 ON CONFLICT(txid) DO UPDATE SET label = excluded.label;
 
+delete:
+DELETE FROM tx_payment_labels WHERE txid = ?;
+
 list:
 SELECT txid, label FROM tx_payment_labels ORDER BY txid;

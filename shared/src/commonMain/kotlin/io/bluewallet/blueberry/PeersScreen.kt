@@ -33,7 +33,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.bluewallet.blueberry.boot.loadHomeDetailedSync
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.BtcAmountText
@@ -65,6 +67,7 @@ fun PeersScreen(
     onOpenReceive: () -> Unit,
     onOpenSend: () -> Unit,
     onOpenCoins: () -> Unit,
+    onOpenTx: (String) -> Unit,
     onDetailedSyncChange: (Boolean) -> Unit,
 ) {
     var counts by remember { mutableStateOf(store.get()) }
@@ -301,9 +304,14 @@ fun PeersScreen(
                         val tx = walletTxs.txs[index]
                         val incoming = tx.netDeltaSats >= 0
                         if (index > 0) StatusDivider()
+                        val muted = txListSecondaryMuted(tx.paymentLabel)
                         StatusRow(
                             label = tx.timeLabel,
-                            secondary = tx.paymentLabel?.let { "${tx.shortTxid}  $it" } ?: tx.shortTxid,
+                            secondary = txListSecondary(tx.shortTxid, tx.paymentLabel),
+                            secondaryColor = if (muted) BwColors.InkMuted else BwColors.Ink,
+                            secondaryFontSize = if (muted) 12.sp else BwType.BodySize,
+                            secondaryFontWeight = if (muted) FontWeight.Normal else BwType.Body,
+                            onClick = { onOpenTx(tx.txid) },
                             value = tx.netDeltaLabel,
                             valueColor = if (incoming) BwColors.Success else BwColors.Danger,
                             dotColor = if (incoming) BwColors.Success else BwColors.Danger,
