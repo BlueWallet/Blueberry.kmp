@@ -2,6 +2,7 @@ package io.bluewallet.blueberry
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -33,6 +34,7 @@ private val CircleStep = 12.dp
 @Composable
 fun CoinsPanel(
     utxos: List<WalletUtxoRow>,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(BwSpace.Radius)
@@ -42,6 +44,7 @@ fun CoinsPanel(
             .clip(shape)
             .background(BwColors.Card, shape)
             .border(BwSpace.Hairline, BwColors.Border, shape)
+            .clickable(onClick = onClick)
             .padding(BwSpace.Card),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),

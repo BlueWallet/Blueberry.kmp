@@ -41,6 +41,7 @@ data class WalletUtxoRow(
     val ageLabel: String,
     val valueBar: String,
     val name: String?,
+    val isChange: Boolean,
 )
 
 data class WalletTxsSnapshot(
@@ -162,6 +163,7 @@ fun snapshotFromDb(
             if (u.value > maxValue) maxValue = u.value
         }
         val nameByOutpoint = db.utxoNames.list().associate { it.outpoint to it.name }
+        val changeScripts = wallet.snapshot().addresses.filter { it.change }.map { it.scriptPubKey }
         utxos = map.entries.map { (key, u) ->
             val (txid, vout) = parseOutpointKey(key)
             val height = u.height ?: 0
@@ -177,6 +179,7 @@ fun snapshotFromDb(
                 ageLabel = timeLabelForHeight(db, height, nowMs, timeLabels),
                 valueBar = utxoValueBar(u.value, maxValue),
                 name = nameByOutpoint[key],
+                isChange = changeScripts.any { it.contentEquals(u.scriptPubKey) },
             )
         }.sortedWith(
             compareByDescending<WalletUtxoRow> { it.height }
