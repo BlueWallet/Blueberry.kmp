@@ -1,0 +1,49 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ComplexCondition:BuildSendTx.kt$!appliedExcess &amp;&amp; out.publicKeyScript.toByteArray().contentEquals(changeScript) &amp;&amp; (skipPaymentAmount == null || out.amount.toLong() != skipPaymentAmount)</ID>
+    <ID>ComplexCondition:WatchGaps.kt$extRaw == null || intRaw == null || extRaw != external.toString() || intRaw != internal.toString()</ID>
+    <ID>CyclomaticComplexMethod:BuildSendTx.kt$private fun buildDraftSendTx(params: BuildSendTxParams): DraftSendTx</ID>
+    <ID>LongMethod:BuildSendTx.kt$private fun buildDraftSendTx(params: BuildSendTxParams): DraftSendTx</ID>
+    <ID>NestedBlockDepth:IsAddressValid.kt$fun isAddressValid(address: String): Boolean</ID>
+    <ID>NestedBlockDepth:ReceiveAddress.kt$fun preferredWifReceiveAddress( wallet: WatchWallet, txs: List&lt;WifReceiveTxRow&gt;, ): WatchAddress</ID>
+    <ID>ReturnCount:Birthday.kt$fun inspectWalletBirthday(db: Database): WalletBirthdayInspection</ID>
+    <ID>ReturnCount:Birthday.kt$fun maybeFreezeWalletBirthday( db: Database, height: Int, ): Boolean</ID>
+    <ID>ReturnCount:EncodePsbtUr.kt$FountainDecoder$fun receivePart( seqNum: Long, seqLength: Int, messageLength: Int, checksum: Long, fragment: ByteArray, ): Boolean</ID>
+    <ID>ReturnCount:EncodePsbtUr.kt$FountainDecoder$private fun validatePart( seqLength: Int, messageLength: Int, checksum: Long, fragmentLength: Int, ): Boolean</ID>
+    <ID>ReturnCount:IsAddressValid.kt$fun isAddressValid(address: String): Boolean</ID>
+    <ID>ReturnCount:IsAddressValid.kt$fun watchAddressScriptType(address: String): AddressScriptType</ID>
+    <ID>ReturnCount:ReceiveAddress.kt$fun preferredWifReceiveAddress( wallet: WatchWallet, txs: List&lt;WifReceiveTxRow&gt;, ): WatchAddress</ID>
+    <ID>ReturnCount:Secret.kt$fun parseWalletSecret(raw: String): ParsedWalletSecret</ID>
+    <ID>ReturnCount:Secret.kt$private fun looksLikeWifCandidate(value: String): Boolean</ID>
+    <ID>ReturnCount:WatchGaps.kt$internal fun parseInt10(v: String?): Double?</ID>
+    <ID>ThrowsCount:BuildSendTx.kt$private fun buildDraftSendTx(params: BuildSendTxParams): DraftSendTx</ID>
+    <ID>ThrowsCount:IsAddressValid.kt$fun watchAddressScriptType(address: String): AddressScriptType</ID>
+    <ID>ThrowsCount:Secret.kt$fun decodeWifPrivateKey(wif: String): ByteArray</ID>
+    <ID>ThrowsCount:Secret.kt$fun parseWalletSecret(raw: String): ParsedWalletSecret</ID>
+    <ID>TooGenericExceptionCaught:Secret.kt$err: Exception</ID>
+    <ID>TooManyFunctions:BuildSendTx.kt$io.bluewallet.blueberry.wallet.BuildSendTx.kt</ID>
+    <ID>TooManyFunctions:Derive.kt$io.bluewallet.blueberry.wallet.Derive.kt</ID>
+    <ID>TooManyFunctions:EncodePsbtUr.kt$io.bluewallet.blueberry.wallet.EncodePsbtUr.kt</ID>
+    <ID>UseCheckOrError:BuildSendTx.kt$throw IllegalStateException("failed to update PSBT input $index: ${updated.left}")</ID>
+    <ID>UseRequire:BuildSendTx.kt$throw IllegalArgumentException("amount must be positive")</ID>
+    <ID>UseRequire:BuildSendTx.kt$throw IllegalArgumentException("cannot send back to the watched address")</ID>
+    <ID>UseRequire:BuildSendTx.kt$throw IllegalArgumentException("fee rate must be positive")</ID>
+    <ID>UseRequire:BuildSendTx.kt$throw IllegalArgumentException("insufficient funds for amount and fee")</ID>
+    <ID>UseRequire:BuildSendTx.kt$throw IllegalArgumentException("invalid change address")</ID>
+    <ID>UseRequire:BuildSendTx.kt$throw IllegalArgumentException("invalid destination address")</ID>
+    <ID>UseRequire:BuildSendTx.kt$throw IllegalArgumentException("no UTXOs selected")</ID>
+    <ID>UseRequire:BuildSendTx.kt$throw IllegalArgumentException("some selected UTXOs are uneconomical at this fee rate")</ID>
+    <ID>UseRequire:IsAddressValid.kt$throw IllegalArgumentException("P2WSH watch addresses are unsupported")</ID>
+    <ID>UseRequire:IsAddressValid.kt$throw IllegalArgumentException("invalid mainnet address")</ID>
+    <ID>UseRequire:Secret.kt$throw IllegalArgumentException("invalid WIF")</ID>
+    <ID>UseRequire:Secret.kt$throw IllegalArgumentException("invalid mainnet address")</ID>
+    <ID>UseRequire:Secret.kt$throw IllegalArgumentException("only mainnet account zpub is supported")</ID>
+    <ID>UseRequire:Secret.kt$throw IllegalArgumentException("only mainnet compressed WIF is supported (not testnet)")</ID>
+    <ID>UseRequire:Secret.kt$throw IllegalArgumentException("uncompressed WIF is not supported; use compressed WIF")</ID>
+    <ID>UseRequire:Secret.kt$throw IllegalArgumentException("wallet secret is empty")</ID>
+    <ID>UseRequire:Secret.kt$throw IllegalArgumentException("wallet_secret missing")</ID>
+    <ID>UseRequire:Secret.kt$throw IllegalArgumentException("zpub must be account-level (m/84'/0'/0')")</ID>
+  </CurrentIssues>
+</SmellBaseline>

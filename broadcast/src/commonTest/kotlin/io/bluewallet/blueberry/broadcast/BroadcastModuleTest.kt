@@ -34,8 +34,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-private const val NODE_NETWORK = 1uL
-
 private fun sampleTx(): Transaction =
     Transaction(
         version = 1u,

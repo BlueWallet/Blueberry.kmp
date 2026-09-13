@@ -31,6 +31,7 @@ webcam-capture = "0.3.12"
 slf4j = "2.0.17"
 sqlite-jdbc = "3.53.2.1"
 ktlint = "14.2.0"
+detekt = "1.23.8"
 
 [libraries]
 bitcoin-headers = { module = "io.bluewallet:bitcoin-headers", version.ref = "bitcoin-headers" }
@@ -83,3 +84,4 @@ kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }

@@ -694,7 +694,9 @@ fun createFiltersDownloadModule(
             parentJob = job
             val scope = CoroutineScope(job + Dispatchers.Default)
             moduleScope = scope
-            while (runRequests.tryReceive().isSuccess) {}
+            while (runRequests.tryReceive().isSuccess) {
+                // drain queued kicks from before the loop starts
+            }
             val launched =
                 scope.launch {
                     while (isActive) {

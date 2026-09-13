@@ -26,8 +26,8 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 
-private val MSG_TX = 1u
-private val MSG_WTX = 5u
+private const val MSG_TX = 1u
+private const val MSG_WTX = 5u
 private val MSG_WITNESS_FLAG = 1u shl 30
 
 data class BroadcastTxV2Options(

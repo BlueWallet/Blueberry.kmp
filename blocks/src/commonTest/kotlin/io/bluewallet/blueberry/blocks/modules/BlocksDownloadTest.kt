@@ -33,7 +33,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-private val NODE_NETWORK = 1uL
+private const val NODE_NETWORK = 1uL
 
 private const val GENESIS_BLOCK_HEX =
     "01000000" +
@@ -120,7 +120,9 @@ private fun makeOpenSession(
                     return blocksByInternalHex[key] ?: error("no fixture for $key")
                 }
 
-                override suspend fun close() {}
+                override suspend fun close() {
+                    // stub: fixture session has no resources
+                }
             }
         BlockBatchResult.Ok(session)
     }

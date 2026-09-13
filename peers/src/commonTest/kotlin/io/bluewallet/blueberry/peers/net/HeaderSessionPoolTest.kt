@@ -220,7 +220,9 @@ class HeaderSessionPoolTest {
                                     return ByteArray(0)
                                 }
 
-                                override suspend fun write(bytes: ByteArray) {}
+                                override suspend fun write(bytes: ByteArray) {
+                                    // stub: hang is in read
+                                }
 
                                 override suspend fun close() {
                                     closed = true

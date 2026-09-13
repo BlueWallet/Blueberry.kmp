@@ -42,7 +42,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-private val NEXT_HEADER_HEX =
+private const val NEXT_HEADER_HEX =
     "000000208fdfeffd2c3a3a235a847805dbd1dc5adb9cd48519532a000000000000000000105b6f8cba2f1258ea4c1e41f72e843c770c3acfede6f02df3108c6fba7b88bfca4f2a5ca5183217d6a930c9"
 
 class ChainHeadersTest {

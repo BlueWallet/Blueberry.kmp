@@ -1,0 +1,22 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:BroadcastModule.kt$fun createBroadcastModule( ctx: ModuleContext, options: BroadcastModuleOptions = BroadcastModuleOptions(), ): Module</ID>
+    <ID>CyclomaticComplexMethod:V2Broadcast.kt$suspend fun broadcastTxV2( duplex: ByteDuplex, txHex: String, options: BroadcastTxV2Options, )</ID>
+    <ID>LongMethod:BroadcastModule.kt$suspend fun runBroadcast( id: String, txHex: String, )</ID>
+    <ID>LongMethod:V2Broadcast.kt$suspend fun broadcastTxV2( duplex: ByteDuplex, txHex: String, options: BroadcastTxV2Options, )</ID>
+    <ID>NestedBlockDepth:BroadcastModule.kt$fun createBroadcastModule( ctx: ModuleContext, options: BroadcastModuleOptions = BroadcastModuleOptions(), ): Module</ID>
+    <ID>SwallowedException:V2Broadcast.kt$err: TimeoutCancellationException</ID>
+    <ID>ThrowsCount:V2Broadcast.kt$suspend fun broadcastTxV2( duplex: ByteDuplex, txHex: String, options: BroadcastTxV2Options, )</ID>
+    <ID>TooGenericExceptionCaught:BroadcastModule.kt$err: Throwable</ID>
+    <ID>TooGenericExceptionCaught:TorByteDuplex.kt$&lt;no name provided&gt;$err: Throwable</ID>
+    <ID>TooGenericExceptionCaught:TorDialPolicy.kt$err: Throwable</ID>
+    <ID>TooGenericExceptionCaught:V2Broadcast.kt$err: Throwable</ID>
+    <ID>UseCheckOrError:BroadcastModule.kt$throw IllegalStateException("dial timeout")</ID>
+    <ID>UseCheckOrError:BroadcastModuleTest.kt$BroadcastModuleTest$throw IllegalStateException("dial failed")</ID>
+    <ID>UseCheckOrError:TorDialPolicy.kt$throw lastError ?: IllegalStateException("tor dial retries exhausted")</ID>
+    <ID>UseCheckOrError:V2Broadcast.kt$throw IllegalStateException("handshake timeout")</ID>
+    <ID>UseCheckOrError:V2Broadcast.kt$throw IllegalStateException("peer rejected transaction")</ID>
+  </CurrentIssues>
+</SmellBaseline>

@@ -49,7 +49,7 @@ import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.math.max
 
 /** Bitcoin NODE_NETWORK — peer can serve historical blocks. */
-private val NODE_NETWORK = 1uL
+private const val NODE_NETWORK = 1uL
 
 private const val UI_MIN_MS = 100L
 private const val PEER_COOL_MS = 3_000L

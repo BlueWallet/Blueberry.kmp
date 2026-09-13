@@ -66,14 +66,6 @@ private fun pickAlive(
 
 private fun formatError(err: Throwable): String = err.message?.takeIf { it.isNotBlank() } ?: err.toString()
 
-private fun summarizeFailures(failures: List<String>): String {
-    val counts = linkedMapOf<String, Int>()
-    for (f in failures) counts[f] = (counts[f] ?: 0) + 1
-    return counts.entries
-        .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
-        .joinToString(" | ") { (detail, n) -> "$n× $detail" }
-}
-
 private fun displayTxid(txHex: String): String = internalHexToDisplayHex(bytesToHex(transactionId(decodeBroadcastTx(txHex))))
 
 fun createBroadcastModule(
@@ -153,7 +145,7 @@ fun createBroadcastModule(
         dial: suspend (String, Int, Job) -> ByteDuplex,
         txHex: String,
         job: Job,
-        emitProgress: (BroadcastPhase, Int?, String?, String?) -> Unit,
+        emitProgress: (BroadcastPhase, String?, String?) -> Unit,
     ): Pair<String?, List<String>> {
         val failures = mutableListOf<String>()
         for (attempt in 1..maxAttempts) {
@@ -166,7 +158,7 @@ fun createBroadcastModule(
             }
             val key = peerKey(peer)
             log("broadcast", "attempt $attempt/$maxAttempts peer=$key")
-            emitProgress(BroadcastPhase.ATTEMPT, attempt, key, null)
+            emitProgress(BroadcastPhase.ATTEMPT, key, null)
             try {
                 attemptOne(dial, peer, txHex, job)
                 return key to failures
@@ -175,7 +167,7 @@ fun createBroadcastModule(
             } catch (err: Throwable) {
                 val detail = formatError(err)
                 failures += "$key: $detail"
-                emitProgress(BroadcastPhase.FAILED_ATTEMPT, attempt, key, detail)
+                emitProgress(BroadcastPhase.FAILED_ATTEMPT, key, detail)
             }
         }
         return null to failures
@@ -191,7 +183,6 @@ fun createBroadcastModule(
 
         fun emitProgress(
             phase: BroadcastPhase,
-            attempt: Int? = null,
             peer: String? = null,
             detail: String? = null,
         ) {
