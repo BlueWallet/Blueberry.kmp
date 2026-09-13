@@ -2,7 +2,6 @@ package io.bluewallet.blueberry
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class CoinsRowsTest {
     private fun row(
@@ -10,6 +9,7 @@ class CoinsRowsTest {
         valueSats: Long,
         name: String? = null,
         isChange: Boolean = false,
+        ageLabel: String = "",
     ) = WalletUtxoRow(
         key = key,
         txid = key.substringBefore(':'),
@@ -19,7 +19,7 @@ class CoinsRowsTest {
         scriptPubKey = byteArrayOf(),
         amountLabel = "",
         height = 0,
-        ageLabel = "",
+        ageLabel = ageLabel,
         valueBar = "",
         name = name,
         isChange = isChange,
@@ -57,5 +57,26 @@ class CoinsRowsTest {
     fun preserves_input_order() {
         val rows = coinsRows(listOf(row("zz:1", 1), row("aa:0", 9)))
         assertEquals(listOf("zz:1", "aa:0"), rows.map { it.key })
+    }
+
+    @Test
+    fun copies_ageLabel() {
+        val padded = "3 years ago".padEnd(16)
+        val rows = coinsRows(
+            listOf(
+                row("aa:0", 2, ageLabel = padded),
+                row("aa:1", 1, ageLabel = ""),
+            ),
+        )
+        assertEquals(listOf(padded, ""), rows.map { it.ageLabel })
+    }
+
+    @Test
+    fun caption_is_trimmed_age_then_name_like_send() {
+        assertEquals(null, coinsRowCaption("", null))
+        assertEquals(null, coinsRowCaption("   ", null))
+        assertEquals("3 years ago", coinsRowCaption("3 years ago".padEnd(16), null))
+        assertEquals("coffee", coinsRowCaption("", "coffee"))
+        assertEquals("3 years ago  coffee", coinsRowCaption("3 years ago".padEnd(16), "coffee"))
     }
 }
