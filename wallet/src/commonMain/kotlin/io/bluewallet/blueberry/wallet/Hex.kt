@@ -1,6 +1,10 @@
 package io.bluewallet.blueberry.wallet
 
+import fr.acinq.bitcoin.Crypto
+
 fun scriptHex(script: ByteArray): String = hexFromBytes(script)
+
+fun sha256Hex(bytes: ByteArray): String = hexFromBytes(Crypto.sha256(bytes))
 
 fun hexFromBytes(bytes: ByteArray): String = bytes.joinToString("") { b ->
     val v = b.toInt() and 0xff

@@ -234,14 +234,38 @@ fun PeersScreen(
                 )
             }
         }
-            Text(
-                text = "Transactions",
-                color = BwColors.InkSecondary,
-                fontFamily = BwFontFamily,
-                fontSize = BwType.LabelSize,
-                fontWeight = BwType.Label,
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+        ) {
+            PillButton(
+                text = "Receive",
+                onClick = onOpenReceive,
+                modifier = Modifier.weight(1f),
+            )
+            PillButton(
+                text = "Send",
+                onClick = onOpenSend,
+                modifier = Modifier.weight(1f),
             )
         }
+        Text(
+            text = "Coins",
+            color = BwColors.InkSecondary,
+            fontFamily = BwFontFamily,
+            fontSize = BwType.LabelSize,
+            fontWeight = BwType.Label,
+        )
+        CoinsPanel(utxos = walletTxs.utxos)
+        Text(
+            text = "Transactions",
+            color = BwColors.InkSecondary,
+            fontFamily = BwFontFamily,
+            fontSize = BwType.LabelSize,
+            fontWeight = BwType.Label,
+        )
         if (walletTxs.blocksTotal > walletTxs.blocksParsed) {
             Text(
                 text = formatParseProgress(walletTxs.blocksParsed, walletTxs.blocksTotal, walletTxs.etaMs),
@@ -283,21 +307,6 @@ fun PeersScreen(
                     }
                 }
             }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-        ) {
-            PillButton(
-                text = "Receive",
-                onClick = onOpenReceive,
-                modifier = Modifier.weight(1f),
-            )
-            PillButton(
-                text = "Send",
-                onClick = onOpenSend,
-                modifier = Modifier.weight(1f),
-            )
         }
     }
 }
