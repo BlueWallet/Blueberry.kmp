@@ -6,9 +6,13 @@ fun stubDuplex(): ByteDuplex =
     object : ByteDuplex {
         override suspend fun read(n: Int): ByteArray = ByteArray(0)
 
-        override suspend fun write(bytes: ByteArray) {}
+        override suspend fun write(bytes: ByteArray) {
+            // stub: no outbound bytes
+        }
 
-        override suspend fun close() {}
+        override suspend fun close() {
+            // stub: nothing to release
+        }
     }
 
 fun stubPlatformNet(): PlatformNet =

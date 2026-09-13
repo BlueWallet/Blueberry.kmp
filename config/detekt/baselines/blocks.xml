@@ -1,0 +1,13 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:BlocksDownload.kt$@OptIn(ExperimentalAtomicApi::class) fun createBlocksDownloadModule( ctx: ModuleContext, options: BlocksDownloadOptions, ): Module</ID>
+    <ID>LongMethod:BlocksDownload.kt$suspend fun downloadOne( job: MatchedBlock, peer: PeerRef, ): Boolean</ID>
+    <ID>LongParameterList:BlocksDownload.kt$BlocksDownloadOptions$( val net: PlatformNet, val openSession: (suspend (String, Int, BlockSyncOptions) -&gt; BlockBatchResult&lt;BlockSessionApi&gt;)? = null, val connectTimeoutMs: Long? = null, val syncTimeoutMs: Long? = null, val concurrency: Int? = null, val idleDelayMs: Long? = null, val now: (() -&gt; Long)? = null, val onDownloadRun: (() -&gt; Unit)? = null, val log: ((String) -&gt; Unit)? = null, )</ID>
+    <ID>LoopWithTooManyJumpStatements:BlocksDownload.kt$for</ID>
+    <ID>LoopWithTooManyJumpStatements:BlocksDownload.kt$while</ID>
+    <ID>ReturnCount:BlocksDownload.kt$suspend fun downloadOne( job: MatchedBlock, peer: PeerRef, ): Boolean</ID>
+    <ID>TooGenericExceptionCaught:BlocksDownload.kt$err: Throwable</ID>
+  </CurrentIssues>
+</SmellBaseline>

@@ -40,7 +40,7 @@ import kotlin.math.ceil
 import kotlin.math.max
 
 /** Bitcoin NODE_NETWORK — peer can serve historical blocks. */
-private val NODE_NETWORK = 1uL
+private const val NODE_NETWORK = 1uL
 
 /** Cap for `stop()` join: wait out in-flight SQLite, not blocking DNS/connect. */
 private const val STOP_JOIN_MS = 1_000L

@@ -32,7 +32,7 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.max
 
 /** Bitcoin NODE_NETWORK — peer can serve historical blocks. */
-private val NODE_NETWORK = 1uL
+private const val NODE_NETWORK = 1uL
 
 class SyncIdleOptions(
     val evalIntervalMs: Long? = null,
@@ -230,7 +230,9 @@ fun createSyncIdleModule(
                 headersDownloaded = 0
                 headersTotal = 0
             }
-            while (evaluationRequests.tryReceive().isSuccess) {}
+            while (evaluationRequests.tryReceive().isSuccess) {
+                // drain queued evaluations from before the loop starts
+            }
             state.store(
                 SyncIdleState(
                     stopped = false,

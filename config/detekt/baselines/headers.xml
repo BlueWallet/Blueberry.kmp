@@ -1,0 +1,23 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:ChainHeaders.kt$@OptIn(ExperimentalAtomicApi::class) fun createChainHeadersModule( ctx: ModuleContext, options: ChainHeadersOptions, ): Module</ID>
+    <ID>LargeClass:ChainHeadersTest.kt$ChainHeadersTest</ID>
+    <ID>LongMethod:ChainHeaders.kt$suspend fun raceHeaderFetch( peers: List&lt;PeerRef&gt;, locatorHashes: List&lt;ByteArray&gt;, ): RaceOutcome</ID>
+    <ID>LongMethod:ChainHeaders.kt$suspend fun runLoop()</ID>
+    <ID>LongMethod:TrustedChain.kt$fun trustedChainFromStored( records: List&lt;StoredHeader&gt;, params: HeaderConsensusParams, ): ValidatedHeaderChain</ID>
+    <ID>LongParameterList:ChainHeaders.kt$( ctx: ModuleContext, headers: List&lt;BlockHeader&gt;, base: ValidatedHeaderChain, consensus: HeaderConsensusParams, nowSeconds: () -&gt; Long, loadChainThrough: (Int) -&gt; ValidatedHeaderChain, )</ID>
+    <ID>LongParameterList:ChainHeaders.kt$ChainHeadersOptions$( val net: PlatformNet, val fetchBatch: (suspend (String, Int, HeaderFetchOptions) -&gt; HeaderBatchResult)? = null, val connectTimeoutMs: Long? = null, val headersTimeoutMs: Long? = null, val racePeers: Int? = null, val pollIntervalMs: Long? = null, val consensus: HeaderConsensusParams? = null, val now: (() -&gt; Long)? = null, val nowSeconds: (() -&gt; Long)? = null, )</ID>
+    <ID>LoopWithTooManyJumpStatements:ChainHeaders.kt$while</ID>
+    <ID>NestedBlockDepth:ChainHeaders.kt$@OptIn(ExperimentalAtomicApi::class) fun createChainHeadersModule( ctx: ModuleContext, options: ChainHeadersOptions, ): Module</ID>
+    <ID>ReturnCount:ChainHeaders.kt$fun tryFreezeBirthday()</ID>
+    <ID>ReturnCount:ChainHeaders.kt$private fun applyHeaderBatch( ctx: ModuleContext, headers: List&lt;BlockHeader&gt;, base: ValidatedHeaderChain, consensus: HeaderConsensusParams, nowSeconds: () -&gt; Long, loadChainThrough: (Int) -&gt; ValidatedHeaderChain, ): ApplyResult</ID>
+    <ID>ReturnCount:ChainHeaders.kt$suspend fun raceHeaderFetch( peers: List&lt;PeerRef&gt;, locatorHashes: List&lt;ByteArray&gt;, ): RaceOutcome</ID>
+    <ID>TooGenericExceptionCaught:ChainHeaders.kt$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:ChainHeaders.kt$err: Throwable</ID>
+    <ID>UseCheckOrError:Checkpoint.kt$throw IllegalStateException("checkpoint header fails PoW check")</ID>
+    <ID>UseCheckOrError:TrustedChain.kt$throw IllegalStateException( "trusted chain gap at height ${stored.height}, expected $expectedHeight", )</ID>
+    <ID>UseRequire:TrustedChain.kt$throw IllegalArgumentException("trusted chain is empty")</ID>
+  </CurrentIssues>
+</SmellBaseline>

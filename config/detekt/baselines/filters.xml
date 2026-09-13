@@ -1,0 +1,34 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:FiltersDownload.kt$@OptIn(ExperimentalAtomicApi::class) fun createFiltersDownloadModule( ctx: ModuleContext, options: FiltersDownloadOptions, ): Module</ID>
+    <ID>CyclomaticComplexMethod:FiltersMatching.kt$@OptIn(ExperimentalAtomicApi::class) fun createFiltersMatchingModule( ctx: ModuleContext, options: FiltersMatchingOptions, ): Module</ID>
+    <ID>CyclomaticComplexMethod:Scan.kt$suspend fun scanFiltersForMatches( db: Database, scripts: List&lt;ByteArray&gt;, callbacks: MatchScanCallbacks? = null, options: MatchScanOptions? = null, ): Int</ID>
+    <ID>LargeClass:FiltersDownloadTest.kt$FiltersDownloadTest</ID>
+    <ID>LongMethod:FiltersDownload.kt$@OptIn(ExperimentalAtomicApi::class) fun createFiltersDownloadModule( ctx: ModuleContext, options: FiltersDownloadOptions, ): Module</ID>
+    <ID>LongMethod:FiltersDownload.kt$suspend fun downloadFilterRange( session: FilterSessionApi, peer: PeerRef, range: HeightRange, chainFrom: Int, tipTo: Int, ): Int</ID>
+    <ID>LongMethod:FiltersDownload.kt$suspend fun runDownload()</ID>
+    <ID>LongMethod:FiltersDownload.kt$suspend fun syncFilterHeadersPhase( chainFrom: Int, tipTo: Int, tipHashInternalHex: String, ): Boolean</ID>
+    <ID>LongMethod:FiltersDownload.kt$suspend fun syncFiltersPhase( chainFrom: Int, tipTo: Int, )</ID>
+    <ID>LongMethod:FiltersMatching.kt$suspend fun loop()</ID>
+    <ID>LongMethod:Scan.kt$suspend fun scanFiltersForMatches( db: Database, scripts: List&lt;ByteArray&gt;, callbacks: MatchScanCallbacks? = null, options: MatchScanOptions? = null, ): Int</ID>
+    <ID>LongParameterList:FiltersDownload.kt$FiltersDownloadOptions$( val net: PlatformNet, val openSession: (suspend (String, Int, FilterSyncOptions) -&gt; FilterBatchResult&lt;FilterSessionApi&gt;)? = null, val connectTimeoutMs: Long? = null, val syncTimeoutMs: Long? = null, val concurrency: Int? = null, val filterBatchSize: Int? = null, val headerBatchSize: Int? = null, val persistBatchSize: Int? = null, val idleDelayMs: Long? = null, val coolMs: Long? = null, val now: (() -&gt; Long)? = null, val onDownloadRun: (() -&gt; Unit)? = null, val log: ((String) -&gt; Unit)? = null, )</ID>
+    <ID>LoopWithTooManyJumpStatements:FiltersDownload.kt$while</ID>
+    <ID>LoopWithTooManyJumpStatements:FiltersMatching.kt$while</ID>
+    <ID>NestedBlockDepth:FiltersDownload.kt$@OptIn(ExperimentalAtomicApi::class) fun createFiltersDownloadModule( ctx: ModuleContext, options: FiltersDownloadOptions, ): Module</ID>
+    <ID>NestedBlockDepth:FiltersMatching.kt$@OptIn(ExperimentalAtomicApi::class) fun createFiltersMatchingModule( ctx: ModuleContext, options: FiltersMatchingOptions, ): Module</ID>
+    <ID>NestedBlockDepth:Scan.kt$suspend fun scanFiltersForMatches( db: Database, scripts: List&lt;ByteArray&gt;, callbacks: MatchScanCallbacks? = null, options: MatchScanOptions? = null, ): Int</ID>
+    <ID>ReturnCount:FiltersDownload.kt$fun buildHeaderClaim( cursor: Int, chainFrom: Int, tipTo: Int, ): HeightRange?</ID>
+    <ID>ReturnCount:FiltersDownload.kt$fun firstMissingFilterHeader( from: Int, to: Int, ): Int?</ID>
+    <ID>ReturnCount:FiltersDownload.kt$fun reconcileReorg( from: Int, to: Int, )</ID>
+    <ID>ReturnCount:FiltersDownload.kt$fun verifyCfHeadersBatch( rangeFrom: Int, next: Int, stop: Int, previousFilterHeader: ByteArray, filterHashes: List&lt;ByteArray&gt;, checkpoints: Map&lt;Int, ByteArray&gt;, ): List&lt;ByteArray&gt;?</ID>
+    <ID>ReturnCount:FiltersDownload.kt$suspend fun syncFilterHeadersPhase( chainFrom: Int, tipTo: Int, tipHashInternalHex: String, ): Boolean</ID>
+    <ID>ReturnCount:Scan.kt$private fun rowStillCurrent( db: Database, row: FilterRecord, ): Boolean</ID>
+    <ID>ReturnCount:Scan.kt$suspend fun scanFiltersForMatches( db: Database, scripts: List&lt;ByteArray&gt;, callbacks: MatchScanCallbacks? = null, options: MatchScanOptions? = null, ): Int</ID>
+    <ID>TooGenericExceptionCaught:FiltersDownload.kt$err: Throwable</ID>
+    <ID>TooGenericExceptionCaught:FiltersDownload.kt$flushErr: Throwable</ID>
+    <ID>TooGenericExceptionCaught:FiltersMatching.kt$err: Throwable</ID>
+    <ID>TooGenericExceptionThrown:FiltersDownload.kt$throw Exception("filter batch and final persistence failed")</ID>
+  </CurrentIssues>
+</SmellBaseline>

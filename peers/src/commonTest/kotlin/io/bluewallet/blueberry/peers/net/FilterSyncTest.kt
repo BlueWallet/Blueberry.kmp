@@ -54,7 +54,9 @@ class FilterSyncTest {
                                     onFilter: (suspend (CFilterItem) -> Unit)?,
                                 ) = listOf(CFilterItem(stop, byteArrayOf(1)))
 
-                                override suspend fun close() {}
+                                override suspend fun close() {
+                                    // stub: session has no resources
+                                }
                             }
                         },
                     ),

@@ -34,6 +34,10 @@ Use the full Superpowers workflow on every coding task in this repo (brainstormi
 
 Before committing Kotlin or Gradle Kotlin DSL changes, run `./gradlew ktlintCheck`. If it fails, run `./gradlew ktlintFormat` and re-run `ktlintCheck` until it passes. Do not commit with ktlint violations. Do not format `vendor/*`.
 
+## detekt
+
+Before committing Kotlin changes, run `./gradlew detekt`. Fix any new findings. Do not regenerate `config/detekt/baselines/*` to hide new issues. Do not lint `vendor/*`.
+
 ## Verification
 
 - Do not claim the app is running without evidence (`adb devices`, successful install, or a running process via `adb shell pidof io.bluewallet.blueberry`).

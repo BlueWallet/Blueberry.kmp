@@ -1,0 +1,35 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:ParseBlocks.kt$@OptIn(ExperimentalAtomicApi::class) fun createParseBlocksModule( ctx: ModuleContext, options: ParseBlocksOptions, ): Module</ID>
+    <ID>LongMethod:ParseBlocks.kt$suspend fun parseBatch()</ID>
+    <ID>LongParameterList:ParseBlocks.kt$ParseBlocksOptions$( val wallet: Wallet, val batchSize: Int? = null, val idleDelayMs: Long? = null, val blockGapMs: Long? = null, val now: (() -&gt; Long)? = null, val onParseBatch: (suspend () -&gt; Unit)? = null, val log: ((String) -&gt; Unit)? = null, val logError: ((String, Throwable?) -&gt; Unit)? = null, )</ID>
+    <ID>LoopWithTooManyJumpStatements:ParseBlocks.kt$for</ID>
+    <ID>LoopWithTooManyJumpStatements:ParseBlocks.kt$while</ID>
+    <ID>NestedBlockDepth:Extract.kt$fun extractWatchTxs( txs: List&lt;Transaction&gt;, watchScripts: List&lt;ByteArray&gt;, utxos: MutableMap&lt;String, WatchUtxo&gt;, ): List&lt;ExtractedWatchTx&gt;</ID>
+    <ID>NestedBlockDepth:ParseBlocks.kt$@OptIn(ExperimentalAtomicApi::class) fun createParseBlocksModule( ctx: ModuleContext, options: ParseBlocksOptions, ): Module</ID>
+    <ID>NestedBlockDepth:UsedIndexes.kt$fun usedWatchIndexes( txs: List&lt;ByteArray&gt;, wallet: WatchWallet, ): UsedWatchIndexes</ID>
+    <ID>ReturnCount:Extract.kt$private fun pushPayload(written: ByteArray): ByteArray?</ID>
+    <ID>ReturnCount:Format.kt$fun parseBtcToSats(input: String): Long?</ID>
+    <ID>ReturnCount:Format.kt$fun utxoValueBar( value: Long, maxValue: Long, width: Int = 30, ): String</ID>
+    <ID>ReturnCount:Format.kt$fun utxoValuePercent( value: Long, maxValue: Long, ): Int</ID>
+    <ID>ReturnCount:FormatBlockTime.kt$fun formatBlockTimeLabel( unixSeconds: Long, nowMs: Long, ): String</ID>
+    <ID>ReturnCount:FormatBlockTime.kt$fun formatRelativeAge( unixSeconds: Long?, nowMs: Long, ): String</ID>
+    <ID>ReturnCount:FormatBlockTime.kt$fun msUntilNextRelativeAgeChange( unixSeconds: Long?, nowMs: Long, ): Long?</ID>
+    <ID>ReturnCount:ParseBlocks.kt$fun maybeGrowWatch(): Boolean</ID>
+    <ID>ReturnCount:ParseBlocks.kt$suspend fun parseBatch()</ID>
+    <ID>ReturnCount:ParseBlocks.kt$suspend fun waitForKick(ms: Long? = null)</ID>
+    <ID>ReturnCount:SendContext.kt$fun &lt;T&gt; pickUtxosByKeys( utxos: List&lt;T&gt;, keys: List&lt;String&gt;, keyOf: (T) -&gt; String, ): PickUtxos&lt;T&gt;</ID>
+    <ID>ReturnCount:UsedIndexes.kt$fun snapshotReceiveAddress( db: Database, wallet: Wallet, ): String?</ID>
+    <ID>ThrowsCount:Extract.kt$fun decodeBlockTxs(blockBytes: ByteArray): List&lt;Transaction&gt;</ID>
+    <ID>TooGenericExceptionCaught:ParseBlocks.kt$err: Throwable</ID>
+    <ID>TooManyFunctions:Extract.kt$io.bluewallet.blueberry.parse.Extract.kt</ID>
+    <ID>UseRequire:Extract.kt$throw IllegalArgumentException( "transaction count $count cannot fit in $remaining remaining bytes", )</ID>
+    <ID>UseRequire:Extract.kt$throw IllegalArgumentException("block too short")</ID>
+    <ID>UseRequire:Extract.kt$throw IllegalArgumentException("invalid transaction count")</ID>
+    <ID>UseRequire:Extract.kt$throw IllegalArgumentException("trailing block data")</ID>
+    <ID>UseRequire:Extract.kt$throw IllegalArgumentException("unexpected end of block header")</ID>
+    <ID>UseRequire:PaymentLabel.kt$throw IllegalArgumentException("payment label is required")</ID>
+  </CurrentIssues>
+</SmellBaseline>

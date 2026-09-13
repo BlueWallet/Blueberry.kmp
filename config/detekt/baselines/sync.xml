@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:SyncIdle.kt$@OptIn(ExperimentalAtomicApi::class) fun createSyncIdleModule( ctx: ModuleContext, options: SyncIdleOptions = SyncIdleOptions(), ): Module</ID>
+    <ID>LongMethod:SyncIdle.kt$&lt;no name provided&gt;$override suspend fun start()</ID>
+    <ID>LongParameterList:EvaluateTest.kt$EvaluateTest$( headersDownloaded: Int = 100, headersTotal: Int = 100, filterMissingRangeCount: Int = 0, filterWorkNeedsPeers: Boolean = false, matchingBehind: Boolean = false, blocksDownloaded: Int = 5, blocksMatched: Int = 5, needingDownloadCount: Int = 0, alivePeerCount: Int = 3, )</ID>
+    <ID>ReturnCount:Evaluate.kt$fun evaluateSyncState(s: SyncSnapshot): SyncEvaluation</ID>
+    <ID>ReturnCount:SyncIdle.kt$fun applyEvaluation( cur: SyncIdleState, evalResult: SyncEvaluation, ): Pair&lt;SyncIdleState, SyncEvaluation?&gt;</ID>
+  </CurrentIssues>
+</SmellBaseline>

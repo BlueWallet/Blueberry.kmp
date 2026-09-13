@@ -1,0 +1,48 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ComplexCondition:FilterSessionPool.kt$ep.busy || ep.session != null || ep.orphaned || t &lt; ep.coolUntil</ID>
+    <ID>CyclomaticComplexMethod:FilterSessionPool.kt$@OptIn(ExperimentalAtomicApi::class) fun createFilterSessionPool(options: FilterSessionPoolOptions): FilterSessionPool</ID>
+    <ID>CyclomaticComplexMethod:HeaderSync.kt$@OptIn(ExperimentalAtomicApi::class) fun createHeaderSessionPool(poolOptions: HeaderSessionPoolOptions = HeaderSessionPoolOptions()): HeaderSessionPool</ID>
+    <ID>CyclomaticComplexMethod:PeersDiscovery.kt$@OptIn(ExperimentalAtomicApi::class, ExperimentalCoroutinesApi::class) fun createPeersDiscoveryModule( ctx: ModuleContext, options: PeersDiscoveryOptions, ): Module</ID>
+    <ID>LargeClass:PeersDiscoveryTest.kt$PeersDiscoveryTest</ID>
+    <ID>LongMethod:HeaderSync.kt$&lt;no name provided&gt;$override suspend fun fetchBatch( host: String, port: Int, options: HeaderFetchOptions, ): HeaderBatchResult</ID>
+    <ID>LongMethod:HeaderSync.kt$suspend fun openLive( host: String, port: Int, connectTimeoutMs: Long, ): LiveSession</ID>
+    <ID>LongMethod:PeersDiscovery.kt$fun takeProbeBatch( limit: Int, inflightKeys: Set&lt;String&gt;, ): List&lt;Peer&gt;</ID>
+    <ID>LongMethod:PeersDiscovery.kt$suspend fun runLoop()</ID>
+    <ID>LongParameterList:FilterSessionPool.kt$FilterSessionPoolOptions$( val connect: TcpConnect, val openSession: (suspend (String, Int, FilterSyncOptions) -&gt; FilterBatchResult&lt;FilterSessionApi&gt;)? = null, val max: Int? = null, val connectTimeoutMs: Long? = null, val syncTimeoutMs: Long? = null, val coolMs: Long? = null, val now: (() -&gt; Long)? = null, val onOpenCount: ((Int) -&gt; Unit)? = null, val onDiagnostic: ((String) -&gt; Unit)? = null, )</ID>
+    <ID>LongParameterList:HeaderSync.kt$HeaderSessionPoolOptions$( val connectTimeoutMs: Long? = null, val headersTimeoutMs: Long? = null, val connect: TcpConnect? = null, val openSession: (suspend (String, Int) -&gt; OpenedHeaderSession)? = null, val onOpenCount: ((Int) -&gt; Unit)? = null, val onTipHint: (() -&gt; Unit)? = null, val max: Int? = null, )</ID>
+    <ID>LongParameterList:PeersDiscovery.kt$PeersDiscoveryOptions$( val net: PlatformNet, val resolveSeeds: (suspend () -&gt; List&lt;PeerCandidate&gt;)? = null, val probe: (suspend (String, Int, ProbeCallOptions) -&gt; ProbeResult)? = null, val concurrency: Int? = null, val idleDelayMs: Long? = null, val probeTimeoutMs: Long? = null, val addrTimeoutMs: Long? = null, val crawlIntervalMs: Long? = null, val now: (() -&gt; Long)? = null, val minAliveCompactFilters: Int? = null, val minAliveBlockPeers: Int? = null, val reseedIntervalMs: Long? = null, val retryProbeTimeoutMs: Long? = null, )</ID>
+    <ID>LoopWithTooManyJumpStatements:FilterSessionPool.kt$&lt;no name provided&gt;$for</ID>
+    <ID>LoopWithTooManyJumpStatements:FilterSessionPool.kt$for</ID>
+    <ID>LoopWithTooManyJumpStatements:PeersDiscovery.kt$while</ID>
+    <ID>NestedBlockDepth:HeaderSync.kt$@OptIn(ExperimentalAtomicApi::class) fun createHeaderSessionPool(poolOptions: HeaderSessionPoolOptions = HeaderSessionPoolOptions()): HeaderSessionPool</ID>
+    <ID>ReturnCount:Addr.kt$fun addrV2ToCandidate(address: NetworkAddressV2): PeerCandidate?</ID>
+    <ID>ReturnCount:Addr.kt$fun legacyAddrToCandidate(address: TimedNetworkAddress): PeerCandidate?</ID>
+    <ID>ReturnCount:FilterSessionPool.kt$&lt;no name provided&gt;$override suspend fun &lt;T&gt; withSession(fn: suspend (FilterSessionApi, FilterPoolPeer) -&gt; T): T?</ID>
+    <ID>ReturnCount:FilterSessionPool.kt$fun pickIdle(): Endpoint?</ID>
+    <ID>ReturnCount:FilterSessionPool.kt$fun pickToOpen(): Endpoint?</ID>
+    <ID>ReturnCount:HeaderSync.kt$&lt;no name provided&gt;$override suspend fun fetchBatch( host: String, port: Int, options: HeaderFetchOptions, ): HeaderBatchResult</ID>
+    <ID>ReturnCount:PeersDiscovery.kt$suspend fun maybeReseed()</ID>
+    <ID>SwallowedException:BlockSync.kt$e: TimeoutCancellationException</ID>
+    <ID>SwallowedException:FilterSync.kt$e: TimeoutCancellationException</ID>
+    <ID>SwallowedException:HeaderSync.kt$&lt;no name provided&gt;$e: TimeoutCancellationException</ID>
+    <ID>SwallowedException:HeaderSync.kt$e: TimeoutCancellationException</ID>
+    <ID>SwallowedException:PeerProbe.kt$e: TimeoutCancellationException</ID>
+    <ID>TooGenericExceptionCaught:BlockSync.kt$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:FilterSessionPool.kt$&lt;no name provided&gt;$err: Throwable</ID>
+    <ID>TooGenericExceptionCaught:FilterSessionPool.kt$err: Throwable</ID>
+    <ID>TooGenericExceptionCaught:FilterSync.kt$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:HeaderSync.kt$&lt;no name provided&gt;$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:HeaderSync.kt$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:PeerProbe.kt$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:PeersDiscovery.kt$err: Throwable</ID>
+    <ID>TooGenericExceptionCaught:PlatformNet.android.kt$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:PlatformNet.jvm.kt$e: Throwable</ID>
+    <ID>TooGenericExceptionThrown:BlockSync.kt$&lt;no name provided&gt;$throw Exception("notfound block")</ID>
+    <ID>TooGenericExceptionThrown:BlockSync.kt$&lt;no name provided&gt;$throw Exception("notfound did not contain requested block")</ID>
+    <ID>TooGenericExceptionThrown:BlockSync.kt$throw Exception("$label timed out after ${syncTimeoutMs}ms")</ID>
+    <ID>TooGenericExceptionThrown:FilterSync.kt$throw Exception("$label timed out after ${syncTimeoutMs}ms")</ID>
+  </CurrentIssues>
+</SmellBaseline>

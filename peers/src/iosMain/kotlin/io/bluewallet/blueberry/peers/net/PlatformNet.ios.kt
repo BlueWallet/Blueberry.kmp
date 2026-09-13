@@ -219,17 +219,13 @@ private suspend fun connectSocket(
             lastError = posixError("socket")
             continue
         }
-        try {
-            val rc = connectFd(fd, ai.addr)
-            if (rc == 0) {
-                enableSocketOptions(fd)
-                return PosixByteDuplex(fd)
-            }
-            lastError = posixError("connect")
-            platform.posix.close(fd)
-        } catch (e: CancellationException) {
-            throw e
+        val rc = connectFd(fd, ai.addr)
+        if (rc == 0) {
+            enableSocketOptions(fd)
+            return PosixByteDuplex(fd)
         }
+        lastError = posixError("connect")
+        platform.posix.close(fd)
     }
     throw IllegalStateException(lastError)
 }
