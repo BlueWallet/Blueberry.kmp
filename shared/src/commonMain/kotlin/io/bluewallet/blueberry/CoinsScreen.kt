@@ -98,10 +98,10 @@ fun CoinsScreen(
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             BtcAmountText(sats = row.valueSats, color = BwColors.Ink)
-                            val name = row.name
-                            if (name != null) {
+                            val caption = coinsRowCaption(row.ageLabel, row.name)
+                            if (caption != null) {
                                 Text(
-                                    text = name,
+                                    text = caption,
                                     color = BwColors.InkMuted,
                                     fontFamily = BwFontFamily,
                                     fontSize = BwType.CaptionSize,
