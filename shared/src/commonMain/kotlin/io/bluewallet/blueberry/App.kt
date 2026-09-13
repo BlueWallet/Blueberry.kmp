@@ -48,6 +48,7 @@ fun App(databasePath: String) {
         var showSettings by remember { mutableStateOf(false) }
         var showReceive by remember { mutableStateOf(false) }
         var showSend by remember { mutableStateOf(false) }
+        var showCoins by remember { mutableStateOf(false) }
         val opened = remember(databasePath, session) { OpenedDatabase(databasePath) }
         DisposableEffect(opened) {
             onDispose { opened.close() }
@@ -95,6 +96,14 @@ fun App(databasePath: String) {
             )
             return@BwTheme
         }
+        if (showCoins && runtime != null) {
+            CoinsScreen(
+                runtime = runtime,
+                db = db,
+                onBack = { showCoins = false },
+            )
+            return@BwTheme
+        }
         if (showSettings) {
             SettingsScreen(
                 databaseSize = remember(databasePath, session) {
@@ -133,6 +142,7 @@ fun App(databasePath: String) {
                 onOpenSettings = { showSettings = true },
                 onOpenReceive = { showReceive = true },
                 onOpenSend = { showSend = true },
+                onOpenCoins = { showCoins = true },
                 onDetailedSyncChange = { value ->
                     scope.launch(Dispatchers.Default) { saveHomeDetailedSync(db, value) }
                 },

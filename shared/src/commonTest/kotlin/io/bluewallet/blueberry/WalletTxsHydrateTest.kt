@@ -208,6 +208,37 @@ class WalletTxsHydrateTest {
         hydrateWallet(db, store, wallet, 2)
         assertTrue(store.get().utxos.isNotEmpty(), "second hydrate with wallet must not skip UTXO rebuild")
         assertEquals(9_664L, store.get().utxos[0].valueSats)
+        assertEquals(false, store.get().utxos[0].isChange)
+        db.close()
+    }
+
+    @Test
+    fun hydrate_marks_internal_utxos_as_change() {
+        val db = createSqliteDatabase(":memory:")
+        val secret =
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        saveWalletSecret(db, secret)
+        val wallet = createWallet(db)
+        val ext = wallet.snapshot().addresses.first { !it.change && it.index == 0 }
+        val intern = wallet.snapshot().addresses.first { it.change && it.index == 0 }
+        val prevHash = ByteArray(32).also { it[0] = 7 }
+        val fund = Transaction(
+            2L,
+            listOf(TxIn(OutPoint(TxHash(prevHash), 0L), 0xffffffffL)),
+            listOf(
+                TxOut(Satoshi(50_000L), ext.scriptPubKey),
+                TxOut(Satoshi(25_000L), intern.scriptPubKey),
+            ),
+            0L,
+        )
+        db.transactions.upsert(
+            StoredTx(fund.txid.toString(), 800_000, 0, "aa".repeat(32), Transaction.write(fund), 75_000L),
+        )
+        val store = createWalletTxsStore()
+        hydrateWallet(db, store, wallet, 1)
+        val byValue = store.get().utxos.associateBy { it.valueSats }
+        assertEquals(false, byValue.getValue(50_000L).isChange)
+        assertEquals(true, byValue.getValue(25_000L).isChange)
         db.close()
     }
 

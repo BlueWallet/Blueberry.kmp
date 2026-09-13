@@ -64,6 +64,7 @@ fun PeersScreen(
     onOpenSettings: () -> Unit,
     onOpenReceive: () -> Unit,
     onOpenSend: () -> Unit,
+    onOpenCoins: () -> Unit,
     onDetailedSyncChange: (Boolean) -> Unit,
 ) {
     var counts by remember { mutableStateOf(store.get()) }
@@ -258,7 +259,7 @@ fun PeersScreen(
             fontSize = BwType.LabelSize,
             fontWeight = BwType.Label,
         )
-        CoinsPanel(utxos = walletTxs.utxos)
+        CoinsPanel(utxos = walletTxs.utxos, onClick = onOpenCoins)
         Text(
             text = "Transactions",
             color = BwColors.InkSecondary,
