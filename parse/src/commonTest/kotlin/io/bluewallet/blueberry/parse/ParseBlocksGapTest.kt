@@ -20,8 +20,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-private fun blockBytesPaying(script: ByteArray, value: Long): ByteArray =
-    wrapBlock(coinbaseLikeReceive(script, value))
+private fun blockBytesPaying(
+    script: ByteArray,
+    value: Long,
+): ByteArray = wrapBlock(coinbaseLikeReceive(script, value))
 
 class ParseBlocksGapTest {
     @Test
@@ -48,10 +50,11 @@ class ParseBlocksGapTest {
             bus.on(Event.FiltersProgress) { progress.add(it.downloaded to it.total) }
 
             val watch = createWallet(db, CreateWalletOptions(secret = ABANDON_MNEMONIC, addressGap = window))
-            val mod = createParseBlocksModule(
-                ModuleContext(bus, db),
-                ParseBlocksOptions(wallet = watch, idleDelayMs = 50, blockGapMs = 0),
-            )
+            val mod =
+                createParseBlocksModule(
+                    ModuleContext(bus, db),
+                    ParseBlocksOptions(wallet = watch, idleDelayMs = 50, blockGapMs = 0),
+                )
             mod.start()
             bus.emit(Event.SyncIdle, SyncIdlePayload(at = 1))
             waitFor(10_000) { loadWatchGaps(db).external == grown && progress.isNotEmpty() }
@@ -64,58 +67,62 @@ class ParseBlocksGapTest {
         }
 
     @Test
-    fun gap_growth_aborts_the_current_batch_so_later_heights_use_the_new_watchlist() = runBlocking {
-        val bus = createMessageBus()
-        val db = createSqliteDatabase(":memory:")
-        val wide = deriveWatchWallet(ABANDON_MNEMONIC, 60)
-        val danger = wide.addresses.first { !it.change && it.index == 25 }
-        val next = wide.addresses.first { !it.change && it.index == 45 }
+    fun gap_growth_aborts_the_current_batch_so_later_heights_use_the_new_watchlist() =
+        runBlocking {
+            val bus = createMessageBus()
+            val db = createSqliteDatabase(":memory:")
+            val wide = deriveWatchWallet(ABANDON_MNEMONIC, 60)
+            val danger = wide.addresses.first { !it.change && it.index == 25 }
+            val next = wide.addresses.first { !it.change && it.index == 45 }
 
-        db.blocks.insert(DownloadedBlock(3, "dd".repeat(32), blockBytesPaying(danger.scriptPubKey, 1000)))
-        db.blocks.insert(DownloadedBlock(4, "cc".repeat(32), blockBytesPaying(next.scriptPubKey, 2000)))
+            db.blocks.insert(DownloadedBlock(3, "dd".repeat(32), blockBytesPaying(danger.scriptPubKey, 1000)))
+            db.blocks.insert(DownloadedBlock(4, "cc".repeat(32), blockBytesPaying(next.scriptPubKey, 2000)))
 
-        val watch = createWallet(db, CreateWalletOptions(secret = ABANDON_MNEMONIC, addressGap = 40))
-        val mod = createParseBlocksModule(
-            ModuleContext(bus, db),
-            ParseBlocksOptions(wallet = watch, idleDelayMs = 50, batchSize = 8, blockGapMs = 0),
-        )
-        mod.start()
-        bus.emit(Event.SyncIdle, SyncIdlePayload(at = 1))
-        waitFor(10_000) {
-            usedWatchIndexes(db.transactions.list().map { it.tx }, watch.snapshot()).external.contains(45)
+            val watch = createWallet(db, CreateWalletOptions(secret = ABANDON_MNEMONIC, addressGap = 40))
+            val mod =
+                createParseBlocksModule(
+                    ModuleContext(bus, db),
+                    ParseBlocksOptions(wallet = watch, idleDelayMs = 50, batchSize = 8, blockGapMs = 0),
+                )
+            mod.start()
+            bus.emit(Event.SyncIdle, SyncIdlePayload(at = 1))
+            waitFor(10_000) {
+                usedWatchIndexes(db.transactions.list().map { it.tx }, watch.snapshot()).external.contains(45)
+            }
+            assertEquals(2, db.transactions.count())
+            assertTrue(loadWatchGaps(db).external >= 90)
+            mod.stop()
+            db.close()
         }
-        assertEquals(2, db.transactions.count())
-        assertTrue(loadWatchGaps(db).external >= 90)
-        mod.stop()
-        db.close()
-    }
 
     @Test
-    fun gap_growth_re_parses_already_downloaded_blocks_for_newly_watched_indexes() = runBlocking {
-        val bus = createMessageBus()
-        val db = createSqliteDatabase(":memory:")
-        val wide = deriveWatchWallet(ABANDON_MNEMONIC, 60)
-        val danger = wide.addresses.first { !it.change && it.index == 25 }
-        val next = wide.addresses.first { !it.change && it.index == 45 }
+    fun gap_growth_re_parses_already_downloaded_blocks_for_newly_watched_indexes() =
+        runBlocking {
+            val bus = createMessageBus()
+            val db = createSqliteDatabase(":memory:")
+            val wide = deriveWatchWallet(ABANDON_MNEMONIC, 60)
+            val danger = wide.addresses.first { !it.change && it.index == 25 }
+            val next = wide.addresses.first { !it.change && it.index == 45 }
 
-        db.blocks.insert(DownloadedBlock(4, "cc".repeat(32), blockBytesPaying(next.scriptPubKey, 2000)))
-        db.parsedBlocks.mark(4)
-        db.blocks.insert(DownloadedBlock(3, "dd".repeat(32), blockBytesPaying(danger.scriptPubKey, 1000)))
+            db.blocks.insert(DownloadedBlock(4, "cc".repeat(32), blockBytesPaying(next.scriptPubKey, 2000)))
+            db.parsedBlocks.mark(4)
+            db.blocks.insert(DownloadedBlock(3, "dd".repeat(32), blockBytesPaying(danger.scriptPubKey, 1000)))
 
-        val watch = createWallet(db, CreateWalletOptions(secret = ABANDON_MNEMONIC, addressGap = 40))
-        val mod = createParseBlocksModule(
-            ModuleContext(bus, db),
-            ParseBlocksOptions(wallet = watch, idleDelayMs = 50, blockGapMs = 0),
-        )
-        mod.start()
-        bus.emit(Event.SyncIdle, SyncIdlePayload(at = 1))
-        waitFor(10_000) {
-            usedWatchIndexes(db.transactions.list().map { it.tx }, watch.snapshot()).external.contains(45)
+            val watch = createWallet(db, CreateWalletOptions(secret = ABANDON_MNEMONIC, addressGap = 40))
+            val mod =
+                createParseBlocksModule(
+                    ModuleContext(bus, db),
+                    ParseBlocksOptions(wallet = watch, idleDelayMs = 50, blockGapMs = 0),
+                )
+            mod.start()
+            bus.emit(Event.SyncIdle, SyncIdlePayload(at = 1))
+            waitFor(10_000) {
+                usedWatchIndexes(db.transactions.list().map { it.tx }, watch.snapshot()).external.contains(45)
+            }
+            assertTrue(loadWatchGaps(db).external >= 90)
+            mod.stop()
+            db.close()
         }
-        assertTrue(loadWatchGaps(db).external >= 90)
-        mod.stop()
-        db.close()
-    }
 
     @Test
     fun gap_growth_rematches_from_header_floor_so_earlier_new_index_payments_are_found() =
@@ -147,10 +154,11 @@ class ParseBlocksGapTest {
             db.blocks.insert(DownloadedBlock(5, "dd".repeat(32), blockBytesPaying(danger.scriptPubKey, 1000)))
 
             val watch = createWallet(db, CreateWalletOptions(secret = ABANDON_MNEMONIC, addressGap = 40))
-            val mod = createParseBlocksModule(
-                ModuleContext(bus, db),
-                ParseBlocksOptions(wallet = watch, idleDelayMs = 50, blockGapMs = 0),
-            )
+            val mod =
+                createParseBlocksModule(
+                    ModuleContext(bus, db),
+                    ParseBlocksOptions(wallet = watch, idleDelayMs = 50, blockGapMs = 0),
+                )
             mod.start()
             bus.emit(Event.SyncIdle, SyncIdlePayload(at = 1))
             waitFor(10_000) {

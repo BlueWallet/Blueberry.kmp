@@ -11,11 +11,22 @@ data class SendDetails(
     val paymentLabel: String,
 )
 
-sealed class SendField { data object Address : SendField(); data object Amount : SendField(); data object Label : SendField() }
+sealed class SendField {
+    data object Address : SendField()
+
+    data object Amount : SendField()
+
+    data object Label : SendField()
+}
 
 sealed class SendDetailsValidation {
-    data class Ok(val details: SendDetails) : SendDetailsValidation()
-    data class Invalid(val field: SendField) : SendDetailsValidation()
+    data class Ok(
+        val details: SendDetails,
+    ) : SendDetailsValidation()
+
+    data class Invalid(
+        val field: SendField,
+    ) : SendDetailsValidation()
 }
 
 fun validateSendDetails(

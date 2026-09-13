@@ -21,10 +21,11 @@ fun PillButton(
         onClick = onClick,
         modifier = modifier.height(32.dp),
         shape = RoundedCornerShape(50),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = BwColors.Accent,
-            contentColor = BwColors.OnAccent,
-        ),
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor = BwColors.Accent,
+                contentColor = BwColors.OnAccent,
+            ),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
     ) {

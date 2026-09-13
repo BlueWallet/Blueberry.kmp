@@ -61,11 +61,12 @@ fun CoinsScreen(
     }
     val rows = coinsRows(snap.utxos)
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BwColors.Paper)
-            .safeDrawingPadding()
-            .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(BwColors.Paper)
+                .safeDrawingPadding()
+                .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         ScreenHeader(title = "Coins", onBack = onBack)
@@ -80,21 +81,22 @@ fun CoinsScreen(
             LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 items(rows, key = { it.key }) { row ->
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                editingKey = row.key
-                                draft = row.name.orEmpty()
-                            }
-                            .padding(vertical = BwSpace.Gap),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    editingKey = row.key
+                                    draft = row.name.orEmpty()
+                                }.padding(vertical = BwSpace.Gap),
                         horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
-                            modifier = Modifier
-                                .size(CircleSize)
-                                .clip(CircleShape)
-                                .background(Color(row.circleArgb)),
+                            modifier =
+                                Modifier
+                                    .size(CircleSize)
+                                    .clip(CircleShape)
+                                    .background(Color(row.circleArgb)),
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             BtcAmountText(sats = row.valueSats, color = BwColors.Ink)
@@ -115,11 +117,12 @@ fun CoinsScreen(
                                 color = BwColors.InkSecondary,
                                 fontFamily = BwFontFamily,
                                 fontSize = BwType.CaptionSize,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .background(BwColors.Card)
-                                    .border(BwSpace.Hairline, BwColors.Border, RoundedCornerShape(50))
-                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                                modifier =
+                                    Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(BwColors.Card)
+                                        .border(BwSpace.Hairline, BwColors.Border, RoundedCornerShape(50))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp),
                             )
                         }
                     }

@@ -38,7 +38,10 @@ private const val GENESIS_BLOCK_HEX =
         "4104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac" +
         "00000000"
 
-private suspend fun answerVersionVerack(protocol: Protocol, port: Int) {
+private suspend fun answerVersionVerack(
+    protocol: Protocol,
+    port: Int,
+) {
     val msg = protocol.readMessage()
     check(msg is Message.Version) { "expected version" }
     protocol.writeMessage(
@@ -64,57 +67,67 @@ private suspend fun answerVersionVerack(protocol: Protocol, port: Int) {
 
 class BlockSyncTest {
     @Test
-    fun maps_connect_failure_to_err() = runBlocking {
-        val result = openBlockSession(
-            "1.2.3.4",
-            8333,
-            BlockSyncOptions(
-                connectTimeoutMs = 100,
-                syncTimeoutMs = 100,
-                connect = { _, _ -> error("ECONNREFUSED") },
-            ),
-        )
-        assertIs<BlockBatchResult.Err>(result)
-        Unit
-    }
+    fun maps_connect_failure_to_err() =
+        runBlocking {
+            val result =
+                openBlockSession(
+                    "1.2.3.4",
+                    8333,
+                    BlockSyncOptions(
+                        connectTimeoutMs = 100,
+                        syncTimeoutMs = 100,
+                        connect = { _, _ -> error("ECONNREFUSED") },
+                    ),
+                )
+            assertIs<BlockBatchResult.Err>(result)
+            Unit
+        }
 
     @Test
-    fun getBlock_getdata_uses_MSG_WITNESS_BLOCK() = runBlocking {
-        val (clientSide, serverSide) = pairedByteDuplexes()
-        val hash = ByteArray(32) { 0xab.toByte() }
-        val genesis = decodeBlock(hexToBytes(GENESIS_BLOCK_HEX))
+    fun getBlock_getdata_uses_MSG_WITNESS_BLOCK() =
+        runBlocking {
+            val (clientSide, serverSide) = pairedByteDuplexes()
+            val hash = ByteArray(32) { 0xab.toByte() }
+            val genesis = decodeBlock(hexToBytes(GENESIS_BLOCK_HEX))
 
-        coroutineScope {
-            val server = async {
-                val protocol = Protocol.connect(
-                    serverSide,
-                    ProtocolOptions(role = Role.Responder, network = Networks.mainnet),
-                )
-                answerVersionVerack(protocol, 8333)
-                val msg = protocol.readMessage()
-                assertIs<Message.GetData>(msg)
-                assertEquals(1, msg.payload.inventory.size)
-                assertEquals(MSG_WITNESS_BLOCK, msg.payload.inventory[0].type)
-                assertTrue(msg.payload.inventory[0].hash.contentEquals(hash))
-                assertNotEquals(MSG_BLOCK, msg.payload.inventory[0].type)
-                protocol.writeMessage(Message.Block(genesis))
-                protocol.close()
+            coroutineScope {
+                val server =
+                    async {
+                        val protocol =
+                            Protocol.connect(
+                                serverSide,
+                                ProtocolOptions(role = Role.Responder, network = Networks.mainnet),
+                            )
+                        answerVersionVerack(protocol, 8333)
+                        val msg = protocol.readMessage()
+                        assertIs<Message.GetData>(msg)
+                        assertEquals(1, msg.payload.inventory.size)
+                        assertEquals(MSG_WITNESS_BLOCK, msg.payload.inventory[0].type)
+                        assertTrue(
+                            msg.payload.inventory[0]
+                                .hash
+                                .contentEquals(hash),
+                        )
+                        assertNotEquals(MSG_BLOCK, msg.payload.inventory[0].type)
+                        protocol.writeMessage(Message.Block(genesis))
+                        protocol.close()
+                    }
+
+                val opened =
+                    openBlockSession(
+                        "127.0.0.1",
+                        8333,
+                        BlockSyncOptions(
+                            connectTimeoutMs = 2_000,
+                            syncTimeoutMs = 2_000,
+                            connect = { _, _ -> clientSide },
+                        ),
+                    )
+                val ok = assertIs<BlockBatchResult.Ok<BlockSessionApi>>(opened)
+                val block = ok.value.getBlock(hash)
+                assertEquals(1, block.transactions.size)
+                ok.value.close()
+                server.await()
             }
-
-            val opened = openBlockSession(
-                "127.0.0.1",
-                8333,
-                BlockSyncOptions(
-                    connectTimeoutMs = 2_000,
-                    syncTimeoutMs = 2_000,
-                    connect = { _, _ -> clientSide },
-                ),
-            )
-            val ok = assertIs<BlockBatchResult.Ok<BlockSessionApi>>(opened)
-            val block = ok.value.getBlock(hash)
-            assertEquals(1, block.transactions.size)
-            ok.value.close()
-            server.await()
         }
-    }
 }

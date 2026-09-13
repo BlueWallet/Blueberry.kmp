@@ -30,11 +30,12 @@ fun MetricCard(
 ) {
     val shape = RoundedCornerShape(BwSpace.Radius)
     Row(
-        modifier = modifier
-            .clip(shape)
-            .background(BwColors.Card, shape)
-            .border(BwSpace.Hairline, BwColors.Border, shape)
-            .padding(BwSpace.Card),
+        modifier =
+            modifier
+                .clip(shape)
+                .background(BwColors.Card, shape)
+                .border(BwSpace.Hairline, BwColors.Border, shape)
+                .padding(BwSpace.Card),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
@@ -84,12 +85,13 @@ fun ProgressMetricCard(
 ) {
     val shape = RoundedCornerShape(BwSpace.Radius)
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(BwColors.Card, shape)
-            .border(BwSpace.Hairline, BwColors.Border, shape)
-            .padding(BwSpace.Card),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(BwColors.Card, shape)
+                .border(BwSpace.Hairline, BwColors.Border, shape)
+                .padding(BwSpace.Card),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(

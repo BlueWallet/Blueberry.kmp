@@ -2,8 +2,7 @@ package io.bluewallet.blueberry.parse
 
 import fr.acinq.bitcoin.Transaction
 
-private fun sortTxRows(txs: List<TxRow>): List<TxRow> =
-    txs.sortedWith(compareBy({ it.height }, { it.txIndex }))
+private fun sortTxRows(txs: List<TxRow>): List<TxRow> = txs.sortedWith(compareBy({ it.height }, { it.txIndex }))
 
 private fun applyTxToState(
     tx: Transaction,
@@ -22,22 +21,28 @@ private fun applyTxToState(
     tx.txOut.forEachIndexed { vout, o ->
         if (watch.contains(scriptHex(o.publicKeyScript.toByteArray()))) {
             delta += o.amount.toLong()
-            utxos[outpointKey(tx.txid.toString(), vout)] = WatchUtxo(
-                value = o.amount.toLong(),
-                scriptPubKey = o.publicKeyScript.toByteArray(),
-                height = height,
-            )
+            utxos[outpointKey(tx.txid.toString(), vout)] =
+                WatchUtxo(
+                    value = o.amount.toLong(),
+                    scriptPubKey = o.publicKeyScript.toByteArray(),
+                    height = height,
+                )
         }
     }
     return delta
 }
 
 fun prevoutKey(input: fr.acinq.bitcoin.TxIn): String {
-    val hashBytes = input.outPoint.hash.value.toByteArray()
+    val hashBytes =
+        input.outPoint.hash.value
+            .toByteArray()
     return outpointKey(prevoutTxidDisplay(hashBytes), input.outPoint.index.toInt())
 }
 
-fun buildUtxoMap(txs: List<TxRow>, watchScripts: List<ByteArray>): MutableMap<String, WatchUtxo> {
+fun buildUtxoMap(
+    txs: List<TxRow>,
+    watchScripts: List<ByteArray>,
+): MutableMap<String, WatchUtxo> {
     val watch = watchScripts.map(::scriptHex).toSet()
     val utxos = mutableMapOf<String, WatchUtxo>()
     for (row in sortTxRows(txs)) {
@@ -46,7 +51,10 @@ fun buildUtxoMap(txs: List<TxRow>, watchScripts: List<ByteArray>): MutableMap<St
     return utxos
 }
 
-fun netDeltasForTxs(txs: List<TxRow>, watchScripts: List<ByteArray>): Map<String, Long> {
+fun netDeltasForTxs(
+    txs: List<TxRow>,
+    watchScripts: List<ByteArray>,
+): Map<String, Long> {
     val watch = watchScripts.map(::scriptHex).toSet()
     val utxos = mutableMapOf<String, WatchUtxo>()
     val deltas = mutableMapOf<String, Long>()
@@ -56,7 +64,10 @@ fun netDeltasForTxs(txs: List<TxRow>, watchScripts: List<ByteArray>): Map<String
     return deltas
 }
 
-fun balanceFromTxs(txs: List<TxRow>, watchScripts: List<ByteArray>): BalanceSummary {
+fun balanceFromTxs(
+    txs: List<TxRow>,
+    watchScripts: List<ByteArray>,
+): BalanceSummary {
     val utxos = buildUtxoMap(txs, watchScripts)
     var sats = 0L
     for (utxo in utxos.values) sats += utxo.value

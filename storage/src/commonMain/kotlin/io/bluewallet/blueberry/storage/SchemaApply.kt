@@ -9,15 +9,18 @@ internal fun applySchema(driver: SqlDriver) {
 
 internal expect fun applyPragmas(driver: SqlDriver)
 
-internal fun queryPragmaValue(driver: SqlDriver, pragma: String): String {
-    return driver.executeQuery(
-        identifier = null,
-        sql = "PRAGMA $pragma",
-        mapper = { cursor ->
-            QueryResult.Value(
-                if (cursor.next().value) cursor.getString(0).orEmpty() else "",
-            )
-        },
-        parameters = 0,
-    ).value
-}
+internal fun queryPragmaValue(
+    driver: SqlDriver,
+    pragma: String,
+): String =
+    driver
+        .executeQuery(
+            identifier = null,
+            sql = "PRAGMA $pragma",
+            mapper = { cursor ->
+                QueryResult.Value(
+                    if (cursor.next().value) cursor.getString(0).orEmpty() else "",
+                )
+            },
+            parameters = 0,
+        ).value

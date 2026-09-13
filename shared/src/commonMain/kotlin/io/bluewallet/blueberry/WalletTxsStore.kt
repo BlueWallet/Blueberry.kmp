@@ -3,14 +3,14 @@ package io.bluewallet.blueberry
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.MessageBus
 import io.bluewallet.blueberry.headers.nowMillis
+import io.bluewallet.blueberry.parse.TxRow
 import io.bluewallet.blueberry.parse.buildUtxoMap
-import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.parse.formatBlockTimeLabel
+import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.parse.formatNetDelta
 import io.bluewallet.blueberry.parse.padBlockTimeLabel
 import io.bluewallet.blueberry.parse.shortOutpoint
 import io.bluewallet.blueberry.parse.shortTxid
-import io.bluewallet.blueberry.parse.TxRow
 import io.bluewallet.blueberry.parse.utxoValueBar
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.wallet.Wallet
@@ -58,9 +58,17 @@ data class WalletTxsSnapshot(
 
 interface WalletTxsStore {
     fun get(): WalletTxsSnapshot
+
     fun apply(snapshot: WalletTxsSnapshot)
-    fun setBlockCounts(parsed: Int, total: Int, at: Long? = null)
+
+    fun setBlockCounts(
+        parsed: Int,
+        total: Int,
+        at: Long? = null,
+    )
+
     fun setParsingActive(active: Boolean)
+
     fun subscribe(listener: () -> Unit): () -> Unit
 }
 
@@ -68,7 +76,10 @@ val emptyWalletTxsSnapshot = WalletTxsSnapshot()
 
 private const val MAX_SAMPLES = 8
 
-private data class ParseSample(val at: Long, val downloaded: Int)
+private data class ParseSample(
+    val at: Long,
+    val downloaded: Int,
+)
 
 private data class WalletTxsState(
     val snapshot: WalletTxsSnapshot = emptyWalletTxsSnapshot,
@@ -90,21 +101,25 @@ private fun timeLabelForHeight(
     val hit = cache[height]
     if (hit != null) return hit
     val stored = db.headers.get(height)
-    val label = if (stored == null) {
-        padBlockTimeLabel("#$height")
-    } else {
-        try {
-            val timestamp = decodeBlockHeader(stored.header).timestamp
-            formatBlockTimeLabel(timestamp, nowMs)
-        } catch (_: Throwable) {
+    val label =
+        if (stored == null) {
             padBlockTimeLabel("#$height")
+        } else {
+            try {
+                val timestamp = decodeBlockHeader(stored.header).timestamp
+                formatBlockTimeLabel(timestamp, nowMs)
+            } catch (_: Throwable) {
+                padBlockTimeLabel("#$height")
+            }
         }
-    }
     cache[height] = label
     return label
 }
 
-private fun addAdvancingSample(samples: List<ParseSample>, sample: ParseSample): List<ParseSample> {
+private fun addAdvancingSample(
+    samples: List<ParseSample>,
+    sample: ParseSample,
+): List<ParseSample> {
     val last = samples.lastOrNull()
     if (last != null && sample.downloaded <= last.downloaded) return samples
     val next = samples + sample
@@ -127,7 +142,10 @@ private fun nextProgressSamples(
     return addAdvancingSample(samples, ParseSample(at, downloaded))
 }
 
-private fun estimateEtaMs(samples: List<ParseSample>, total: Int): Long? {
+private fun estimateEtaMs(
+    samples: List<ParseSample>,
+    total: Int,
+): Long? {
     if (samples.size < 2) return null
     val first = samples.first()
     val last = samples.last()
@@ -154,38 +172,46 @@ fun snapshotFromDb(
     var utxos = emptyList<WalletUtxoRow>()
     if (wallet != null) {
         wallet.syncFromDb()
-        val map = buildUtxoMap(
-            stored.map { TxRow(it.txid, it.height, it.txIndex, it.tx) },
-            wallet.scripts(),
-        )
+        val map =
+            buildUtxoMap(
+                stored.map { TxRow(it.txid, it.height, it.txIndex, it.tx) },
+                wallet.scripts(),
+            )
         var maxValue = 0L
         for (u in map.values) {
             if (u.value > maxValue) maxValue = u.value
         }
         val nameByOutpoint = db.utxoNames.list().associate { it.outpoint to it.name }
-        val changeScripts = wallet.snapshot().addresses.filter { it.change }.map { it.scriptPubKey }
-        utxos = map.entries.map { (key, u) ->
-            val (txid, vout) = parseOutpointKey(key)
-            val height = u.height ?: 0
-            WalletUtxoRow(
-                key = key,
-                txid = txid,
-                vout = vout,
-                outpointShort = shortOutpoint(txid, vout),
-                valueSats = u.value,
-                scriptPubKey = u.scriptPubKey,
-                amountLabel = formatBtc(u.value),
-                height = height,
-                ageLabel = timeLabelForHeight(db, height, nowMs, timeLabels),
-                valueBar = utxoValueBar(u.value, maxValue),
-                name = nameByOutpoint[key],
-                isChange = changeScripts.any { it.contentEquals(u.scriptPubKey) },
-            )
-        }.sortedWith(
-            compareByDescending<WalletUtxoRow> { it.height }
-                .thenBy { it.txid }
-                .thenBy { it.vout },
-        )
+        val changeScripts =
+            wallet
+                .snapshot()
+                .addresses
+                .filter { it.change }
+                .map { it.scriptPubKey }
+        utxos =
+            map.entries
+                .map { (key, u) ->
+                    val (txid, vout) = parseOutpointKey(key)
+                    val height = u.height ?: 0
+                    WalletUtxoRow(
+                        key = key,
+                        txid = txid,
+                        vout = vout,
+                        outpointShort = shortOutpoint(txid, vout),
+                        valueSats = u.value,
+                        scriptPubKey = u.scriptPubKey,
+                        amountLabel = formatBtc(u.value),
+                        height = height,
+                        ageLabel = timeLabelForHeight(db, height, nowMs, timeLabels),
+                        valueBar = utxoValueBar(u.value, maxValue),
+                        name = nameByOutpoint[key],
+                        isChange = changeScripts.any { it.contentEquals(u.scriptPubKey) },
+                    )
+                }.sortedWith(
+                    compareByDescending<WalletUtxoRow> { it.height }
+                        .thenBy { it.txid }
+                        .thenBy { it.vout },
+                )
     }
 
     return WalletTxsSnapshot(
@@ -195,17 +221,18 @@ fun snapshotFromDb(
         blocksParsed = db.parsedBlocks.count(),
         blocksTotal = db.blocks.count(),
         etaMs = null,
-        txs = stored.map { tx ->
-            WalletTxRow(
-                txid = tx.txid,
-                shortTxid = shortTxid(tx.txid),
-                height = tx.height,
-                timeLabel = timeLabelForHeight(db, tx.height, nowMs, timeLabels),
-                netDeltaSats = tx.netDeltaSats,
-                netDeltaLabel = formatNetDelta(tx.netDeltaSats),
-                paymentLabel = labelByTxid[tx.txid],
-            )
-        },
+        txs =
+            stored.map { tx ->
+                WalletTxRow(
+                    txid = tx.txid,
+                    shortTxid = shortTxid(tx.txid),
+                    height = tx.height,
+                    timeLabel = timeLabelForHeight(db, tx.height, nowMs, timeLabels),
+                    netDeltaSats = tx.netDeltaSats,
+                    netDeltaLabel = formatNetDelta(tx.netDeltaSats),
+                    paymentLabel = labelByTxid[tx.txid],
+                )
+            },
         utxos = utxos,
         utxosReady = wallet != null,
     )
@@ -227,8 +254,11 @@ private class WalletTxsStoreImpl : WalletTxsStore {
             val cur = state.load()
             if (cur.parsingActive == active) return
             val nextSnap =
-                if (!active && cur.snapshot.etaMs != null) cur.snapshot.copy(etaMs = null)
-                else cur.snapshot
+                if (!active && cur.snapshot.etaMs != null) {
+                    cur.snapshot.copy(etaMs = null)
+                } else {
+                    cur.snapshot
+                }
             val next = WalletTxsState(snapshot = nextSnap, parsingActive = active, samples = emptyList())
             if (state.compareAndSet(cur, next)) {
                 if (nextSnap !== cur.snapshot) emitChange()
@@ -237,7 +267,11 @@ private class WalletTxsStoreImpl : WalletTxsStore {
         }
     }
 
-    override fun setBlockCounts(parsed: Int, total: Int, at: Long?) {
+    override fun setBlockCounts(
+        parsed: Int,
+        total: Int,
+        at: Long?,
+    ) {
         while (true) {
             val cur = state.load()
             val snap = cur.snapshot
@@ -249,25 +283,28 @@ private class WalletTxsStoreImpl : WalletTxsStore {
                 samples = emptyList()
             }
             if (at != null && cur.parsingActive) {
-                samples = nextProgressSamples(
-                    samples,
-                    snap.blocksParsed,
-                    snap.blocksTotal,
-                    at,
-                    parsed,
-                    total,
+                samples =
+                    nextProgressSamples(
+                        samples,
+                        snap.blocksParsed,
+                        snap.blocksTotal,
+                        at,
+                        parsed,
+                        total,
+                    )
+            }
+            val etaMs =
+                when {
+                    !cur.parsingActive -> null
+                    isDone -> 0L
+                    samples.size < 2 -> null
+                    else -> estimateEtaMs(samples, total)
+                }
+            val next =
+                cur.copy(
+                    snapshot = snap.copy(blocksParsed = parsed, blocksTotal = total, etaMs = etaMs),
+                    samples = samples,
                 )
-            }
-            val etaMs = when {
-                !cur.parsingActive -> null
-                isDone -> 0L
-                samples.size < 2 -> null
-                else -> estimateEtaMs(samples, total)
-            }
-            val next = cur.copy(
-                snapshot = snap.copy(blocksParsed = parsed, blocksTotal = total, etaMs = etaMs),
-                samples = samples,
-            )
             if (state.compareAndSet(cur, next)) {
                 emitChange()
                 return
@@ -279,11 +316,12 @@ private class WalletTxsStoreImpl : WalletTxsStore {
         while (true) {
             val cur = state.load()
             if (!cur.parsingActive) {
-                val updated = WalletTxsState(
-                    snapshot = snapshot.copy(etaMs = null),
-                    parsingActive = false,
-                    samples = emptyList(),
-                )
+                val updated =
+                    WalletTxsState(
+                        snapshot = snapshot.copy(etaMs = null),
+                        parsingActive = false,
+                        samples = emptyList(),
+                    )
                 if (state.compareAndSet(cur, updated)) {
                     emitChange()
                     return
@@ -299,14 +337,15 @@ private class WalletTxsStoreImpl : WalletTxsStore {
                 }
                 continue
             }
-            val nextSamples = nextProgressSamples(
-                cur.samples,
-                prev.blocksParsed,
-                prev.blocksTotal,
-                snapshot.at,
-                snapshot.blocksParsed,
-                snapshot.blocksTotal,
-            )
+            val nextSamples =
+                nextProgressSamples(
+                    cur.samples,
+                    prev.blocksParsed,
+                    prev.blocksTotal,
+                    snapshot.at,
+                    snapshot.blocksParsed,
+                    snapshot.blocksTotal,
+                )
             val hasBacklog = snapshot.blocksTotal > snapshot.blocksParsed
             val nextEta = if (hasBacklog) estimateEtaMs(nextSamples, snapshot.blocksTotal) else null
             val updated = cur.copy(snapshot = snapshot.copy(etaMs = nextEta), samples = nextSamples)
@@ -335,11 +374,17 @@ private class WalletTxsStoreImpl : WalletTxsStore {
 
 fun createWalletTxsStore(): WalletTxsStore = WalletTxsStoreImpl()
 
-fun hydrateWalletBlockCounts(db: Database, store: WalletTxsStore) {
+fun hydrateWalletBlockCounts(
+    db: Database,
+    store: WalletTxsStore,
+) {
     store.setBlockCounts(db.parsedBlocks.count(), db.blocks.count())
 }
 
-private fun txSetUnchanged(db: Database, snap: WalletTxsSnapshot): Boolean {
+private fun txSetUnchanged(
+    db: Database,
+    snap: WalletTxsSnapshot,
+): Boolean {
     if (snap.at == null) return false
     val fp = db.transactions.fingerprint()
     return fp.count == snap.txs.size &&

@@ -17,5 +17,4 @@ internal actual fun applyPragmas(driver: SqlDriver) {
     }
 }
 
-private fun SqlDriver.isJdbcFallback(): Boolean =
-    this::class.qualifiedName?.contains("Jdbc") == true
+private fun SqlDriver.isJdbcFallback(): Boolean = this::class.qualifiedName?.contains("Jdbc") == true

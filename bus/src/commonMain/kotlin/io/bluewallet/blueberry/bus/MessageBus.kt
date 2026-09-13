@@ -8,7 +8,10 @@ fun createMessageBus(): MessageBus {
     val listeners = AtomicReference<Map<Event<*>, Set<Any>>>(emptyMap())
 
     return object : MessageBus {
-        override fun <T> on(event: Event<T>, handler: (T) -> Unit): () -> Unit {
+        override fun <T> on(
+            event: Event<T>,
+            handler: (T) -> Unit,
+        ): () -> Unit {
             while (true) {
                 val cur = listeners.load()
                 val next = cur + (event to (cur[event].orEmpty() + handler))
@@ -24,7 +27,10 @@ fun createMessageBus(): MessageBus {
             }
         }
 
-        override fun <T> emit(event: Event<T>, payload: T) {
+        override fun <T> emit(
+            event: Event<T>,
+            payload: T,
+        ) {
             val snapshot = listeners.load()[event] ?: return
             for (handler in snapshot) {
                 try {

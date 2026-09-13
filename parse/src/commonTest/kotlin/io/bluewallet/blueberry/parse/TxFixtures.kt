@@ -24,24 +24,23 @@ fun watchKey0(path: String = "m/84'/0'/0'/0/0"): PublicKey {
     return DeterministicWallet.generate(seed).derivePrivateKey(path).publicKey
 }
 
-fun watchPubkey0(path: String = "m/84'/0'/0'/0/0"): ByteArray =
-    watchKey0(path).value.toByteArray()
+fun watchPubkey0(path: String = "m/84'/0'/0'/0/0"): ByteArray = watchKey0(path).value.toByteArray()
 
-fun p2wpkhScript(pubkey: PublicKey = watchKey0()): ByteArray =
-    Script.write(Script.pay2wpkh(pubkey))
+fun p2wpkhScript(pubkey: PublicKey = watchKey0()): ByteArray = Script.write(Script.pay2wpkh(pubkey))
 
-fun p2pkhScript(pubkey: PublicKey = watchKey0()): ByteArray =
-    Script.write(Script.pay2pkh(pubkey))
+fun p2pkhScript(pubkey: PublicKey = watchKey0()): ByteArray = Script.write(Script.pay2pkh(pubkey))
 
-fun p2shP2wpkhScript(pubkey: PublicKey = watchKey0()): ByteArray =
-    Script.write(Script.pay2sh(Script.pay2wpkh(pubkey)))
+fun p2shP2wpkhScript(pubkey: PublicKey = watchKey0()): ByteArray = Script.write(Script.pay2sh(Script.pay2wpkh(pubkey)))
 
 fun unrelatedScript(): ByteArray = byteArrayOf(0x00, 0x14) + ByteArray(20)
 
-fun compilePushes(vararg chunks: ByteArray): ByteArray =
-    Script.write(chunks.map { OP_PUSHDATA(it) })
+fun compilePushes(vararg chunks: ByteArray): ByteArray = Script.write(chunks.map { OP_PUSHDATA(it) })
 
-fun coinbaseLikeReceive(script: ByteArray, valueSats: Long, prevSalt: Byte = 0): Transaction =
+fun coinbaseLikeReceive(
+    script: ByteArray,
+    valueSats: Long,
+    prevSalt: Byte = 0,
+): Transaction =
     Transaction(
         2L,
         listOf(
@@ -73,7 +72,10 @@ fun witnessSpend(
         0L,
     )
 
-fun knownOutpointSpend(prevTxidDisplay: String, valueSats: Long = 900): Transaction =
+fun knownOutpointSpend(
+    prevTxidDisplay: String,
+    valueSats: Long = 900,
+): Transaction =
     Transaction(
         2L,
         listOf(

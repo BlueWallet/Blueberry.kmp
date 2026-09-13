@@ -20,10 +20,18 @@ data class BroadcastSnapshot(
 
 interface BroadcastStore {
     fun get(): BroadcastSnapshot
-    fun start(id: String, txHex: String)
+
+    fun start(
+        id: String,
+        txHex: String,
+    )
+
     fun applyProgress(payload: BroadcastProgressPayload)
+
     fun applyDone(payload: BroadcastDonePayload)
+
     fun reset()
+
     fun subscribe(listener: () -> Unit): () -> Unit
 }
 
@@ -38,7 +46,10 @@ private class BroadcastStoreImpl : BroadcastStore {
 
     override fun get(): BroadcastSnapshot = state.load()
 
-    override fun start(id: String, txHex: String) {
+    override fun start(
+        id: String,
+        txHex: String,
+    ) {
         state.store(BroadcastSnapshot(id = id, txHex = txHex, phase = "starting"))
         emit()
     }
@@ -64,17 +75,19 @@ private class BroadcastStoreImpl : BroadcastStore {
         if (cur.id != payload.id) return
         state.store(
             when (payload) {
-                is BroadcastDonePayload.Ok -> cur.copy(
-                    id = payload.id,
-                    phase = "success",
-                    peer = payload.peer,
-                    error = null,
-                )
-                is BroadcastDonePayload.Error -> cur.copy(
-                    id = payload.id,
-                    phase = "error",
-                    error = payload.error,
-                )
+                is BroadcastDonePayload.Ok ->
+                    cur.copy(
+                        id = payload.id,
+                        phase = "success",
+                        peer = payload.peer,
+                        error = null,
+                    )
+                is BroadcastDonePayload.Error ->
+                    cur.copy(
+                        id = payload.id,
+                        phase = "error",
+                        error = payload.error,
+                    )
             },
         )
         emit()
@@ -103,7 +116,10 @@ private class BroadcastStoreImpl : BroadcastStore {
 
 fun createBroadcastStore(): BroadcastStore = BroadcastStoreImpl()
 
-fun bindBroadcastEvents(bus: MessageBus, store: BroadcastStore): () -> Unit {
+fun bindBroadcastEvents(
+    bus: MessageBus,
+    store: BroadcastStore,
+): () -> Unit {
     val a = bus.on(Event.BroadcastProgress) { store.applyProgress(it) }
     val b = bus.on(Event.BroadcastDone) { store.applyDone(it) }
     return {
@@ -112,12 +128,13 @@ fun bindBroadcastEvents(bus: MessageBus, store: BroadcastStore): () -> Unit {
     }
 }
 
-fun broadcastJobInFlight(phase: String?): Boolean =
-    phase != null && phase != "success" && phase != "error"
+fun broadcastJobInFlight(phase: String?): Boolean = phase != null && phase != "success" && phase != "error"
 
 sealed class BroadcastEscape {
     data object Ignore : BroadcastEscape()
+
     data object Cancel : BroadcastEscape()
+
     data object ForceClose : BroadcastEscape()
 }
 
@@ -130,7 +147,10 @@ fun inFlightBroadcastEscape(
     return if (cancelArmedForId == id) BroadcastEscape.ForceClose else BroadcastEscape.Cancel
 }
 
-fun prepareUiBroadcast(store: BroadcastStore, txHex: String): String? {
+fun prepareUiBroadcast(
+    store: BroadcastStore,
+    txHex: String,
+): String? {
     val snap = store.get()
     if (broadcastJobInFlight(snap.phase)) return null
     if (snap.phase == "success") {

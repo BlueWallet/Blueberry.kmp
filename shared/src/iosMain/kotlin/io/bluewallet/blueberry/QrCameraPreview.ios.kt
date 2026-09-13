@@ -81,20 +81,22 @@ actual fun QrCameraPreview(
         }
     }
     when {
-        denied -> Text(
-            text = "Camera permission required",
-            color = BwColors.InkMuted,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.BodySize,
-            modifier = modifier,
-        )
-        !granted -> Text(
-            text = "Opening camera…",
-            color = BwColors.InkMuted,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.BodySize,
-            modifier = modifier,
-        )
+        denied ->
+            Text(
+                text = "Camera permission required",
+                color = BwColors.InkMuted,
+                fontFamily = BwFontFamily,
+                fontSize = BwType.BodySize,
+                modifier = modifier,
+            )
+        !granted ->
+            Text(
+                text = "Opening camera…",
+                color = BwColors.InkMuted,
+                fontFamily = BwFontFamily,
+                fontSize = BwType.BodySize,
+                modifier = modifier,
+            )
         else -> IosCameraPreview(callback, modifier)
     }
 }
@@ -114,9 +116,10 @@ private fun IosCameraPreview(
         val input = device?.let { AVCaptureDeviceInput.deviceInputWithDevice(it, null) }
         val output = AVCaptureVideoDataOutput()
         output.alwaysDiscardsLateVideoFrames = true
-        output.videoSettings = mapOf(
-            kCVPixelBufferPixelFormatTypeKey to NSNumber(unsignedInt = kCVPixelFormatType_420YpCbCr8BiPlanarFullRange),
-        )
+        output.videoSettings =
+            mapOf(
+                kCVPixelBufferPixelFormatTypeKey to NSNumber(unsignedInt = kCVPixelFormatType_420YpCbCr8BiPlanarFullRange),
+            )
         output.setSampleBufferDelegate(delegate, queue)
         session.sessionPreset = AVCaptureSessionPreset640x480
         if (input != null && session.canAddInput(input)) session.addInput(input)
@@ -152,8 +155,8 @@ private fun IosCameraPreview(
 @OptIn(ExperimentalForeignApi::class)
 private class IosFrameDelegate(
     private val onGrayFrame: (width: Int, height: Int, gray: ByteArray) -> Unit,
-) : NSObject(), AVCaptureVideoDataOutputSampleBufferDelegateProtocol {
-
+) : NSObject(),
+    AVCaptureVideoDataOutputSampleBufferDelegateProtocol {
     override fun captureOutput(
         output: platform.AVFoundation.AVCaptureOutput,
         didOutputSampleBuffer: CMSampleBufferRef?,

@@ -22,20 +22,22 @@ fun HorizontalProgressBar(
     val fill = progressFillFraction(percent)
     val shape = RoundedCornerShape(50)
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(6.dp)
-            .clip(shape)
-            .background(BwColors.BarTrack),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(shape)
+                .background(BwColors.BarTrack),
         contentAlignment = Alignment.CenterStart,
     ) {
         if (fill > 0f) {
             Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(fill)
-                    .clip(shape)
-                    .background(BwColors.Accent),
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(fill)
+                        .clip(shape)
+                        .background(BwColors.Accent),
             )
         }
     }

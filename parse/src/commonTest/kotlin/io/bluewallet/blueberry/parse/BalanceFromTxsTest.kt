@@ -12,33 +12,37 @@ class BalanceFromTxsTest {
         val pubkey = watchKey0()
         val script = p2wpkhScript(pubkey)
         val receive = coinbaseLikeReceive(script, 1000)
-        val spend = Transaction(
-            2L,
-            listOf(
-                fr.acinq.bitcoin.TxIn(
-                    fr.acinq.bitcoin.OutPoint(
-                        fr.acinq.bitcoin.TxHash(
-                            io.bluewallet.blueberry.wallet.hexToBytes(receive.txid.toString()).reversedArray(),
+        val spend =
+            Transaction(
+                2L,
+                listOf(
+                    fr.acinq.bitcoin.TxIn(
+                        fr.acinq.bitcoin.OutPoint(
+                            fr.acinq.bitcoin.TxHash(
+                                io.bluewallet.blueberry.wallet
+                                    .hexToBytes(receive.txid.toString())
+                                    .reversedArray(),
+                            ),
+                            0L,
                         ),
-                        0L,
-                    ),
-                    fr.acinq.bitcoin.ByteVector.empty,
-                    0xffffffffL,
-                    fr.acinq.bitcoin.ScriptWitness(
-                        listOf(
-                            fr.acinq.bitcoin.ByteVector(ByteArray(64)),
-                            fr.acinq.bitcoin.ByteVector(pubkey.value.toByteArray()),
+                        fr.acinq.bitcoin.ByteVector.empty,
+                        0xffffffffL,
+                        fr.acinq.bitcoin.ScriptWitness(
+                            listOf(
+                                fr.acinq.bitcoin.ByteVector(ByteArray(64)),
+                                fr.acinq.bitcoin.ByteVector(pubkey.value.toByteArray()),
+                            ),
                         ),
                     ),
                 ),
-            ),
-            listOf(fr.acinq.bitcoin.TxOut(fr.acinq.bitcoin.Satoshi(900), unrelatedScript())),
-            0L,
-        )
-        val rows = listOf(
-            TxRow(spend.txid.toString(), 101, 0, Transaction.write(spend)),
-            TxRow(receive.txid.toString(), 100, 0, Transaction.write(receive)),
-        )
+                listOf(fr.acinq.bitcoin.TxOut(fr.acinq.bitcoin.Satoshi(900), unrelatedScript())),
+                0L,
+            )
+        val rows =
+            listOf(
+                TxRow(spend.txid.toString(), 101, 0, Transaction.write(spend)),
+                TxRow(receive.txid.toString(), 100, 0, Transaction.write(receive)),
+            )
         assertEquals(BalanceSummary(0, 0), balanceFromTxs(rows, listOf(script)))
         val deltas = netDeltasForTxs(rows, listOf(script))
         assertEquals(1000, deltas[receive.txid.toString()])
@@ -49,37 +53,40 @@ class BalanceFromTxsTest {
     fun buildUtxoMap_records_height_and_spend_removes_prior_output() {
         val pubkey = watchKey0()
         val script = p2wpkhScript(pubkey)
-        val receive = Transaction(
-            2L,
-            listOf(
-                fr.acinq.bitcoin.TxIn(
-                    fr.acinq.bitcoin.OutPoint(fr.acinq.bitcoin.TxHash(ByteArray(32)), 0xffffffffL),
-                    0xffffffffL,
+        val receive =
+            Transaction(
+                2L,
+                listOf(
+                    fr.acinq.bitcoin.TxIn(
+                        fr.acinq.bitcoin.OutPoint(fr.acinq.bitcoin.TxHash(ByteArray(32)), 0xffffffffL),
+                        0xffffffffL,
+                    ),
                 ),
-            ),
-            listOf(
-                fr.acinq.bitcoin.TxOut(fr.acinq.bitcoin.Satoshi(1000), script),
-                fr.acinq.bitcoin.TxOut(fr.acinq.bitcoin.Satoshi(500), script),
-            ),
-            0L,
-        )
-        val map = buildUtxoMap(
-            listOf(TxRow(receive.txid.toString(), 200, 0, Transaction.write(receive))),
-            listOf(script),
-        )
+                listOf(
+                    fr.acinq.bitcoin.TxOut(fr.acinq.bitcoin.Satoshi(1000), script),
+                    fr.acinq.bitcoin.TxOut(fr.acinq.bitcoin.Satoshi(500), script),
+                ),
+                0L,
+            )
+        val map =
+            buildUtxoMap(
+                listOf(TxRow(receive.txid.toString(), 200, 0, Transaction.write(receive))),
+                listOf(script),
+            )
         assertEquals(1000, map[outpointKey(receive.txid.toString(), 0)]?.value)
         assertEquals(200, map[outpointKey(receive.txid.toString(), 0)]?.height)
         assertEquals(500, map[outpointKey(receive.txid.toString(), 1)]?.value)
         assertEquals(200, map[outpointKey(receive.txid.toString(), 1)]?.height)
 
         val spend = knownOutpointSpend(receive.txid.toString())
-        val afterSpend = buildUtxoMap(
-            listOf(
-                TxRow(receive.txid.toString(), 200, 0, Transaction.write(receive)),
-                TxRow(spend.txid.toString(), 201, 0, Transaction.write(spend)),
-            ),
-            listOf(script),
-        )
+        val afterSpend =
+            buildUtxoMap(
+                listOf(
+                    TxRow(receive.txid.toString(), 200, 0, Transaction.write(receive)),
+                    TxRow(spend.txid.toString(), 201, 0, Transaction.write(spend)),
+                ),
+                listOf(script),
+            )
         assertFalse(afterSpend.containsKey(outpointKey(receive.txid.toString(), 0)))
         assertEquals(500, afterSpend[outpointKey(receive.txid.toString(), 1)]?.value)
         assertEquals(200, afterSpend[outpointKey(receive.txid.toString(), 1)]?.height)

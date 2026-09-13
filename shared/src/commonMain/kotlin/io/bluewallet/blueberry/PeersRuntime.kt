@@ -1,31 +1,31 @@
 package io.bluewallet.blueberry
 
+import io.bluewallet.blueberry.blocks.modules.BlocksDownloadOptions
+import io.bluewallet.blueberry.blocks.modules.createBlocksDownloadModule
 import io.bluewallet.blueberry.boot.loadSyncFromYear
+import io.bluewallet.blueberry.broadcast.createBroadcastModule
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.MessageBus
 import io.bluewallet.blueberry.bus.ModuleStatus
 import io.bluewallet.blueberry.bus.ModuleStatusPayload
 import io.bluewallet.blueberry.bus.createMessageBus
-import io.bluewallet.blueberry.blocks.modules.BlocksDownloadOptions
-import io.bluewallet.blueberry.blocks.modules.createBlocksDownloadModule
-import io.bluewallet.blueberry.parse.modules.ParseBlocksOptions
-import io.bluewallet.blueberry.parse.modules.createParseBlocksModule
 import io.bluewallet.blueberry.filters.modules.FiltersDownloadOptions
 import io.bluewallet.blueberry.filters.modules.FiltersMatchingOptions
 import io.bluewallet.blueberry.filters.modules.createFiltersDownloadModule
 import io.bluewallet.blueberry.filters.modules.createFiltersMatchingModule
 import io.bluewallet.blueberry.headers.consensusForYear
-import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.headers.modules.ChainHeadersOptions
 import io.bluewallet.blueberry.headers.modules.createChainHeadersModule
+import io.bluewallet.blueberry.headers.nowMillis
+import io.bluewallet.blueberry.parse.modules.ParseBlocksOptions
+import io.bluewallet.blueberry.parse.modules.createParseBlocksModule
 import io.bluewallet.blueberry.peers.modules.Module
 import io.bluewallet.blueberry.peers.modules.ModuleContext
 import io.bluewallet.blueberry.peers.modules.PeersDiscoveryOptions
 import io.bluewallet.blueberry.peers.modules.createPeersDiscoveryModule
 import io.bluewallet.blueberry.peers.net.createPlatformNet
-import io.bluewallet.blueberry.sync.modules.createSyncIdleModule
-import io.bluewallet.blueberry.broadcast.createBroadcastModule
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.sync.modules.createSyncIdleModule
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.createWallet
 import kotlinx.coroutines.CancellationException
@@ -36,7 +36,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.concurrent.Volatile
 
-fun bindPeerSocketEvents(bus: MessageBus, db: Database, store: PeerSocketsStore): () -> Unit {
+fun bindPeerSocketEvents(
+    bus: MessageBus,
+    db: Database,
+    store: PeerSocketsStore,
+): () -> Unit {
     val a = bus.on(Event.PeersUpdated) { hydratePeers(db, store) }
     val b = bus.on(Event.PeersSockets) { store.applyEvent(it.kind, it.open) }
     return {
@@ -45,7 +49,9 @@ fun bindPeerSocketEvents(bus: MessageBus, db: Database, store: PeerSocketsStore)
     }
 }
 
-class PeersRuntime(private val db: Database) {
+class PeersRuntime(
+    private val db: Database,
+) {
     val bus: MessageBus = createMessageBus()
     val store: PeerSocketsStore = createPeerSocketsStore()
     val headersStore: HeadersProgressStore = createHeadersProgressStore()
@@ -54,13 +60,15 @@ class PeersRuntime(private val db: Database) {
     val blocksStore: BlocksMatchedStore = createBlocksMatchedStore()
     val walletTxsStore: WalletTxsStore = createWalletTxsStore()
     val broadcastStore: BroadcastStore = createBroadcastStore()
+
     @Volatile var wallet: Wallet? = null
         private set
     private val net = createPlatformNet()
-    private val discovery: Module = createPeersDiscoveryModule(
-        ModuleContext(bus, db),
-        PeersDiscoveryOptions(net = net),
-    )
+    private val discovery: Module =
+        createPeersDiscoveryModule(
+            ModuleContext(bus, db),
+            PeersDiscoveryOptions(net = net),
+        )
     private var headers: Module? = null
     private var filters: Module? = null
     private var matching: Module? = null
@@ -69,6 +77,7 @@ class PeersRuntime(private val db: Database) {
     private var syncIdle: Module? = null
     private var broadcast: Module? = null
     private var unbind: (() -> Unit)? = null
+
     @Volatile private var alive = true
     private var started = false
     private val lifecycleMutex = Mutex()
@@ -102,29 +111,30 @@ class PeersRuntime(private val db: Database) {
         val unbindFilters = bindFilterProgressEvents(bus, db, filtersStore)
         val unbindMatching = bindMatchingProgressEvents(bus, db, matchingStore)
         val unbindBlocks = bindBlocksProgressEvents(bus, db, blocksStore)
-        val sharedWallet = try {
-            withContext(Dispatchers.Default) { createWallet(db) }.also { wallet = it }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            bus.emit(
-                Event.ModuleStatus,
-                ModuleStatusPayload(
-                    module = "parse-blocks",
-                    status = ModuleStatus.ERROR,
-                    detail = e.message ?: e.toString(),
-                ),
-            )
-            bus.emit(
-                Event.ModuleStatus,
-                ModuleStatusPayload(
-                    module = "filters-matching",
-                    status = ModuleStatus.ERROR,
-                    detail = e.message ?: e.toString(),
-                ),
-            )
-            null
-        }
+        val sharedWallet =
+            try {
+                withContext(Dispatchers.Default) { createWallet(db) }.also { wallet = it }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                bus.emit(
+                    Event.ModuleStatus,
+                    ModuleStatusPayload(
+                        module = "parse-blocks",
+                        status = ModuleStatus.ERROR,
+                        detail = e.message ?: e.toString(),
+                    ),
+                )
+                bus.emit(
+                    Event.ModuleStatus,
+                    ModuleStatusPayload(
+                        module = "filters-matching",
+                        status = ModuleStatus.ERROR,
+                        detail = e.message ?: e.toString(),
+                    ),
+                )
+                null
+            }
         val unbindWallet = bindWalletTxsEvents(bus, db, walletTxsStore, sharedWallet)
         val unbindBroadcast = bindBroadcastEvents(bus, broadcastStore)
         unbind = {
@@ -153,10 +163,11 @@ class PeersRuntime(private val db: Database) {
             return
         }
         try {
-            val blocksModule = createBlocksDownloadModule(
-                ModuleContext(bus, db),
-                BlocksDownloadOptions(net = net),
-            )
+            val blocksModule =
+                createBlocksDownloadModule(
+                    ModuleContext(bus, db),
+                    BlocksDownloadOptions(net = net),
+                )
             blocks = blocksModule
             blocksModule.start()
         } catch (e: CancellationException) {
@@ -202,13 +213,14 @@ class PeersRuntime(private val db: Database) {
             )
         }
         try {
-            val headersModule = createChainHeadersModule(
-                ModuleContext(bus, db),
-                ChainHeadersOptions(
-                    net = net,
-                    consensus = consensusForYear(loadSyncFromYear(db)),
-                ),
-            )
+            val headersModule =
+                createChainHeadersModule(
+                    ModuleContext(bus, db),
+                    ChainHeadersOptions(
+                        net = net,
+                        consensus = consensusForYear(loadSyncFromYear(db)),
+                    ),
+                )
             headers = headersModule
             headersModule.start()
         } catch (e: CancellationException) {
@@ -224,10 +236,11 @@ class PeersRuntime(private val db: Database) {
             )
         }
         try {
-            val filtersModule = createFiltersDownloadModule(
-                ModuleContext(bus, db),
-                FiltersDownloadOptions(net = net),
-            )
+            val filtersModule =
+                createFiltersDownloadModule(
+                    ModuleContext(bus, db),
+                    FiltersDownloadOptions(net = net),
+                )
             filters = filtersModule
             filtersModule.start()
         } catch (e: CancellationException) {
@@ -244,10 +257,11 @@ class PeersRuntime(private val db: Database) {
         }
         if (sharedWallet != null) {
             try {
-                val parseModule = createParseBlocksModule(
-                    ModuleContext(bus, db),
-                    ParseBlocksOptions(wallet = sharedWallet),
-                )
+                val parseModule =
+                    createParseBlocksModule(
+                        ModuleContext(bus, db),
+                        ParseBlocksOptions(wallet = sharedWallet),
+                    )
                 parseBlocks = parseModule
                 parseModule.start()
             } catch (e: CancellationException) {
@@ -263,10 +277,11 @@ class PeersRuntime(private val db: Database) {
                 )
             }
             try {
-                val matchingModule = createFiltersMatchingModule(
-                    ModuleContext(bus, db),
-                    FiltersMatchingOptions(wallet = sharedWallet),
-                )
+                val matchingModule =
+                    createFiltersMatchingModule(
+                        ModuleContext(bus, db),
+                        FiltersMatchingOptions(wallet = sharedWallet),
+                    )
                 matching = matchingModule
                 matchingModule.start()
             } catch (e: CancellationException) {

@@ -30,11 +30,12 @@ fun StatusList(
 ) {
     val shape = RoundedCornerShape(BwSpace.Radius)
     Box(
-        modifier = modifier
-            .clip(shape)
-            .background(BwColors.Card, shape)
-            .border(BwSpace.Hairline, BwColors.Border, shape)
-            .padding(vertical = 2.dp),
+        modifier =
+            modifier
+                .clip(shape)
+                .background(BwColors.Card, shape)
+                .border(BwSpace.Hairline, BwColors.Border, shape)
+                .padding(vertical = 2.dp),
         content = content,
     )
 }
@@ -42,11 +43,12 @@ fun StatusList(
 @Composable
 fun StatusDivider() {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 10.dp)
-            .height(BwSpace.Hairline)
-            .background(BwColors.Border),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp)
+                .height(BwSpace.Hairline)
+                .background(BwColors.Border),
     )
 }
 
@@ -61,17 +63,19 @@ fun StatusRow(
     valueContent: (@Composable () -> Unit)? = null,
 ) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 7.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
-            modifier = Modifier
-                .size(7.dp)
-                .clip(CircleShape)
-                .background(dotColor),
+            modifier =
+                Modifier
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(dotColor),
         )
         Text(
             text = label,

@@ -29,7 +29,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -48,11 +47,16 @@ private const val STOP_JOIN_MS = 1_000L
 
 private class DiscoveryState {
     @Volatile var stopped = true
+
     @Volatile var paused = false
+
     @Volatile var syncIdle = false
 }
 
-class ProbeCallOptions(val wantAddr: Boolean = false, val timeoutMs: Long? = null)
+class ProbeCallOptions(
+    val wantAddr: Boolean = false,
+    val timeoutMs: Long? = null,
+)
 
 class PeersDiscoveryOptions(
     val net: PlatformNet,
@@ -76,25 +80,27 @@ fun createPeersDiscoveryModule(
     options: PeersDiscoveryOptions,
 ): Module {
     val port = Networks.mainnet.defaultPort
-    val resolveSeeds = options.resolveSeeds ?: {
-        resolveSeedPeers(MAINNET_DNS_SEEDS, port, options.net.dns)
-    }
+    val resolveSeeds =
+        options.resolveSeeds ?: {
+            resolveSeedPeers(MAINNET_DNS_SEEDS, port, options.net.dns)
+        }
     val probeTimeoutMs = options.probeTimeoutMs ?: Config.peerProbeTimeoutMs
     val retryProbeTimeoutMs = options.retryProbeTimeoutMs ?: Config.peerRetryProbeTimeoutMs
     val addrTimeoutMs = options.addrTimeoutMs ?: Config.peerAddrTimeoutMs
     val crawlIntervalMs = options.crawlIntervalMs ?: Config.peerCrawlIntervalMs
-    val probe = options.probe ?: { host, p, call ->
-        probePeer(
-            host,
-            p,
-            ProbeOptions(
-                timeoutMs = call.timeoutMs ?: probeTimeoutMs,
-                addrTimeoutMs = addrTimeoutMs,
-                wantAddr = call.wantAddr,
-                connect = options.net.connect,
-            ),
-        )
-    }
+    val probe =
+        options.probe ?: { host, p, call ->
+            probePeer(
+                host,
+                p,
+                ProbeOptions(
+                    timeoutMs = call.timeoutMs ?: probeTimeoutMs,
+                    addrTimeoutMs = addrTimeoutMs,
+                    wantAddr = call.wantAddr,
+                    connect = options.net.connect,
+                ),
+            )
+        }
     val concurrency = options.concurrency ?: Config.peerConcurrency
     val idleDelayMs = options.idleDelayMs ?: 500L
     val now = options.now ?: { currentTimeMillis() }
@@ -127,30 +133,35 @@ fun createPeersDiscoveryModule(
     }
 
     fun pendingBlockDownloads(): Boolean =
-        ctx.db.matchedBlocks.listNeedingDownload(1).isNotEmpty()
+        ctx.db.matchedBlocks
+            .listNeedingDownload(1)
+            .isNotEmpty()
 
     fun unusedAliveNetworkCount(): Int =
-        ctx.db.peers.listAliveWithServices(
-            NODE_NETWORK,
-            minAliveBlockPeers,
-            AliveServiceOptions(unusedForBlocks = true),
-        ).size
+        ctx.db.peers
+            .listAliveWithServices(
+                NODE_NETWORK,
+                minAliveBlockPeers,
+                AliveServiceOptions(unusedForBlocks = true),
+            ).size
 
-    fun needsBlockPeers(): Boolean =
-        pendingBlockDownloads() && unusedAliveNetworkCount() < minAliveBlockPeers
+    fun needsBlockPeers(): Boolean = pendingBlockDownloads() && unusedAliveNetworkCount() < minAliveBlockPeers
 
     fun needsMoreBlockAddrs(): Boolean =
         needsBlockPeers() &&
-            ctx.db.peers.listUnprobedWithServicesUnused(NODE_NETWORK, minAliveBlockPeers).size <
-                minAliveBlockPeers
+            ctx.db.peers
+                .listUnprobedWithServicesUnused(NODE_NETWORK, minAliveBlockPeers)
+                .size <
+            minAliveBlockPeers
 
-    fun reseedEveryMs(): Long =
-        if (needsBlockPeers()) Config.peerDnsReseedWhenBlocksMs else reseedIntervalMs
+    fun reseedEveryMs(): Long = if (needsBlockPeers()) Config.peerDnsReseedWhenBlocksMs else reseedIntervalMs
 
     fun refreshPause() {
         val wantPause =
             state.syncIdle &&
-                ctx.db.peers.listAlive().isNotEmpty() &&
+                ctx.db.peers
+                    .listAlive()
+                    .isNotEmpty() &&
                 !pendingBlockDownloads()
         if (wantPause == state.paused) return
         state.paused = wantPause
@@ -186,7 +197,10 @@ fun createPeersDiscoveryModule(
         if (state.stopped) return
         if (durableWake.exchange(false)) return
         val done = CompletableDeferred<Unit>()
-        val complete = { done.complete(Unit); Unit }
+        val complete = {
+            done.complete(Unit)
+            Unit
+        }
         wake = complete
         if (durableWake.exchange(false)) complete()
         try {
@@ -218,12 +232,19 @@ fun createPeersDiscoveryModule(
     }
 
     suspend fun bootstrap() {
-        if (ctx.db.peers.listAlive().isNotEmpty()) return
+        if (ctx.db.peers
+                .listAlive()
+                .isNotEmpty()
+        ) {
+            return
+        }
         pullSeeds()
     }
 
     fun aliveCompactFilterCount(): Int =
-        ctx.db.peers.listAliveWithServices(NODE_COMPACT_FILTERS.toULong(), minAliveCompactFilters).size
+        ctx.db.peers
+            .listAliveWithServices(NODE_COMPACT_FILTERS.toULong(), minAliveCompactFilters)
+            .size
 
     suspend fun maybeReseed() {
         if (dnsInFlight) return
@@ -241,16 +262,24 @@ fun createPeersDiscoveryModule(
         }
     }
 
-    fun takeProbeBatch(limit: Int, inflightKeys: Set<String>): List<Peer> {
+    fun takeProbeBatch(
+        limit: Int,
+        inflightKeys: Set<String>,
+    ): List<Peer> {
         if (limit <= 0) return emptyList()
         val picked = mutableListOf<Peer>()
         val seen = inflightKeys.toMutableSet()
         val t = now()
+
         fun due(peer: Peer): Boolean {
             val last = peer.lastProbedAt ?: return true
             return t - last >= probeTimeoutFor(peer)
         }
-        fun take(peers: List<Peer>, max: Int = limit) {
+
+        fun take(
+            peers: List<Peer>,
+            max: Int = limit,
+        ) {
             for (peer in peers) {
                 if (picked.size >= max) return
                 val key = "${peer.host}:${peer.port}"
@@ -262,20 +291,22 @@ fun createPeersDiscoveryModule(
         if (aliveCompactFilterCount() < minAliveCompactFilters) {
             val cfMax = if (limit < 2) limit else ceil(limit / 2.0).toInt()
             take(
-                ctx.db.peers.listWithServices(
-                    NODE_COMPACT_FILTERS.toULong(),
-                    minAliveCompactFilters + concurrency + 32,
-                ).filter { !it.alive && due(it) },
+                ctx.db.peers
+                    .listWithServices(
+                        NODE_COMPACT_FILTERS.toULong(),
+                        minAliveCompactFilters + concurrency + 32,
+                    ).filter { !it.alive && due(it) },
                 cfMax,
             )
         }
         if (needsBlockPeers() && picked.size < limit) {
             val retryMax = if (limit < 2) limit else ceil(limit / 2.0).toInt()
             take(
-                ctx.db.peers.listOldestDeadWithServices(
-                    NODE_NETWORK,
-                    retryMax + concurrency + 32,
-                ).filter { due(it) },
+                ctx.db.peers
+                    .listOldestDeadWithServices(
+                        NODE_NETWORK,
+                        retryMax + concurrency + 32,
+                    ).filter { due(it) },
                 (picked.size + retryMax).coerceAtMost(limit),
             )
         }
@@ -291,7 +322,8 @@ fun createPeersDiscoveryModule(
         }
         if (picked.size < limit) {
             take(
-                ctx.db.peers.listProbeQueue(concurrency + inflightKeys.size + 16)
+                ctx.db.peers
+                    .listProbeQueue(concurrency + inflightKeys.size + 16)
                     .filter { due(it) },
             )
         }
@@ -328,11 +360,12 @@ fun createPeersDiscoveryModule(
                 val spawnedEpoch = epoch
                 moduleScope.launch {
                     try {
-                        val result = probe(
-                            next.host,
-                            next.port,
-                            ProbeCallOptions(wantAddr = wantAddr, timeoutMs = timeoutMs),
-                        )
+                        val result =
+                            probe(
+                                next.host,
+                                next.port,
+                                ProbeCallOptions(wantAddr = wantAddr, timeoutMs = timeoutMs),
+                            )
                         if (state.stopped || spawnedEpoch != epoch) return@launch
                         val probedAt = now()
                         ctx.db.transaction {
@@ -412,17 +445,20 @@ fun createPeersDiscoveryModule(
             val serial = Dispatchers.Default.limitedParallelism(1)
             val moduleScope = CoroutineScope(job + serial)
             scope = moduleScope
-            unsubIdle = ctx.bus.on(Event.SyncIdle) {
-                state.syncIdle = true
-                refreshPause()
-            }
-            unsubCatchup = ctx.bus.on(Event.SyncCatchup) {
-                state.syncIdle = false
-                refreshPause()
-            }
-            unsubPeers = ctx.bus.on(Event.PeersUpdated) {
-                if (state.syncIdle) refreshPause()
-            }
+            unsubIdle =
+                ctx.bus.on(Event.SyncIdle) {
+                    state.syncIdle = true
+                    refreshPause()
+                }
+            unsubCatchup =
+                ctx.bus.on(Event.SyncCatchup) {
+                    state.syncIdle = false
+                    refreshPause()
+                }
+            unsubPeers =
+                ctx.bus.on(Event.PeersUpdated) {
+                    if (state.syncIdle) refreshPause()
+                }
             moduleScope.launch { runCatching { bootstrap() } }
             detachLoop(ctx, "peers-discovery", moduleScope.launch { runLoop() })
             ctx.bus.emit(

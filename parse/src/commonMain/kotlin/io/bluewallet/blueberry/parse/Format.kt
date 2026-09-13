@@ -1,12 +1,18 @@
 package io.bluewallet.blueberry.parse
 
-fun shortTxid(txid: String, keep: Int = 8): String {
+fun shortTxid(
+    txid: String,
+    keep: Int = 8,
+): String {
     if (txid.length <= keep * 2) return txid
     return "${txid.substring(0, keep)}…${txid.substring(txid.length - keep)}"
 }
 
 /** First 6 hex chars of txid + ":" + vout (Send UTXO list). */
-fun shortOutpoint(txid: String, vout: Int): String = "${txid.substring(0, 6)}:$vout"
+fun shortOutpoint(
+    txid: String,
+    vout: Int,
+): String = "${txid.substring(0, 6)}:$vout"
 
 private val BAR_PARTIAL = arrayOf("", "▏", "▎", "▍", "▌", "▋", "▊", "▉")
 
@@ -14,7 +20,11 @@ private val BAR_PARTIAL = arrayOf("", "▏", "▎", "▍", "▌", "▋", "▊", 
  * Fixed-width relative bar: █ full cells, eighth partials, ░ empty track.
  * Max value fills the width; any positive dust keeps at least ▏.
  */
-fun utxoValueBar(value: Long, maxValue: Long, width: Int = 30): String {
+fun utxoValueBar(
+    value: Long,
+    maxValue: Long,
+    width: Int = 30,
+): String {
     if (value <= 0L || maxValue <= 0L || width <= 0) return ""
     if (value >= maxValue) return "█".repeat(width)
 
@@ -30,7 +40,10 @@ fun utxoValueBar(value: Long, maxValue: Long, width: Int = 30): String {
 }
 
 /** 0..100 relative fill; any positive dust stays at least 1%. */
-fun utxoValuePercent(value: Long, maxValue: Long): Int {
+fun utxoValuePercent(
+    value: Long,
+    maxValue: Long,
+): Int {
     if (value <= 0L || maxValue <= 0L) return 0
     if (value >= maxValue) return 100
     return ((value * 100.0) / maxValue).toInt().coerceIn(1, 99)
@@ -44,18 +57,22 @@ data class BtcParts(
 )
 
 /** Split sats for trailing-zero styling. All-zero frac peels the whole fraction. */
-fun splitBtc(sats: Long, plus: Boolean = false): BtcParts {
+fun splitBtc(
+    sats: Long,
+    plus: Boolean = false,
+): BtcParts {
     val neg = sats < 0
     val abs = if (neg) -sats else sats
     val whole = (abs / 100_000_000L).toString()
     val frac = (abs % 100_000_000L).toString().padStart(8, '0')
     var end = 8
     while (end > 0 && frac[end - 1] == '0') end--
-    val sign = when {
-        neg -> "-"
-        plus && sats > 0 -> "+"
-        else -> ""
-    }
+    val sign =
+        when {
+            neg -> "-"
+            plus && sats > 0 -> "+"
+            else -> ""
+        }
     return BtcParts(
         sign = sign,
         whole = whole,
@@ -70,7 +87,10 @@ data class BtcStyled(
 )
 
 /** Significant span vs muted span (dot joins trailing when the fraction is all zeros). */
-fun styleBtc(sats: Long, plus: Boolean = false): BtcStyled {
+fun styleBtc(
+    sats: Long,
+    plus: Boolean = false,
+): BtcStyled {
     val p = splitBtc(sats, plus)
     return if (p.fracSignificant.isEmpty()) {
         BtcStyled("${p.sign}${p.whole}", ".${p.fracTrailing} BTC")

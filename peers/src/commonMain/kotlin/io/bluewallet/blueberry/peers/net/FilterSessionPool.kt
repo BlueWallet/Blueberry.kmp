@@ -11,7 +11,10 @@ import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.concurrent.atomics.incrementAndFetch
 
-data class FilterPoolPeer(val host: String, val port: Int)
+data class FilterPoolPeer(
+    val host: String,
+    val port: Int,
+)
 
 class FilterSessionPoolOptions(
     val connect: TcpConnect,
@@ -27,12 +30,18 @@ class FilterSessionPoolOptions(
 
 interface FilterSessionPool {
     suspend fun setPeers(peers: List<FilterPoolPeer>)
+
     suspend fun <T> withSession(fn: suspend (FilterSessionApi, FilterPoolPeer) -> T): T?
+
     suspend fun coolDelayMs(): Long
+
     suspend fun closeAll()
 }
 
-private fun peerKey(host: String, port: Int) = "$host:$port"
+private fun peerKey(
+    host: String,
+    port: Int,
+) = "$host:$port"
 
 private class Endpoint(
     var peer: FilterPoolPeer,
@@ -45,9 +54,10 @@ private class Endpoint(
 @OptIn(ExperimentalAtomicApi::class)
 fun createFilterSessionPool(options: FilterSessionPoolOptions): FilterSessionPool {
     val connect = options.connect
-    val openSession = options.openSession ?: { host, port, opts ->
-        openFilterSession(host, port, opts)
-    }
+    val openSession =
+        options.openSession ?: { host, port, opts ->
+            openFilterSession(host, port, opts)
+        }
     val max = maxOf(1, options.max ?: Config.filterConcurrency)
     val connectTimeoutMs = options.connectTimeoutMs ?: Config.peerProbeTimeoutMs
     val syncTimeoutMs = options.syncTimeoutMs ?: Config.filterSyncTimeoutMs
@@ -157,46 +167,57 @@ fun createFilterSessionPool(options: FilterSessionPoolOptions): FilterSessionPoo
         ep.session?.let { return it }
         val startedAt = now()
         val started = generation.load()
-        val result = try {
-            openSession(
-                ep.peer.host,
-                ep.peer.port,
-                FilterSyncOptions(
-                    connectTimeoutMs = connectTimeoutMs,
-                    syncTimeoutMs = syncTimeoutMs,
-                    connect = connect,
-                ),
-            )
-        } catch (err: Throwable) {
-            onDiagnostic?.invoke(
-                "session open failure peer=${ep.peer.host}:${ep.peer.port} elapsedMs=${maxOf(0, now() - startedAt)} cooldownMs=$coolMs error=${err.message ?: err.toString()}",
-            )
-            throw err
-        }
+        val result =
+            try {
+                openSession(
+                    ep.peer.host,
+                    ep.peer.port,
+                    FilterSyncOptions(
+                        connectTimeoutMs = connectTimeoutMs,
+                        syncTimeoutMs = syncTimeoutMs,
+                        connect = connect,
+                    ),
+                )
+            } catch (err: Throwable) {
+                onDiagnostic?.invoke(
+                    "session open failure peer=${ep.peer.host}:${ep.peer.port} elapsedMs=${maxOf(
+                        0,
+                        now() - startedAt,
+                    )} cooldownMs=$coolMs error=${err.message ?: err.toString()}",
+                )
+                throw err
+            }
         var stale: FilterSessionApi? = null
-        val live = lock.withLock {
-            when (result) {
-                is FilterBatchResult.Err -> {
-                    ep.coolUntil = now() + coolMs
-                    onDiagnostic?.invoke(
-                        "session open failure peer=${ep.peer.host}:${ep.peer.port} elapsedMs=${maxOf(0, now() - startedAt)} cooldownMs=$coolMs error=${result.error}",
-                    )
-                    null
-                }
-                is FilterBatchResult.Ok -> {
-                    if (generation.load() != started) {
-                        stale = result.value
-                        null
-                    } else {
-                        ep.session = result.value
+        val live =
+            lock.withLock {
+                when (result) {
+                    is FilterBatchResult.Err -> {
+                        ep.coolUntil = now() + coolMs
                         onDiagnostic?.invoke(
-                            "session open success peer=${ep.peer.host}:${ep.peer.port} elapsedMs=${maxOf(0, now() - startedAt)} services=${result.value.services}",
+                            "session open failure peer=${ep.peer.host}:${ep.peer.port} elapsedMs=${maxOf(
+                                0,
+                                now() - startedAt,
+                            )} cooldownMs=$coolMs error=${result.error}",
                         )
-                        result.value
+                        null
+                    }
+                    is FilterBatchResult.Ok -> {
+                        if (generation.load() != started) {
+                            stale = result.value
+                            null
+                        } else {
+                            ep.session = result.value
+                            onDiagnostic?.invoke(
+                                "session open success peer=${ep.peer.host}:${ep.peer.port} elapsedMs=${maxOf(
+                                    0,
+                                    now() - startedAt,
+                                )} services=${result.value.services}",
+                            )
+                            result.value
+                        }
                     }
                 }
             }
-        }
         closeQuietly(stale)
         return live
     }
@@ -228,15 +249,14 @@ fun createFilterSessionPool(options: FilterSessionPoolOptions): FilterSessionPoo
             }
         }
 
-        override suspend fun <T> withSession(
-            fn: suspend (FilterSessionApi, FilterPoolPeer) -> T,
-        ): T? {
-            val ep = lock.withLock {
-                val picked = pickIdle() ?: pickToOpen() ?: return@withLock null
-                picked.busy = true
-                notifyOpenCount()
-                picked
-            } ?: return null
+        override suspend fun <T> withSession(fn: suspend (FilterSessionApi, FilterPoolPeer) -> T): T? {
+            val ep =
+                lock.withLock {
+                    val picked = pickIdle() ?: pickToOpen() ?: return@withLock null
+                    picked.busy = true
+                    notifyOpenCount()
+                    picked
+                } ?: return null
             return try {
                 val session = ensureSession(ep)
                 if (session == null) {
@@ -247,13 +267,14 @@ fun createFilterSessionPool(options: FilterSessionPoolOptions): FilterSessionPoo
                 closeQuietly(lock.withLock { finishLeaseLocked(ep) })
                 value
             } catch (err: Throwable) {
-                val closing = lock.withLock {
-                    val session = retireLocked(ep)
-                    if (ep.orphaned) {
-                        endpoints.remove(peerKey(ep.peer.host, ep.peer.port))
+                val closing =
+                    lock.withLock {
+                        val session = retireLocked(ep)
+                        if (ep.orphaned) {
+                            endpoints.remove(peerKey(ep.peer.host, ep.peer.port))
+                        }
+                        session
                     }
-                    session
-                }
                 closeQuietly(closing)
                 throw err
             } finally {
@@ -261,36 +282,38 @@ fun createFilterSessionPool(options: FilterSessionPoolOptions): FilterSessionPoo
             }
         }
 
-        override suspend fun coolDelayMs(): Long = lock.withLock {
-            val t = now()
-            var minWait = 0L
-            for (key in peerOrder) {
-                val ep = endpoints[key] ?: continue
-                if (ep.busy || ep.orphaned || ep.session != null) continue
-                val wait = ep.coolUntil - t
-                if (wait <= 0) return@withLock 0
-                if (minWait == 0L || wait < minWait) minWait = wait
+        override suspend fun coolDelayMs(): Long =
+            lock.withLock {
+                val t = now()
+                var minWait = 0L
+                for (key in peerOrder) {
+                    val ep = endpoints[key] ?: continue
+                    if (ep.busy || ep.orphaned || ep.session != null) continue
+                    val wait = ep.coolUntil - t
+                    if (wait <= 0) return@withLock 0
+                    if (minWait == 0L || wait < minWait) minWait = wait
+                }
+                minWait
             }
-            minWait
-        }
 
         override suspend fun closeAll() {
-            val closing = lock.withLock {
-                generation.incrementAndFetch()
-                val sessions = mutableListOf<FilterSessionApi>()
-                for (ep in endpoints.values) {
-                    val session = ep.session
-                    ep.session = null
-                    ep.busy = false
-                    ep.coolUntil = 0
-                    ep.orphaned = false
-                    if (session != null) sessions.add(session)
+            val closing =
+                lock.withLock {
+                    generation.incrementAndFetch()
+                    val sessions = mutableListOf<FilterSessionApi>()
+                    for (ep in endpoints.values) {
+                        val session = ep.session
+                        ep.session = null
+                        ep.busy = false
+                        ep.coolUntil = 0
+                        ep.orphaned = false
+                        if (session != null) sessions.add(session)
+                    }
+                    endpoints.clear()
+                    peerOrder = mutableListOf()
+                    notifyOpenCount()
+                    sessions
                 }
-                endpoints.clear()
-                peerOrder = mutableListOf()
-                notifyOpenCount()
-                sessions
-            }
             for (session in closing) closeQuietly(session)
         }
     }

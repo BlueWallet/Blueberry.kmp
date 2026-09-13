@@ -1,12 +1,12 @@
 package io.bluewallet.blueberry.wallet
 
+import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.OutPoint
 import fr.acinq.bitcoin.Satoshi
 import fr.acinq.bitcoin.Transaction
 import fr.acinq.bitcoin.TxHash
 import fr.acinq.bitcoin.TxIn
 import fr.acinq.bitcoin.TxOut
-import fr.acinq.bitcoin.ByteVector
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -42,13 +42,14 @@ class ReceiveAddressTest {
         val tap = w.addresses.first { it.scriptType == AddressScriptType.P2TR }
         val fundLegacy = fundingTx(legacy.scriptPubKey, 10_000L, salt = 1)
         val fundTap = fundingTx(tap.scriptPubKey, 10_000L, salt = 2)
-        val addr = preferredWifReceiveAddress(
-            w,
-            listOf(
-                WifReceiveTxRow(200, 0, fundTap.tx),
-                WifReceiveTxRow(100, 5, fundLegacy.tx),
-            ),
-        )
+        val addr =
+            preferredWifReceiveAddress(
+                w,
+                listOf(
+                    WifReceiveTxRow(200, 0, fundTap.tx),
+                    WifReceiveTxRow(100, 5, fundLegacy.tx),
+                ),
+            )
         assertEquals(AddressScriptType.P2PKH, addr.scriptType)
         assertEquals(legacy.address, addr.address)
     }
@@ -60,13 +61,14 @@ class ReceiveAddressTest {
         val native = byType(w, AddressScriptType.P2WPKH)
         val a = fundingTx(native.scriptPubKey, 1_000L, salt = 3)
         val b = fundingTx(nested.scriptPubKey, 1_000L, salt = 4)
-        val addr = preferredWifReceiveAddress(
-            w,
-            listOf(
-                WifReceiveTxRow(50, 9, a.tx),
-                WifReceiveTxRow(50, 2, b.tx),
-            ),
-        )
+        val addr =
+            preferredWifReceiveAddress(
+                w,
+                listOf(
+                    WifReceiveTxRow(50, 9, a.tx),
+                    WifReceiveTxRow(50, 2, b.tx),
+                ),
+            )
         assertEquals(AddressScriptType.P2SH_P2WPKH, addr.scriptType)
     }
 
@@ -78,14 +80,15 @@ class ReceiveAddressTest {
         val fund = fundingTx(legacy.scriptPubKey, 10_000L, salt = 30)
         val spend = spendTx(fund.txid, hexToBytes("76a914" + "11".repeat(20) + "88ac"), 9_000L)
         val laterNative = fundingTx(native.scriptPubKey, 1_000L, salt = 31)
-        val addr = preferredWifReceiveAddress(
-            w,
-            listOf(
-                WifReceiveTxRow(200, 0, fund.tx),
-                WifReceiveTxRow(100, 0, spend),
-                WifReceiveTxRow(150, 0, laterNative.tx),
-            ),
-        )
+        val addr =
+            preferredWifReceiveAddress(
+                w,
+                listOf(
+                    WifReceiveTxRow(200, 0, fund.tx),
+                    WifReceiveTxRow(100, 0, spend),
+                    WifReceiveTxRow(150, 0, laterNative.tx),
+                ),
+            )
         assertEquals(AddressScriptType.P2PKH, addr.scriptType)
         assertEquals(legacy.address, addr.address)
     }
@@ -117,29 +120,44 @@ class ReceiveAddressTest {
     }
 }
 
-private fun byType(wallet: WatchWallet, scriptType: AddressScriptType): WatchAddress =
-    wallet.addresses.first { it.scriptType == scriptType }
+private fun byType(
+    wallet: WatchWallet,
+    scriptType: AddressScriptType,
+): WatchAddress = wallet.addresses.first { it.scriptType == scriptType }
 
-private data class FundingTx(val txid: String, val tx: ByteArray)
+private data class FundingTx(
+    val txid: String,
+    val tx: ByteArray,
+)
 
-private fun fundingTx(scriptPubKey: ByteArray, valueSats: Long, salt: Int = 1): FundingTx {
+private fun fundingTx(
+    scriptPubKey: ByteArray,
+    valueSats: Long,
+    salt: Int = 1,
+): FundingTx {
     val prevHash = ByteArray(32).also { it[0] = salt.toByte() }
-    val tx = Transaction(
-        version = 2,
-        txIn = listOf(TxIn(OutPoint(TxHash(prevHash), 0), ByteVector.empty, 0xffffffffL)),
-        txOut = listOf(TxOut(Satoshi(valueSats), scriptPubKey)),
-        lockTime = 0,
-    )
+    val tx =
+        Transaction(
+            version = 2,
+            txIn = listOf(TxIn(OutPoint(TxHash(prevHash), 0), ByteVector.empty, 0xffffffffL)),
+            txOut = listOf(TxOut(Satoshi(valueSats), scriptPubKey)),
+            lockTime = 0,
+        )
     return FundingTx(txid = tx.txid.toString(), tx = Transaction.write(tx))
 }
 
-private fun spendTx(fundTxidDisplay: String, outputScript: ByteArray, valueSats: Long): ByteArray {
+private fun spendTx(
+    fundTxidDisplay: String,
+    outputScript: ByteArray,
+    valueSats: Long,
+): ByteArray {
     val prevHash = hexToBytes(fundTxidDisplay).reversedArray()
-    val tx = Transaction(
-        version = 2,
-        txIn = listOf(TxIn(OutPoint(TxHash(prevHash), 0), ByteVector.empty, 0xffffffffL)),
-        txOut = listOf(TxOut(Satoshi(valueSats), outputScript)),
-        lockTime = 0,
-    )
+    val tx =
+        Transaction(
+            version = 2,
+            txIn = listOf(TxIn(OutPoint(TxHash(prevHash), 0), ByteVector.empty, 0xffffffffL)),
+            txOut = listOf(TxOut(Satoshi(valueSats), outputScript)),
+            lockTime = 0,
+        )
     return Transaction.write(tx)
 }

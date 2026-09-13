@@ -21,29 +21,38 @@ import java.net.Socket
 
 private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-actual fun createPlatformNet(): PlatformNet = PlatformNet(
-    connect = { host, port -> connectSocket(host, port) },
-    dns = object : DnsResolver {
-        override suspend fun resolve4(host: String): List<String> = withContext(Dispatchers.IO) {
-            InetAddress.getAllByName(host).filterIsInstance<Inet4Address>().mapNotNull { it.hostAddress }
-        }
-        override suspend fun resolve6(host: String): List<String> = withContext(Dispatchers.IO) {
-            InetAddress.getAllByName(host).filterIsInstance<Inet6Address>().mapNotNull { it.hostAddress }
-        }
-    },
-)
+actual fun createPlatformNet(): PlatformNet =
+    PlatformNet(
+        connect = { host, port -> connectSocket(host, port) },
+        dns =
+            object : DnsResolver {
+                override suspend fun resolve4(host: String): List<String> =
+                    withContext(Dispatchers.IO) {
+                        InetAddress.getAllByName(host).filterIsInstance<Inet4Address>().mapNotNull { it.hostAddress }
+                    }
 
-private suspend fun connectSocket(host: String, port: Int): ByteDuplex {
+                override suspend fun resolve6(host: String): List<String> =
+                    withContext(Dispatchers.IO) {
+                        InetAddress.getAllByName(host).filterIsInstance<Inet6Address>().mapNotNull { it.hostAddress }
+                    }
+            },
+    )
+
+private suspend fun connectSocket(
+    host: String,
+    port: Int,
+): ByteDuplex {
     val socket = Socket()
     try {
         coroutineScope {
-            val job = launch(Dispatchers.IO) {
-                socket.connect(
-                    InetSocketAddress(host, port),
-                    Config.peerRetryProbeTimeoutMs.toInt(),
-                )
-                socket.tcpNoDelay = true
-            }
+            val job =
+                launch(Dispatchers.IO) {
+                    socket.connect(
+                        InetSocketAddress(host, port),
+                        Config.peerRetryProbeTimeoutMs.toInt(),
+                    )
+                    socket.tcpNoDelay = true
+                }
             try {
                 job.join()
             } catch (e: CancellationException) {
@@ -59,7 +68,9 @@ private suspend fun connectSocket(host: String, port: Int): ByteDuplex {
     }
 }
 
-private class SocketByteDuplex(private val socket: Socket) : ByteDuplex {
+private class SocketByteDuplex(
+    private val socket: Socket,
+) : ByteDuplex {
     private val mutex = Mutex()
 
     private suspend fun <T> abortableIo(block: () -> T): T {
@@ -73,23 +84,26 @@ private class SocketByteDuplex(private val socket: Socket) : ByteDuplex {
         }
     }
 
-    override suspend fun read(n: Int): ByteArray = mutex.withLock {
-        abortableIo {
-            if (socket.isClosed) ByteArray(0)
-            else {
-                val buf = ByteArray(n)
-                val r = socket.getInputStream().read(buf)
-                if (r <= 0) ByteArray(0) else buf.copyOf(r)
+    override suspend fun read(n: Int): ByteArray =
+        mutex.withLock {
+            abortableIo {
+                if (socket.isClosed) {
+                    ByteArray(0)
+                } else {
+                    val buf = ByteArray(n)
+                    val r = socket.getInputStream().read(buf)
+                    if (r <= 0) ByteArray(0) else buf.copyOf(r)
+                }
             }
         }
-    }
 
-    override suspend fun write(bytes: ByteArray) = mutex.withLock {
-        abortableIo {
-            socket.getOutputStream().write(bytes)
-            socket.getOutputStream().flush()
+    override suspend fun write(bytes: ByteArray) =
+        mutex.withLock {
+            abortableIo {
+                socket.getOutputStream().write(bytes)
+                socket.getOutputStream().flush()
+            }
         }
-    }
 
     override suspend fun close() {
         runCatching { socket.close() }

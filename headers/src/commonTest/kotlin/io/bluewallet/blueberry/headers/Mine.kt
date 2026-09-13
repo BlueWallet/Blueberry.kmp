@@ -27,14 +27,15 @@ fun mineHeader(
     powLimit: com.ionspin.kotlin.bignum.integer.BigInteger = EASY_LIMIT,
 ): BlockHeader {
     val target = decodeCompactTarget(bits, powLimit)
-    val header = BlockHeader(
-        version = marker,
-        previousBlockHash = previousHash?.copyOf() ?: ByteArray(32),
-        merkleRoot = ByteArray(32) { (marker and 0xff).toByte() },
-        timestamp = timestamp,
-        bits = bits,
-        nonce = 0,
-    )
+    val header =
+        BlockHeader(
+            version = marker,
+            previousBlockHash = previousHash?.copyOf() ?: ByteArray(32),
+            merkleRoot = ByteArray(32) { (marker and 0xff).toByte() },
+            timestamp = timestamp,
+            bits = bits,
+            nonce = 0,
+        )
     var nonce = 0L
     while (nonce <= 0xffffffffL) {
         val candidate = header.copy(nonce = nonce)
@@ -44,8 +45,10 @@ fun mineHeader(
     error("unable to mine deterministic test header")
 }
 
-fun record(height: Int, header: BlockHeader): HeaderRecord =
-    storedHeaderFromBlockHeader(height.toLong(), header)
+fun record(
+    height: Int,
+    header: BlockHeader,
+): HeaderRecord = storedHeaderFromBlockHeader(height.toLong(), header)
 
 fun easyConsensus(checkpoint: BlockHeader): HeaderConsensusParams =
     HeaderConsensusParams(
@@ -55,15 +58,19 @@ fun easyConsensus(checkpoint: BlockHeader): HeaderConsensusParams =
         retargetInterval = 4,
         medianTimeSpan = 11,
         maxFutureSeconds = 7_200,
-        checkpoint = TrustedHeaderCheckpoint(
-            height = 0,
-            headerBytes = encodeBlockHeader(checkpoint),
-            hashDisplay = headerHashDisplay(checkpoint),
-            previousTimestamps = emptyList(),
-        ),
+        checkpoint =
+            TrustedHeaderCheckpoint(
+                height = 0,
+                headerBytes = encodeBlockHeader(checkpoint),
+                hashDisplay = headerHashDisplay(checkpoint),
+                previousTimestamps = emptyList(),
+            ),
     )
 
-fun persistRecords(db: Database, records: List<HeaderRecord>) {
+fun persistRecords(
+    db: Database,
+    records: List<HeaderRecord>,
+) {
     db.headers.append(
         records.map { r ->
             HeaderWrite(
@@ -75,7 +82,10 @@ fun persistRecords(db: Database, records: List<HeaderRecord>) {
     )
 }
 
-fun upsertPeer(db: Database, host: String) {
+fun upsertPeer(
+    db: Database,
+    host: String,
+) {
     db.peers.upsert(
         PeerWrite(
             host = host,
@@ -106,18 +116,20 @@ fun buildReorgFixture(): ReorgFixture {
         canonical.add(record(i + 1, tip))
     }
     val forkParent = canonical[1]
-    val forkA = mineHeader(
-        previousHash = hexToBytes(forkParent.hashInternalHex),
-        timestamp = 1_030,
-        marker = 20,
-    )
+    val forkA =
+        mineHeader(
+            previousHash = hexToBytes(forkParent.hashInternalHex),
+            timestamp = 1_030,
+            marker = 20,
+        )
     val forkB = mineHeader(previousHash = headerHashInternal(forkA), timestamp = 1_041, marker = 21)
     val forkC = mineHeader(previousHash = headerHashInternal(forkB), timestamp = 1_051, marker = 22)
-    val nextCanonical = mineHeader(
-        previousHash = hexToBytes(canonical.last().hashInternalHex),
-        timestamp = 1_060,
-        marker = 5,
-    )
+    val nextCanonical =
+        mineHeader(
+            previousHash = hexToBytes(canonical.last().hashInternalHex),
+            timestamp = 1_060,
+            marker = 5,
+        )
     return ReorgFixture(params, canonical, listOf(forkA, forkB, forkC), listOf(forkA), nextCanonical)
 }
 
@@ -127,11 +139,12 @@ fun mineEasyChain(count: Int): Pair<HeaderConsensusParams, List<HeaderRecord>> {
     var tip = checkpoint
     val records = mutableListOf(record(0, checkpoint))
     for (i in 1 until count) {
-        tip = mineHeader(
-            previousHash = headerHashInternal(tip),
-            timestamp = 1_000L + i * 10,
-            marker = i + 1,
-        )
+        tip =
+            mineHeader(
+                previousHash = headerHashInternal(tip),
+                timestamp = 1_000L + i * 10,
+                marker = i + 1,
+            )
         records.add(record(i, tip))
     }
     return params to records

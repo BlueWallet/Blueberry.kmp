@@ -37,12 +37,13 @@ actual fun QrCameraPreview(
             suspend fun fail(message: String) {
                 withContext(Dispatchers.Main) { error = message }
             }
-            val cam = try {
-                Webcam.getDefault()
-            } catch (err: Throwable) {
-                fail(err.message ?: "No camera")
-                return@withContext
-            }
+            val cam =
+                try {
+                    Webcam.getDefault()
+                } catch (err: Throwable) {
+                    fail(err.message ?: "No camera")
+                    return@withContext
+                }
             if (cam == null) {
                 fail("No camera")
                 return@withContext
@@ -73,26 +74,29 @@ actual fun QrCameraPreview(
         }
     }
     when {
-        error != null -> Text(
-            text = error!!,
-            color = BwColors.InkMuted,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.BodySize,
-            modifier = modifier,
-        )
-        preview != null -> Image(
-            bitmap = preview!!,
-            contentDescription = "Camera",
-            modifier = modifier,
-            contentScale = ContentScale.Crop,
-        )
-        else -> Text(
-            text = "Opening camera…",
-            color = BwColors.InkMuted,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.BodySize,
-            modifier = modifier,
-        )
+        error != null ->
+            Text(
+                text = error!!,
+                color = BwColors.InkMuted,
+                fontFamily = BwFontFamily,
+                fontSize = BwType.BodySize,
+                modifier = modifier,
+            )
+        preview != null ->
+            Image(
+                bitmap = preview!!,
+                contentDescription = "Camera",
+                modifier = modifier,
+                contentScale = ContentScale.Crop,
+            )
+        else ->
+            Text(
+                text = "Opening camera…",
+                color = BwColors.InkMuted,
+                fontFamily = BwFontFamily,
+                fontSize = BwType.BodySize,
+                modifier = modifier,
+            )
     }
 }
 

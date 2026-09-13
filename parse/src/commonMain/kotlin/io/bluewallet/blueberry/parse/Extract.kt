@@ -6,13 +6,21 @@ import fr.acinq.bitcoin.Script
 import fr.acinq.bitcoin.Transaction
 import fr.acinq.bitcoin.TxIn
 import fr.acinq.bitcoin.io.ByteArrayInput
-fun outpointKey(txidDisplay: String, vout: Int): String =
-    io.bluewallet.blueberry.wallet.outpointKey(txidDisplay, vout)
 
-fun scriptHex(script: ByteArray): String = io.bluewallet.blueberry.wallet.scriptHex(script)
+fun outpointKey(
+    txidDisplay: String,
+    vout: Int,
+): String =
+    io.bluewallet.blueberry.wallet
+        .outpointKey(txidDisplay, vout)
+
+fun scriptHex(script: ByteArray): String =
+    io.bluewallet.blueberry.wallet
+        .scriptHex(script)
 
 fun prevoutTxidDisplay(inputHash: ByteArray): String =
-    io.bluewallet.blueberry.wallet.prevoutTxidDisplay(inputHash)
+    io.bluewallet.blueberry.wallet
+        .prevoutTxidDisplay(inputHash)
 
 /** Same floor as bip158's block decoder — a valid tx cannot be smaller. */
 private const val MIN_TRANSACTION_BYTES = 60
@@ -109,7 +117,10 @@ fun watchedScriptsFromInput(input: TxIn): List<ByteArray> {
     return out
 }
 
-private fun inputMatchesWatch(input: TxIn, watch: Set<String>): Boolean {
+private fun inputMatchesWatch(
+    input: TxIn,
+    watch: Set<String>,
+): Boolean {
     for (script in watchedScriptsFromInput(input)) {
         if (watch.contains(scriptHex(script))) return true
     }
@@ -147,10 +158,11 @@ fun extractWatchTxs(
         }
         tx.txOut.forEachIndexed { vout, o ->
             if (watch.contains(scriptHex(o.publicKeyScript.toByteArray()))) {
-                utxos[outpointKey(tx.txid.toString(), vout)] = WatchUtxo(
-                    value = o.amount.toLong(),
-                    scriptPubKey = o.publicKeyScript.toByteArray(),
-                )
+                utxos[outpointKey(tx.txid.toString(), vout)] =
+                    WatchUtxo(
+                        value = o.amount.toLong(),
+                        scriptPubKey = o.publicKeyScript.toByteArray(),
+                    )
             }
         }
     }

@@ -46,23 +46,26 @@ fun trustedChainFromStored(
         val hashInternal = hexToBytes(stored.hashInternalHex)
         val target = decodeCompactTarget(header.bits, params.powLimit)
         val work = headerWork(target)
-        val record = HeaderRecord(
-            height = stored.height.toLong(),
-            hashDisplay = internalHexToDisplayHex(stored.hashInternalHex),
-            hashInternalHex = stored.hashInternalHex,
-            headerHex = bytesToHex(stored.header),
-        )
-        val entry = HeaderChainEntry(
-            record = record,
-            header = header.copy(
-                previousBlockHash = header.previousBlockHash.copyOf(),
-                merkleRoot = header.merkleRoot.copyOf(),
-            ),
-            hashInternal = hashInternal,
-            target = target,
-            work = work,
-            cumulativeWork = stored.cumulativeWork,
-        )
+        val record =
+            HeaderRecord(
+                height = stored.height.toLong(),
+                hashDisplay = internalHexToDisplayHex(stored.hashInternalHex),
+                hashInternalHex = stored.hashInternalHex,
+                headerHex = bytesToHex(stored.header),
+            )
+        val entry =
+            HeaderChainEntry(
+                record = record,
+                header =
+                    header.copy(
+                        previousBlockHash = header.previousBlockHash.copyOf(),
+                        merkleRoot = header.merkleRoot.copyOf(),
+                    ),
+                hashInternal = hashInternal,
+                target = target,
+                work = work,
+                cumulativeWork = stored.cumulativeWork,
+            )
 
         headers.add(record)
         byHeight[record.height] = record

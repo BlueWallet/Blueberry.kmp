@@ -30,5 +30,7 @@ data class SyncSnapshot(
 sealed class SyncEvaluation {
     data object Idle : SyncEvaluation()
 
-    data class Catchup(val reason: SyncCatchupReason) : SyncEvaluation()
+    data class Catchup(
+        val reason: SyncCatchupReason,
+    ) : SyncEvaluation()
 }

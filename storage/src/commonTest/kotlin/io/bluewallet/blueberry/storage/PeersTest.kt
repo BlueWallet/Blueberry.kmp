@@ -31,7 +31,12 @@ class PeersTest {
             listOf("9.9.9.9"),
             db.peers.listAliveWithServices(high, 10).map { it.host },
         )
-        assertTrue(db.peers.listWithServices(64uL, 10).map { it.host }.contains("9.9.9.9"))
+        assertTrue(
+            db.peers
+                .listWithServices(64uL, 10)
+                .map { it.host }
+                .contains("9.9.9.9"),
+        )
         db.close()
     }
 
@@ -79,11 +84,23 @@ class PeersTest {
         val db = createSqliteDatabase(":memory:")
         db.peers.upsert(basePeer(services = 1uL))
         db.peers.upsert(basePeer(services = 9uL))
-        assertEquals(9uL, db.peers.list().single().services)
+        assertEquals(
+            9uL,
+            db.peers
+                .list()
+                .single()
+                .services,
+        )
 
         db.peers.markProbed("1.2.3.4", 8333, 42)
         db.peers.upsert(basePeer(services = 64uL, lastProbedAt = 42))
-        assertEquals(64uL, db.peers.list().single().services)
+        assertEquals(
+            64uL,
+            db.peers
+                .list()
+                .single()
+                .services,
+        )
         db.close()
     }
 
@@ -114,7 +131,13 @@ class PeersTest {
         assertEquals(1000L, probed.lastProbedAt)
         assertEquals(true, probed.alive)
         db.peers.markUsedForBlocks("1.1.1.1", 8333)
-        assertEquals(true, db.peers.list().single { it.host == "1.1.1.1" }.usedForBlocks)
+        assertEquals(
+            true,
+            db.peers
+                .list()
+                .single { it.host == "1.1.1.1" }
+                .usedForBlocks,
+        )
         db.close()
     }
 
@@ -133,7 +156,8 @@ class PeersTest {
         )
         assertEquals(
             listOf("1.1.1.1"),
-            db.peers.listAliveWithServices(net, 10, AliveServiceOptions(unusedForBlocks = true))
+            db.peers
+                .listAliveWithServices(net, 10, AliveServiceOptions(unusedForBlocks = true))
                 .map { it.host },
         )
         db.close()

@@ -1,19 +1,19 @@
 package io.bluewallet.blueberry
 
-import io.bluewallet.blueberry.bus.Event
-import io.bluewallet.blueberry.bus.BlocksProgressPayload
-import io.bluewallet.blueberry.bus.SyncCatchupPayload
-import io.bluewallet.blueberry.bus.SyncCatchupReason
-import io.bluewallet.blueberry.bus.SyncIdlePayload
-import io.bluewallet.blueberry.bus.WalletTxsPayload
-import io.bluewallet.blueberry.bus.createMessageBus
-import io.bluewallet.blueberry.parse.formatBtc
 import fr.acinq.bitcoin.OutPoint
 import fr.acinq.bitcoin.Satoshi
 import fr.acinq.bitcoin.Transaction
 import fr.acinq.bitcoin.TxHash
 import fr.acinq.bitcoin.TxIn
 import fr.acinq.bitcoin.TxOut
+import io.bluewallet.blueberry.bus.BlocksProgressPayload
+import io.bluewallet.blueberry.bus.Event
+import io.bluewallet.blueberry.bus.SyncCatchupPayload
+import io.bluewallet.blueberry.bus.SyncCatchupReason
+import io.bluewallet.blueberry.bus.SyncIdlePayload
+import io.bluewallet.blueberry.bus.WalletTxsPayload
+import io.bluewallet.blueberry.bus.createMessageBus
+import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.storage.DownloadedBlock
 import io.bluewallet.blueberry.storage.HeaderWrite
 import io.bluewallet.blueberry.storage.StoredTx
@@ -31,16 +31,17 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class WalletTxsHydrateTest {
-    private fun headerAt(timestamp: Long): ByteArray = encodeBlockHeader(
-        BlockHeader(
-            version = 1,
-            previousBlockHash = ByteArray(32),
-            merkleRoot = ByteArray(32),
-            timestamp = timestamp,
-            bits = 0x1d00ffff,
-            nonce = 0,
-        ),
-    )
+    private fun headerAt(timestamp: Long): ByteArray =
+        encodeBlockHeader(
+            BlockHeader(
+                version = 1,
+                previousBlockHash = ByteArray(32),
+                merkleRoot = ByteArray(32),
+                timestamp = timestamp,
+                bits = 0x1d00ffff,
+                nonce = 0,
+            ),
+        )
 
     @Test
     fun seeds_and_refreshes_txs_balance_label_and_parse_backlog_from_db_events() {
@@ -121,7 +122,8 @@ class WalletTxsHydrateTest {
             StoredTx("ab".repeat(32), 1, 0, "11".repeat(32), byteArrayOf(0x00), 1),
         )
         db.txPaymentLabels.upsert(
-            io.bluewallet.blueberry.storage.TxPaymentLabelRow("ab".repeat(32), "groceries"),
+            io.bluewallet.blueberry.storage
+                .TxPaymentLabelRow("ab".repeat(32), "groceries"),
         )
         val snap = snapshotFromDb(db, 1, 1)
         assertEquals("groceries", snap.txs[0].paymentLabel)
@@ -191,12 +193,13 @@ class WalletTxsHydrateTest {
         val wallet = createWallet(db)
         val recv = deriveWatchWallet(wif).addresses.first { it.scriptType == AddressScriptType.P2PKH }
         val prevHash = ByteArray(32).also { it[0] = 42 }
-        val fund = Transaction(
-            2L,
-            listOf(TxIn(OutPoint(TxHash(prevHash), 0L), 0xffffffffL)),
-            listOf(TxOut(Satoshi(9_664L), recv.scriptPubKey)),
-            0L,
-        )
+        val fund =
+            Transaction(
+                2L,
+                listOf(TxIn(OutPoint(TxHash(prevHash), 0L), 0xffffffffL)),
+                listOf(TxOut(Satoshi(9_664L), recv.scriptPubKey)),
+                0L,
+            )
         db.transactions.upsert(
             StoredTx(fund.txid.toString(), 800_000, 0, "aa".repeat(32), Transaction.write(fund), 9_664L),
         )
@@ -222,15 +225,16 @@ class WalletTxsHydrateTest {
         val ext = wallet.snapshot().addresses.first { !it.change && it.index == 0 }
         val intern = wallet.snapshot().addresses.first { it.change && it.index == 0 }
         val prevHash = ByteArray(32).also { it[0] = 7 }
-        val fund = Transaction(
-            2L,
-            listOf(TxIn(OutPoint(TxHash(prevHash), 0L), 0xffffffffL)),
-            listOf(
-                TxOut(Satoshi(50_000L), ext.scriptPubKey),
-                TxOut(Satoshi(25_000L), intern.scriptPubKey),
-            ),
-            0L,
-        )
+        val fund =
+            Transaction(
+                2L,
+                listOf(TxIn(OutPoint(TxHash(prevHash), 0L), 0xffffffffL)),
+                listOf(
+                    TxOut(Satoshi(50_000L), ext.scriptPubKey),
+                    TxOut(Satoshi(25_000L), intern.scriptPubKey),
+                ),
+                0L,
+            )
         db.transactions.upsert(
             StoredTx(fund.txid.toString(), 800_000, 0, "aa".repeat(32), Transaction.write(fund), 75_000L),
         )

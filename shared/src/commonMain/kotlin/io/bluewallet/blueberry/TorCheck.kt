@@ -20,7 +20,10 @@ internal fun formatTorCheckElapsed(ms: Long): String {
     return if (frac == 0) "${sec}s" else "$sec.${frac}s"
 }
 
-data class TorCheckIp(val isTor: Boolean, val ip: String)
+data class TorCheckIp(
+    val isTor: Boolean,
+    val ip: String,
+)
 
 suspend fun checkTorExit(
     overallMs: Long = 180_000L,
@@ -63,10 +66,11 @@ suspend fun fetchTorCheckIp(remainingMs: Long): TorCheckIp {
     val budget = min(120_000L, remainingMs.coerceAtLeast(60_000L))
     return coroutineScope {
         val abort = Abort()
-        val timer = launch {
-            delay(budget)
-            abort.abort(Exception("timed out"))
-        }
+        val timer =
+            launch {
+                delay(budget)
+                abort.abort(Exception("timed out"))
+            }
         val dialer = Echalote.createExitDialer()
         try {
             withTimeout(budget) {

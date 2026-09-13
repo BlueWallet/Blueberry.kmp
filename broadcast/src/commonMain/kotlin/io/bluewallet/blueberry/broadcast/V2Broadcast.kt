@@ -38,11 +38,12 @@ data class BroadcastTxV2Options(
     val ackTimeoutMs: Long = 15_000,
 )
 
-fun decodeBroadcastTx(txHex: String) = try {
-    decodeTransaction(hexToBytes(txHex))
-} catch (_: Throwable) {
-    throw IllegalArgumentException("invalid transaction hex")
-}
+fun decodeBroadcastTx(txHex: String) =
+    try {
+        decodeTransaction(hexToBytes(txHex))
+    } catch (_: Throwable) {
+        throw IllegalArgumentException("invalid transaction hex")
+    }
 
 private fun isSessionGone(err: Throwable): Boolean {
     if (err is ProtocolClosedError) return true
@@ -54,11 +55,12 @@ private fun inventoryMentionsTx(
     inventory: List<InventoryVector>,
     txidInternal: ByteArray,
     wtxidInternal: ByteArray,
-): Boolean = inventory.any { item ->
-    if (item.type == MSG_WTX) return@any equalBytes(item.hash, wtxidInternal)
-    val base = item.type and MSG_WITNESS_FLAG.inv()
-    base == MSG_TX && equalBytes(item.hash, txidInternal)
-}
+): Boolean =
+    inventory.any { item ->
+        if (item.type == MSG_WTX) return@any equalBytes(item.hash, wtxidInternal)
+        val base = item.type and MSG_WITNESS_FLAG.inv()
+        base == MSG_TX && equalBytes(item.hash, txidInternal)
+    }
 
 private fun describeV2Command(msg: Message): String {
     if (msg !is Message.Opaque) return msg.command
@@ -85,19 +87,21 @@ suspend fun broadcastTxV2(
     var ellswiftDone = false
     try {
         log("broadcast", "v2 ellswift start")
-        protocol = withTimeout(options.handshakeTimeoutMs) {
-            val connected = Protocol.connect(
-                duplex,
-                ProtocolOptions(role = Role.Initiator, network = Networks.mainnet),
-            )
-            ellswiftDone = true
-            log("broadcast", "v2 version-handshake start")
-            completeVersionHandshake(
-                connected,
-                VersionHandshakeOptions(port = options.port, name = options.name, version = options.version),
-            )
-            connected
-        }
+        protocol =
+            withTimeout(options.handshakeTimeoutMs) {
+                val connected =
+                    Protocol.connect(
+                        duplex,
+                        ProtocolOptions(role = Role.Initiator, network = Networks.mainnet),
+                    )
+                ellswiftDone = true
+                log("broadcast", "v2 version-handshake start")
+                completeVersionHandshake(
+                    connected,
+                    VersionHandshakeOptions(port = options.port, name = options.name, version = options.version),
+                )
+                connected
+            }
     } catch (err: TimeoutCancellationException) {
         logError("broadcast", "v2 handshake fail phase=timeout", err)
         throw IllegalStateException("handshake timeout")
@@ -128,10 +132,11 @@ suspend fun broadcastTxV2(
                         throw IllegalStateException("peer rejected transaction")
                     }
                     if ((msg is Message.Inv || msg is Message.GetData)) {
-                        val inventory = when (msg) {
-                            is Message.Inv -> msg.payload.inventory
-                            is Message.GetData -> msg.payload.inventory
-                        }
+                        val inventory =
+                            when (msg) {
+                                is Message.Inv -> msg.payload.inventory
+                                is Message.GetData -> msg.payload.inventory
+                            }
                         if (inventoryMentionsTx(inventory, txidInternal, wtxidInternal)) {
                             log("broadcast", "v2 ack ${msg.command}")
                             return@withTimeout

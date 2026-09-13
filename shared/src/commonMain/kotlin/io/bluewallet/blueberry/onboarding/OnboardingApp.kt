@@ -49,10 +49,11 @@ fun OnboardingApp(
                     persistImportedSecret(effect.raw)
                     state = reduceOnboarding(state, OnboardingEvent.PersistImportOk).state
                 } catch (err: Exception) {
-                    state = reduceOnboarding(
-                        state,
-                        OnboardingEvent.PersistFailed(err.message ?: err.toString()),
-                    ).state
+                    state =
+                        reduceOnboarding(
+                            state,
+                            OnboardingEvent.PersistFailed(err.message ?: err.toString()),
+                        ).state
                 }
             }
             is OnboardingEffect.PersistCreatedWallet -> {
@@ -60,10 +61,11 @@ fun OnboardingApp(
                     persistCreatedWallet(effect.mnemonic)
                     onFinished()
                 } catch (err: Exception) {
-                    state = reduceOnboarding(
-                        state,
-                        OnboardingEvent.PersistFailed(err.message ?: err.toString()),
-                    ).state
+                    state =
+                        reduceOnboarding(
+                            state,
+                            OnboardingEvent.PersistFailed(err.message ?: err.toString()),
+                        ).state
                 }
             }
             is OnboardingEffect.PersistYear -> {
@@ -71,10 +73,11 @@ fun OnboardingApp(
                     persistSyncYear(effect.year)
                     onFinished()
                 } catch (err: Exception) {
-                    state = reduceOnboarding(
-                        state,
-                        OnboardingEvent.PersistFailed(err.message ?: err.toString()),
-                    ).state
+                    state =
+                        reduceOnboarding(
+                            state,
+                            OnboardingEvent.PersistFailed(err.message ?: err.toString()),
+                        ).state
                 }
             }
             null -> Unit
@@ -82,10 +85,11 @@ fun OnboardingApp(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeContentPadding()
-            .padding(16.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .safeContentPadding()
+                .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         when (state.step) {
@@ -130,10 +134,11 @@ fun OnboardingApp(
                                 color = BwColors.Link,
                                 fontFamily = BwFontFamily,
                                 fontSize = BwType.CaptionSize,
-                                modifier = Modifier.clickable(
-                                    enabled = !state.busy,
-                                    onClick = { scanning = true },
-                                ),
+                                modifier =
+                                    Modifier.clickable(
+                                        enabled = !state.busy,
+                                        onClick = { scanning = true },
+                                    ),
                             )
                         },
                     )
@@ -142,8 +147,11 @@ fun OnboardingApp(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(
                         onClick = {
-                            if (scanning) scanning = false
-                            else dispatch(OnboardingEvent.Back)
+                            if (scanning) {
+                                scanning = false
+                            } else {
+                                dispatch(OnboardingEvent.Back)
+                            }
                         },
                         enabled = !state.busy,
                     ) { Text("Back") }
@@ -195,12 +203,12 @@ fun OnboardingApp(
                         val label = if (year == state.selectedYear) "• $year" else "$year"
                         Text(
                             label,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(enabled = !state.busy) {
-                                    dispatch(OnboardingEvent.SelectYear(year))
-                                }
-                                .padding(vertical = 8.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable(enabled = !state.busy) {
+                                        dispatch(OnboardingEvent.SelectYear(year))
+                                    }.padding(vertical = 8.dp),
                         )
                     }
                 }

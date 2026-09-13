@@ -17,13 +17,22 @@ data class BlocksProgress(
 
 interface BlocksMatchedStore {
     fun get(): BlocksProgress
-    fun applyEvent(at: Long, downloaded: Int, matched: Int)
+
+    fun applyEvent(
+        at: Long,
+        downloaded: Int,
+        matched: Int,
+    )
+
     fun subscribe(listener: () -> Unit): () -> Unit
 }
 
 private const val MAX_SAMPLES = 8
 
-private data class BlockProgressSample(val at: Long, val downloaded: Int)
+private data class BlockProgressSample(
+    val at: Long,
+    val downloaded: Int,
+)
 
 private data class BlocksStoreState(
     val progress: BlocksProgress = BlocksProgress(),
@@ -56,7 +65,10 @@ private fun nextProgressSamples(
     return addAdvancingSample(samples, BlockProgressSample(at, downloaded))
 }
 
-private fun estimateEtaMs(samples: List<BlockProgressSample>, matched: Int): Long? {
+private fun estimateEtaMs(
+    samples: List<BlockProgressSample>,
+    matched: Int,
+): Long? {
     if (samples.size < 2) return null
     val first = samples.first()
     val last = samples.last()
@@ -80,22 +92,30 @@ private class BlocksMatchedStoreImpl : BlocksMatchedStore {
 
     override fun get() = state.load().progress
 
-    override fun applyEvent(at: Long, downloaded: Int, matched: Int) {
+    override fun applyEvent(
+        at: Long,
+        downloaded: Int,
+        matched: Int,
+    ) {
         while (true) {
             val cur = state.load()
             val prev = cur.progress
-            val nextSamples = nextProgressSamples(
-                cur.samples,
-                prev.downloaded,
-                prev.matched,
-                at,
-                downloaded,
-                matched,
-            )
+            val nextSamples =
+                nextProgressSamples(
+                    cur.samples,
+                    prev.downloaded,
+                    prev.matched,
+                    at,
+                    downloaded,
+                    matched,
+                )
             val nextPercent = progressPercent(downloaded, matched)
             val nextEta =
-                if (downloaded >= matched) 0L
-                else estimateEtaMs(nextSamples, matched)
+                if (downloaded >= matched) {
+                    0L
+                } else {
+                    estimateEtaMs(nextSamples, matched)
+                }
             if (
                 prev.downloaded == downloaded &&
                 prev.matched == matched &&
@@ -105,16 +125,18 @@ private class BlocksMatchedStoreImpl : BlocksMatchedStore {
             ) {
                 return
             }
-            val next = BlocksStoreState(
-                progress = BlocksProgress(
-                    downloaded = downloaded,
-                    matched = matched,
-                    at = at,
-                    etaMs = nextEta,
-                    percent = nextPercent,
-                ),
-                samples = nextSamples,
-            )
+            val next =
+                BlocksStoreState(
+                    progress =
+                        BlocksProgress(
+                            downloaded = downloaded,
+                            matched = matched,
+                            at = at,
+                            etaMs = nextEta,
+                            percent = nextPercent,
+                        ),
+                    samples = nextSamples,
+                )
             if (state.compareAndSet(cur, next)) {
                 emitChange()
                 return

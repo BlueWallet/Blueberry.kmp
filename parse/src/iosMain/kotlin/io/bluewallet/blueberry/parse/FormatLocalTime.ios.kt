@@ -16,8 +16,9 @@ private const val APPLE_EPOCH_OFFSET = 978307200.0
 internal actual fun formatLocalYmdHm(unixSeconds: Long): String {
     val date = NSDate(timeIntervalSinceReferenceDate = unixSeconds.toDouble() - APPLE_EPOCH_OFFSET)
     val cal = NSCalendar.currentCalendar
-    val units = NSCalendarUnitYear or NSCalendarUnitMonth or NSCalendarUnitDay or
-        NSCalendarUnitHour or NSCalendarUnitMinute
+    val units =
+        NSCalendarUnitYear or NSCalendarUnitMonth or NSCalendarUnitDay or
+            NSCalendarUnitHour or NSCalendarUnitMinute
     val c = cal.components(units, fromDate = date)
     return "${c.year.toInt()}-${pad2(c.month.toInt())}-${pad2(c.day.toInt())} " +
         "${pad2(c.hour.toInt())}:${pad2(c.minute.toInt())}"

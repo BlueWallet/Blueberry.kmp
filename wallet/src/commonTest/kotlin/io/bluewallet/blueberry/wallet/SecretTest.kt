@@ -112,6 +112,9 @@ class SecretTest {
 
 internal fun p2wshOpTrueAddress(): String {
     val script = byteArrayOf(0x51)
-    val hash = fr.acinq.bitcoin.Crypto.sha256(script)
-    return fr.acinq.bitcoin.Bech32.encodeWitnessAddress("bc", 0, hash)
+    val hash =
+        fr.acinq.bitcoin.Crypto
+            .sha256(script)
+    return fr.acinq.bitcoin.Bech32
+        .encodeWitnessAddress("bc", 0, hash)
 }

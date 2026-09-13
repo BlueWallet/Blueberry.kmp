@@ -23,6 +23,7 @@ object BwColors {
     val Ink = Color(0xFF0C2550)
     val InkSecondary = Color(0xFF81868E)
     val InkMuted = Color(0xFF9AA0AA)
+
     /** Sister "Refresh" / "Sidebar" — BlueWallet `secondButtonTextColor`. */
     val Action = Color(0xFF50555C)
     val Link = Color(0xFF0F5CC0)
@@ -63,22 +64,23 @@ object BwType {
     val CaptionSize = 11.sp
 }
 
-private val BwColorScheme = lightColorScheme(
-    primary = BwColors.Accent,
-    onPrimary = BwColors.OnAccent,
-    primaryContainer = BwColors.AccentSoft,
-    onPrimaryContainer = BwColors.Ink,
-    secondary = BwColors.Link,
-    onSecondary = BwColors.OnAccent,
-    background = BwColors.Paper,
-    onBackground = BwColors.Ink,
-    surface = BwColors.Card,
-    onSurface = BwColors.Ink,
-    surfaceVariant = BwColors.Section,
-    onSurfaceVariant = BwColors.InkSecondary,
-    outline = BwColors.Border,
-    error = BwColors.Danger,
-)
+private val BwColorScheme =
+    lightColorScheme(
+        primary = BwColors.Accent,
+        onPrimary = BwColors.OnAccent,
+        primaryContainer = BwColors.AccentSoft,
+        onPrimaryContainer = BwColors.Ink,
+        secondary = BwColors.Link,
+        onSecondary = BwColors.OnAccent,
+        background = BwColors.Paper,
+        onBackground = BwColors.Ink,
+        surface = BwColors.Card,
+        onSurface = BwColors.Ink,
+        surfaceVariant = BwColors.Section,
+        onSurfaceVariant = BwColors.InkSecondary,
+        outline = BwColors.Border,
+        error = BwColors.Danger,
+    )
 
 /**
  * Applies the light palette and paints the window with [BwColors.Paper]. The

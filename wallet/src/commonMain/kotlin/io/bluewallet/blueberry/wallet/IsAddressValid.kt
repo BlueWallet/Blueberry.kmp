@@ -13,7 +13,8 @@ fun isAddressValid(address: String): Boolean {
     if (value.isEmpty()) return false
     return try {
         if (!value.lowercase().startsWith("bc1")) {
-            Bitcoin.addressToPublicKeyScript(Block.LivenetGenesisBlock.hash, value)
+            Bitcoin
+                .addressToPublicKeyScript(Block.LivenetGenesisBlock.hash, value)
                 .isRight
         } else {
             val decoded = Bech32.decodeWitnessAddress(value)
@@ -68,8 +69,10 @@ internal fun outputScriptFromAddress(address: String): ByteArray {
             return byteArrayOf(0x51, 0x20) + program
         }
     }
-    val script = Bitcoin.addressToPublicKeyScript(Block.LivenetGenesisBlock.hash, value)
-        .right
-        ?: throw IllegalArgumentException("invalid mainnet address")
+    val script =
+        Bitcoin
+            .addressToPublicKeyScript(Block.LivenetGenesisBlock.hash, value)
+            .right
+            ?: throw IllegalArgumentException("invalid mainnet address")
     return Script.write(script)
 }

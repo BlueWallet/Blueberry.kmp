@@ -48,13 +48,14 @@ fun ClickMeContent() {
                 if (torBusy) return@SettingsActionRow
                 scope.launch {
                     torBusy = true
-                    torResult = try {
-                        withContext(Dispatchers.Default) { checkTorExit() }
-                    } catch (err: Exception) {
-                        listOf(err.message ?: err.toString())
-                    } finally {
-                        torBusy = false
-                    }
+                    torResult =
+                        try {
+                            withContext(Dispatchers.Default) { checkTorExit() }
+                        } catch (err: Exception) {
+                            listOf(err.message ?: err.toString())
+                        } finally {
+                            torBusy = false
+                        }
                 }
             },
         )
@@ -71,31 +72,34 @@ private fun SettingsActionRow(
     val passed = result?.firstOrNull() == "ok"
     val shape = RoundedCornerShape(BwSpace.Radius)
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(BwColors.Card, shape)
-            .border(BwSpace.Hairline, BwColors.Border, shape)
-            .padding(BwSpace.Card),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(BwColors.Card, shape)
+                .border(BwSpace.Hairline, BwColors.Border, shape)
+                .padding(BwSpace.Card),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         Column(modifier = Modifier.weight(1f)) {
             when {
-                busy -> Text(
-                    text = "Running…",
-                    color = BwColors.InkMuted,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.ValueSize,
-                    fontWeight = BwType.Value,
-                )
-                result == null -> Text(
-                    text = "\u00A0",
-                    color = Color.Transparent,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.ValueSize,
-                    fontWeight = BwType.Value,
-                )
+                busy ->
+                    Text(
+                        text = "Running…",
+                        color = BwColors.InkMuted,
+                        fontFamily = BwFontFamily,
+                        fontSize = BwType.ValueSize,
+                        fontWeight = BwType.Value,
+                    )
+                result == null ->
+                    Text(
+                        text = "\u00A0",
+                        color = Color.Transparent,
+                        fontFamily = BwFontFamily,
+                        fontSize = BwType.ValueSize,
+                        fontWeight = BwType.Value,
+                    )
                 passed -> {
                     Text(
                         text = "OK",
@@ -114,15 +118,16 @@ private fun SettingsActionRow(
                         )
                     }
                 }
-                else -> result.forEach { line ->
-                    Text(
-                        text = line,
-                        color = BwColors.Danger,
-                        fontFamily = BwFontFamily,
-                        fontSize = BwType.CaptionSize,
-                        fontWeight = BwType.Caption,
-                    )
-                }
+                else ->
+                    result.forEach { line ->
+                        Text(
+                            text = line,
+                            color = BwColors.Danger,
+                            fontFamily = BwFontFamily,
+                            fontSize = BwType.CaptionSize,
+                            fontWeight = BwType.Caption,
+                        )
+                    }
             }
         }
         PillButton(text = buttonText, onClick = onClick)

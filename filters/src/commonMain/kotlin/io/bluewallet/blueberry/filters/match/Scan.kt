@@ -60,7 +60,10 @@ private fun toDisplayHash(internalHex: String): ByteArray {
     return out
 }
 
-private fun rowStillCurrent(db: Database, row: FilterRecord): Boolean {
+private fun rowStillCurrent(
+    db: Database,
+    row: FilterRecord,
+): Boolean {
     if (db.filters.hashAt(row.height) != row.blockHashInternalHex) {
         return false
     }
@@ -94,8 +97,11 @@ suspend fun scanFiltersForMatches(
     }
 
     suspend fun pause() {
-        if (batchGapMs > 0) sleep(batchGapMs)
-        else yieldFn()
+        if (batchGapMs > 0) {
+            sleep(batchGapMs)
+        } else {
+            yieldFn()
+        }
     }
 
     emitProgress()
@@ -128,23 +134,25 @@ suspend fun scanFiltersForMatches(
             val filterBytesList = current.map { it.filter }
             val hashList = current.map { toDisplayHash(it.blockHashInternalHex) }
 
-            val hitFlags = matchAnyBasicFilters(
-                filterBytesList,
-                hashList,
-                scripts,
-            )
+            val hitFlags =
+                matchAnyBasicFilters(
+                    filterBytesList,
+                    hashList,
+                    scripts,
+                )
 
             val heights = ArrayList<Int>(current.size)
             for (i in current.indices) {
                 val row = current[i]
                 heights.add(row.height)
                 if (hitFlags[i]) {
-                    val inserted = db.matchedBlocks.insert(
-                        MatchedBlock(
-                            height = row.height,
-                            blockHashInternalHex = row.blockHashInternalHex,
-                        ),
-                    )
+                    val inserted =
+                        db.matchedBlocks.insert(
+                            MatchedBlock(
+                                height = row.height,
+                                blockHashInternalHex = row.blockHashInternalHex,
+                            ),
+                        )
                     if (inserted) {
                         callbacks?.onMatch?.invoke(
                             FilterMatch(

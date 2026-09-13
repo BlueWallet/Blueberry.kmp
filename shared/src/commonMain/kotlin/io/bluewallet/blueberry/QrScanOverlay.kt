@@ -29,9 +29,10 @@ fun QrScanOverlay(
     val busy = remember { AtomicBoolean(false) }
     val finished = remember { AtomicBoolean(false) }
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(BwColors.Paper),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(BwColors.Paper),
     ) {
         Text(
             text = "Point the camera at a QR code",

@@ -3,8 +3,14 @@ package io.bluewallet.blueberry.boot
 import io.bluewallet.blueberry.wallet.WalletSecretInspection
 
 sealed class OnboardingGate {
-    data class ExitInvalid(val detail: String) : OnboardingGate()
-    data class Onboard(val startAtYearStep: Boolean) : OnboardingGate()
+    data class ExitInvalid(
+        val detail: String,
+    ) : OnboardingGate()
+
+    data class Onboard(
+        val startAtYearStep: Boolean,
+    ) : OnboardingGate()
+
     data object Start : OnboardingGate()
 }
 

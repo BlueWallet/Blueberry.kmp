@@ -40,7 +40,10 @@ data class ExtractedWatchTx(
     }
 }
 
-data class BalanceSummary(val sats: Long, val utxoCount: Int)
+data class BalanceSummary(
+    val sats: Long,
+    val utxoCount: Int,
+)
 
 data class TxRow(
     val txid: String,

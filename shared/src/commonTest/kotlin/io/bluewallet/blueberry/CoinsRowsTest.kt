@@ -62,12 +62,13 @@ class CoinsRowsTest {
     @Test
     fun copies_ageLabel() {
         val padded = "3 years ago".padEnd(16)
-        val rows = coinsRows(
-            listOf(
-                row("aa:0", 2, ageLabel = padded),
-                row("aa:1", 1, ageLabel = ""),
-            ),
-        )
+        val rows =
+            coinsRows(
+                listOf(
+                    row("aa:0", 2, ageLabel = padded),
+                    row("aa:1", 1, ageLabel = ""),
+                ),
+            )
         assertEquals(listOf(padded, ""), rows.map { it.ageLabel })
     }
 

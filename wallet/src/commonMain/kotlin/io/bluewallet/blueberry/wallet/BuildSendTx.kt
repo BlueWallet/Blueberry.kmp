@@ -116,49 +116,63 @@ private val ESTIMATION_REDEEM_SCRIPT: ByteArray = Script.write(Script.pay2wpkh(E
 private fun pushData(data: ByteArray): ByteArray = Script.write(listOf(OP_PUSHDATA(data)))
 
 /** Signature script an input of this type carries once signed, sized but zero-filled. */
-private fun placeholderSignatureScript(scriptType: AddressScriptType): ByteArray = when (scriptType) {
-    AddressScriptType.P2PKH ->
-        pushData(ByteArray(LOW_R_SIG_LEN)) + pushData(ByteArray(COMPRESSED_PUBKEY_LEN))
-    AddressScriptType.P2SH_P2WPKH -> pushData(ESTIMATION_REDEEM_SCRIPT)
-    AddressScriptType.P2WPKH, AddressScriptType.P2TR -> ByteArray(0)
-}
+private fun placeholderSignatureScript(scriptType: AddressScriptType): ByteArray =
+    when (scriptType) {
+        AddressScriptType.P2PKH ->
+            pushData(ByteArray(LOW_R_SIG_LEN)) + pushData(ByteArray(COMPRESSED_PUBKEY_LEN))
+        AddressScriptType.P2SH_P2WPKH -> pushData(ESTIMATION_REDEEM_SCRIPT)
+        AddressScriptType.P2WPKH, AddressScriptType.P2TR -> ByteArray(0)
+    }
 
 /** Witness an input of this type carries once signed, sized but zero-filled. */
-private fun placeholderWitness(scriptType: AddressScriptType): ScriptWitness = when (scriptType) {
-    AddressScriptType.P2PKH -> ScriptWitness()
-    AddressScriptType.P2SH_P2WPKH, AddressScriptType.P2WPKH -> ScriptWitness(
-        listOf(ByteVector(ByteArray(LOW_R_SIG_LEN)), ByteVector(ByteArray(COMPRESSED_PUBKEY_LEN))),
+private fun placeholderWitness(scriptType: AddressScriptType): ScriptWitness =
+    when (scriptType) {
+        AddressScriptType.P2PKH -> ScriptWitness()
+        AddressScriptType.P2SH_P2WPKH, AddressScriptType.P2WPKH ->
+            ScriptWitness(
+                listOf(ByteVector(ByteArray(LOW_R_SIG_LEN)), ByteVector(ByteArray(COMPRESSED_PUBKEY_LEN))),
+            )
+        AddressScriptType.P2TR -> ScriptWitness(listOf(ByteVector(ByteArray(SCHNORR_SIG_LEN))))
+    }
+
+private fun outPointFor(utxo: SendInputUtxo): OutPoint = OutPoint(TxHash(hexToBytes(utxo.txid).reversedArray()), utxo.vout.toLong())
+
+private fun estimateTxIn(
+    utxo: SendInputUtxo,
+    scriptType: AddressScriptType,
+): TxIn =
+    TxIn(
+        outPointFor(utxo),
+        ByteVector(placeholderSignatureScript(scriptType)),
+        SEQUENCE_FINAL,
+        placeholderWitness(scriptType),
     )
-    AddressScriptType.P2TR -> ScriptWitness(listOf(ByteVector(ByteArray(SCHNORR_SIG_LEN))))
-}
-
-private fun outPointFor(utxo: SendInputUtxo): OutPoint =
-    OutPoint(TxHash(hexToBytes(utxo.txid).reversedArray()), utxo.vout.toLong())
-
-private fun estimateTxIn(utxo: SendInputUtxo, scriptType: AddressScriptType): TxIn = TxIn(
-    outPointFor(utxo),
-    ByteVector(placeholderSignatureScript(scriptType)),
-    SEQUENCE_FINAL,
-    placeholderWitness(scriptType),
-)
 
 private fun ceilDiv4(weight: Int): Int = (weight + 3) / 4
 
-private fun watchAddressesByScript(wallet: WatchWallet): Map<String, WatchAddress> =
-    wallet.addresses.associateBy { scriptHex(it.scriptPubKey) }
+private fun watchAddressesByScript(wallet: WatchWallet): Map<String, WatchAddress> = wallet.addresses.associateBy { scriptHex(it.scriptPubKey) }
 
-private fun addressForScript(byScript: Map<String, WatchAddress>, scriptPubKey: ByteArray): WatchAddress =
+private fun addressForScript(
+    byScript: Map<String, WatchAddress>,
+    scriptPubKey: ByteArray,
+): WatchAddress =
     byScript[scriptHex(scriptPubKey)]
         ?: throw IllegalArgumentException("UTXO is not a watched address")
 
 /** Bech32 is case-insensitive; base58 is not. */
-private fun addressesEqual(a: String, b: String): Boolean {
+private fun addressesEqual(
+    a: String,
+    b: String,
+): Boolean {
     val aBech32 = a.lowercase().startsWith("bc1")
     val bBech32 = b.lowercase().startsWith("bc1")
     return if (aBech32 && bBech32) a.lowercase() == b.lowercase() else a == b
 }
 
-private fun derLowR(hash: ByteArray, privateKey: PrivateKey): ByteArray {
+private fun derLowR(
+    hash: ByteArray,
+    privateKey: PrivateKey,
+): ByteArray {
     val keyBytes = privateKey.value.toByteArray()
     var compact = Secp256k1.sign(hash, keyBytes)
     var counter = 0
@@ -181,20 +195,22 @@ private fun signWitnessV0LowR(
     scriptCode: ByteArray,
     amount: Satoshi,
     privateKey: PrivateKey,
-): ByteArray = derLowR(
-    tx.hashForSigning(inputIndex, scriptCode, SigHash.SIGHASH_ALL, amount, SigVersion.SIGVERSION_WITNESS_V0),
-    privateKey,
-)
+): ByteArray =
+    derLowR(
+        tx.hashForSigning(inputIndex, scriptCode, SigHash.SIGHASH_ALL, amount, SigVersion.SIGVERSION_WITNESS_V0),
+        privateKey,
+    )
 
 private fun signLegacyLowR(
     tx: Transaction,
     inputIndex: Int,
     previousOutputScript: ByteArray,
     privateKey: PrivateKey,
-): ByteArray = derLowR(
-    tx.hashForSigning(inputIndex, previousOutputScript, SigHash.SIGHASH_ALL),
-    privateKey,
-)
+): ByteArray =
+    derLowR(
+        tx.hashForSigning(inputIndex, previousOutputScript, SigHash.SIGHASH_ALL),
+        privateKey,
+    )
 
 /**
  * The key material a wallet secret gives us. Mnemonics and WIFs can sign; zpub and single-address
@@ -202,51 +218,64 @@ private fun signLegacyLowR(
  * also supply PSBT origin metadata (account fingerprint + derivation path).
  */
 private sealed class SendAccount {
-    data class Mnemonic(val master: DeterministicWallet.ExtendedPrivateKey) : SendAccount()
-    data class Zpub(val account: DeterministicWallet.ExtendedPublicKey) : SendAccount()
-    data class Wif(val privateKey: PrivateKey) : SendAccount()
+    data class Mnemonic(
+        val master: DeterministicWallet.ExtendedPrivateKey,
+    ) : SendAccount()
+
+    data class Zpub(
+        val account: DeterministicWallet.ExtendedPublicKey,
+    ) : SendAccount()
+
+    data class Wif(
+        val privateKey: PrivateKey,
+    ) : SendAccount()
+
     data object AddressWatch : SendAccount()
 }
 
-private fun sendAccountFor(parsed: ParsedWalletSecret): SendAccount = when (parsed.kind) {
-    WalletSecretKind.MNEMONIC ->
-        SendAccount.Mnemonic(DeterministicWallet.generate(MnemonicCode.toSeed(parsed.value, "")))
-    WalletSecretKind.ZPUB ->
-        SendAccount.Zpub(DeterministicWallet.ExtendedPublicKey.decode(parsed.value).second)
-    WalletSecretKind.WIF ->
-        SendAccount.Wif(PrivateKey(decodeWifPrivateKey(parsed.value)))
-    WalletSecretKind.ADDRESS -> SendAccount.AddressWatch
-}
+private fun sendAccountFor(parsed: ParsedWalletSecret): SendAccount =
+    when (parsed.kind) {
+        WalletSecretKind.MNEMONIC ->
+            SendAccount.Mnemonic(DeterministicWallet.generate(MnemonicCode.toSeed(parsed.value, "")))
+        WalletSecretKind.ZPUB ->
+            SendAccount.Zpub(DeterministicWallet.ExtendedPublicKey.decode(parsed.value).second)
+        WalletSecretKind.WIF ->
+            SendAccount.Wif(PrivateKey(decodeWifPrivateKey(parsed.value)))
+        WalletSecretKind.ADDRESS -> SendAccount.AddressWatch
+    }
 
-private fun SendAccount.fingerprint(): Long? = when (this) {
-    is SendAccount.Mnemonic -> master.fingerprint()
-    is SendAccount.Zpub -> account.fingerprint()
-    is SendAccount.Wif, SendAccount.AddressWatch -> null
-}
+private fun SendAccount.fingerprint(): Long? =
+    when (this) {
+        is SendAccount.Mnemonic -> master.fingerprint()
+        is SendAccount.Zpub -> account.fingerprint()
+        is SendAccount.Wif, SendAccount.AddressWatch -> null
+    }
 
 /** zpub watches use a chain/index path relative to the account; mnemonics use the full BIP84 path. */
-private fun relativePathNums(addr: WatchAddress): List<Long> =
-    listOf(if (addr.change) 1L else 0L, addr.index.toLong())
+private fun relativePathNums(addr: WatchAddress): List<Long> = listOf(if (addr.change) 1L else 0L, addr.index.toLong())
 
-private fun SendAccount.publicKeyAt(addr: WatchAddress): PublicKey? = when (this) {
-    is SendAccount.Mnemonic -> master.derivePrivateKey(addr.path).publicKey
-    is SendAccount.Zpub -> account.derivePublicKey(relativePathNums(addr)).publicKey
-    is SendAccount.Wif -> privateKey.publicKey()
-    SendAccount.AddressWatch -> null
-}
+private fun SendAccount.publicKeyAt(addr: WatchAddress): PublicKey? =
+    when (this) {
+        is SendAccount.Mnemonic -> master.derivePrivateKey(addr.path).publicKey
+        is SendAccount.Zpub -> account.derivePublicKey(relativePathNums(addr)).publicKey
+        is SendAccount.Wif -> privateKey.publicKey()
+        SendAccount.AddressWatch -> null
+    }
 
-private fun SendAccount.bip32PathNums(addr: WatchAddress): List<Long>? = when (this) {
-    is SendAccount.Mnemonic -> KeyPath.computePath(addr.path)
-    is SendAccount.Zpub -> relativePathNums(addr)
-    is SendAccount.Wif, SendAccount.AddressWatch -> null
-}
+private fun SendAccount.bip32PathNums(addr: WatchAddress): List<Long>? =
+    when (this) {
+        is SendAccount.Mnemonic -> KeyPath.computePath(addr.path)
+        is SendAccount.Zpub -> relativePathNums(addr)
+        is SendAccount.Wif, SendAccount.AddressWatch -> null
+    }
 
-private fun SendAccount.privateKeyFor(signPath: String): PrivateKey = when (this) {
-    is SendAccount.Mnemonic -> master.derivePrivateKey(signPath).privateKey
-    is SendAccount.Wif -> privateKey
-    is SendAccount.Zpub, SendAccount.AddressWatch ->
-        throw IllegalArgumentException(SIGNING_SECRET_REQUIRED)
-}
+private fun SendAccount.privateKeyFor(signPath: String): PrivateKey =
+    when (this) {
+        is SendAccount.Mnemonic -> master.derivePrivateKey(signPath).privateKey
+        is SendAccount.Wif -> privateKey
+        is SendAccount.Zpub, SendAccount.AddressWatch ->
+            throw IllegalArgumentException(SIGNING_SECRET_REQUIRED)
+    }
 
 private data class DraftInput(
     val utxo: SendInputUtxo,
@@ -308,8 +337,9 @@ private fun buildDraftSendTx(params: BuildSendTxParams): DraftSendTx {
     // A single-address watch has nowhere to put change except the address it is watching, so a
     // partial send to that same address would collapse both outputs onto it.
     if (account is SendAccount.AddressWatch && !sendMax) {
-        val watched = params.wallet.addresses.firstOrNull()
-            ?: throw IllegalArgumentException("address wallet missing watched address")
+        val watched =
+            params.wallet.addresses.firstOrNull()
+                ?: throw IllegalArgumentException("address wallet missing watched address")
         if (addressesEqual(params.toAddress, watched.address)) {
             throw IllegalArgumentException("cannot send back to the watched address")
         }
@@ -344,12 +374,13 @@ private fun buildDraftSendTx(params: BuildSendTxParams): DraftSendTx {
     val vsizeWithoutChange = ceilDiv4(weightWithoutChange)
     val feeWithoutChange = feePerByteInt * vsizeWithoutChange
 
-    val weightWithChange = Transaction(
-        2L,
-        estimateInputs,
-        preChangeOutputs + listOf(TxOut(Satoshi(0L), changeScript)),
-        0L,
-    ).weight()
+    val weightWithChange =
+        Transaction(
+            2L,
+            estimateInputs,
+            preChangeOutputs + listOf(TxOut(Satoshi(0L), changeScript)),
+            0L,
+        ).weight()
     val vsizeWithChange = ceilDiv4(weightWithChange)
     val feeWithChange = feePerByteInt * vsizeWithChange
 
@@ -381,21 +412,22 @@ private fun buildDraftSendTx(params: BuildSendTxParams): DraftSendTx {
     val skipPaymentAmount = if (!sendMax && toScript.contentEquals(changeScript)) amount else null
 
     var appliedExcess = false
-    val finalOutputs = if (excess > 0) {
-        draftOutputs.map { out ->
-            if (!appliedExcess &&
-                out.publicKeyScript.toByteArray().contentEquals(changeScript) &&
-                (skipPaymentAmount == null || out.amount.toLong() != skipPaymentAmount)
-            ) {
-                appliedExcess = true
-                out.copy(amount = Satoshi(out.amount.toLong() + excess))
-            } else {
-                out
+    val finalOutputs =
+        if (excess > 0) {
+            draftOutputs.map { out ->
+                if (!appliedExcess &&
+                    out.publicKeyScript.toByteArray().contentEquals(changeScript) &&
+                    (skipPaymentAmount == null || out.amount.toLong() != skipPaymentAmount)
+                ) {
+                    appliedExcess = true
+                    out.copy(amount = Satoshi(out.amount.toLong() + excess))
+                } else {
+                    out
+                }
             }
+        } else {
+            draftOutputs
         }
-    } else {
-        draftOutputs
-    }
 
     if (!sendMax) {
         val checkFee = if (appliedExcess) targetFee else selectedFeeInt
@@ -407,34 +439,36 @@ private fun buildDraftSendTx(params: BuildSendTxParams): DraftSendTx {
     val unsignedInputs = params.utxos.map { TxIn(outPointFor(it), SEQUENCE_FINAL) }
     val unsignedTx = Transaction(2L, unsignedInputs, finalOutputs, 0L)
 
-    val draftInputs = params.utxos.mapIndexed { index, utxo ->
-        val addr = watchAddresses[index]
-        DraftInput(
-            utxo = utxo,
-            scriptType = scriptTypes[index],
-            signPath = addr.path,
-            publicKey = account.publicKeyAt(addr),
-            bip32Path = account.bip32PathNums(addr),
-        )
-    }
+    val draftInputs =
+        params.utxos.mapIndexed { index, utxo ->
+            val addr = watchAddresses[index]
+            DraftInput(
+                utxo = utxo,
+                scriptType = scriptTypes[index],
+                signPath = addr.path,
+                publicKey = account.publicKeyAt(addr),
+                bip32Path = account.bip32PathNums(addr),
+            )
+        }
 
     val outputSum = finalOutputs.sumOf { it.amount.toLong() }
     val feeSats = inputSum - outputSum
 
-    val changeSats = if (sendMax) {
-        0L
-    } else {
-        var matched = 0L
-        for (out in finalOutputs) {
-            if (out.publicKeyScript.toByteArray().contentEquals(changeScript)) matched += out.amount.toLong()
-        }
-        if (toScript.contentEquals(changeScript)) {
-            val change = matched - amount
-            if (change > 0L) change else 0L
+    val changeSats =
+        if (sendMax) {
+            0L
         } else {
-            matched
+            var matched = 0L
+            for (out in finalOutputs) {
+                if (out.publicKeyScript.toByteArray().contentEquals(changeScript)) matched += out.amount.toLong()
+            }
+            if (toScript.contentEquals(changeScript)) {
+                val change = matched - amount
+                if (change > 0L) change else 0L
+            } else {
+                matched
+            }
         }
-    }
 
     return DraftSendTx(
         unsignedTx = unsignedTx,
@@ -459,39 +493,42 @@ fun buildSignedSendTx(params: BuildSendTxParams): BuildSendTxResult {
     val draft = buildDraftSendTx(params)
     val spentOutputs = draft.inputs.map { TxOut(Satoshi(it.utxo.valueSats), it.utxo.scriptPubKey) }
 
-    val signedInputs = draft.inputs.mapIndexed { index, input ->
-        val privateKey = draft.account.privateKeyFor(input.signPath)
-        val publicKey = privateKey.publicKey()
-        val txIn = draft.unsignedTx.txIn[index]
-        val amount = Satoshi(input.utxo.valueSats)
-        when (input.scriptType) {
-            AddressScriptType.P2PKH -> {
-                val sig = signLegacyLowR(draft.unsignedTx, index, input.utxo.scriptPubKey, privateKey)
-                txIn.updateSignatureScript(pushData(sig) + pushData(publicKey.value.toByteArray()))
-            }
-            AddressScriptType.P2SH_P2WPKH -> {
-                val scriptCode = Script.write(Script.pay2pkh(publicKey))
-                val sig = signWitnessV0LowR(draft.unsignedTx, index, scriptCode, amount, privateKey)
-                txIn.updateSignatureScript(pushData(Script.write(Script.pay2wpkh(publicKey))))
-                    .updateWitness(ScriptWitness(listOf(ByteVector(sig), publicKey.value)))
-            }
-            AddressScriptType.P2WPKH -> {
-                val scriptCode = Script.write(Script.pay2pkh(publicKey))
-                val sig = signWitnessV0LowR(draft.unsignedTx, index, scriptCode, amount, privateKey)
-                txIn.updateWitness(ScriptWitness(listOf(ByteVector(sig), publicKey.value)))
-            }
-            AddressScriptType.P2TR -> {
-                val sig = draft.unsignedTx.signInputTaprootKeyPath(
-                    privateKey,
-                    index,
-                    spentOutputs,
-                    SigHash.SIGHASH_DEFAULT,
-                    null,
-                )
-                txIn.updateWitness(Script.witnessKeyPathPay2tr(sig))
+    val signedInputs =
+        draft.inputs.mapIndexed { index, input ->
+            val privateKey = draft.account.privateKeyFor(input.signPath)
+            val publicKey = privateKey.publicKey()
+            val txIn = draft.unsignedTx.txIn[index]
+            val amount = Satoshi(input.utxo.valueSats)
+            when (input.scriptType) {
+                AddressScriptType.P2PKH -> {
+                    val sig = signLegacyLowR(draft.unsignedTx, index, input.utxo.scriptPubKey, privateKey)
+                    txIn.updateSignatureScript(pushData(sig) + pushData(publicKey.value.toByteArray()))
+                }
+                AddressScriptType.P2SH_P2WPKH -> {
+                    val scriptCode = Script.write(Script.pay2pkh(publicKey))
+                    val sig = signWitnessV0LowR(draft.unsignedTx, index, scriptCode, amount, privateKey)
+                    txIn
+                        .updateSignatureScript(pushData(Script.write(Script.pay2wpkh(publicKey))))
+                        .updateWitness(ScriptWitness(listOf(ByteVector(sig), publicKey.value)))
+                }
+                AddressScriptType.P2WPKH -> {
+                    val scriptCode = Script.write(Script.pay2pkh(publicKey))
+                    val sig = signWitnessV0LowR(draft.unsignedTx, index, scriptCode, amount, privateKey)
+                    txIn.updateWitness(ScriptWitness(listOf(ByteVector(sig), publicKey.value)))
+                }
+                AddressScriptType.P2TR -> {
+                    val sig =
+                        draft.unsignedTx.signInputTaprootKeyPath(
+                            privateKey,
+                            index,
+                            spentOutputs,
+                            SigHash.SIGHASH_DEFAULT,
+                            null,
+                        )
+                    txIn.updateWitness(Script.witnessKeyPathPay2tr(sig))
+                }
             }
         }
-    }
     val signedTx = draft.unsignedTx.copy(txIn = signedInputs)
 
     return BuildSendTxResult(
@@ -518,36 +555,42 @@ fun buildUnsignedSendPsbt(params: BuildSendTxParams): BuildSendPsbtResult {
     draft.inputs.forEachIndexed { index, input ->
         val outPoint = draft.unsignedTx.txIn[index].outPoint
         val txOut = TxOut(Satoshi(input.utxo.valueSats), input.utxo.scriptPubKey)
-        val derivationPaths = if (input.publicKey != null && input.bip32Path != null && fingerprint != null) {
-            mapOf(input.publicKey to KeyPathWithMaster(fingerprint, KeyPath(input.bip32Path)))
-        } else {
-            emptyMap()
-        }
-        val updated = when (input.scriptType) {
-            AddressScriptType.P2PKH -> {
-                val prevTx = Transaction.read(
-                    input.utxo.nonWitnessUtxo ?: throw IllegalArgumentException(LEGACY_PREV_TX_REQUIRED),
-                )
-                psbt.updateNonWitnessInput(prevTx, input.utxo.vout, derivationPaths = derivationPaths)
+        val derivationPaths =
+            if (input.publicKey != null && input.bip32Path != null && fingerprint != null) {
+                mapOf(input.publicKey to KeyPathWithMaster(fingerprint, KeyPath(input.bip32Path)))
+            } else {
+                emptyMap()
             }
-            AddressScriptType.P2SH_P2WPKH -> psbt.updateWitnessInput(
-                outPoint,
-                txOut,
-                redeemScript = input.publicKey?.let { Script.pay2wpkh(it) },
-                derivationPaths = derivationPaths,
-            )
-            AddressScriptType.P2WPKH -> psbt.updateWitnessInput(
-                outPoint,
-                txOut,
-                derivationPaths = derivationPaths,
-            )
-            AddressScriptType.P2TR -> psbt.updateWitnessInput(
-                outPoint,
-                txOut,
-                derivationPaths = derivationPaths,
-                taprootInternalKey = input.publicKey?.let { XonlyPublicKey(it) },
-            )
-        }
+        val updated =
+            when (input.scriptType) {
+                AddressScriptType.P2PKH -> {
+                    val prevTx =
+                        Transaction.read(
+                            input.utxo.nonWitnessUtxo ?: throw IllegalArgumentException(LEGACY_PREV_TX_REQUIRED),
+                        )
+                    psbt.updateNonWitnessInput(prevTx, input.utxo.vout, derivationPaths = derivationPaths)
+                }
+                AddressScriptType.P2SH_P2WPKH ->
+                    psbt.updateWitnessInput(
+                        outPoint,
+                        txOut,
+                        redeemScript = input.publicKey?.let { Script.pay2wpkh(it) },
+                        derivationPaths = derivationPaths,
+                    )
+                AddressScriptType.P2WPKH ->
+                    psbt.updateWitnessInput(
+                        outPoint,
+                        txOut,
+                        derivationPaths = derivationPaths,
+                    )
+                AddressScriptType.P2TR ->
+                    psbt.updateWitnessInput(
+                        outPoint,
+                        txOut,
+                        derivationPaths = derivationPaths,
+                        taprootInternalKey = input.publicKey?.let { XonlyPublicKey(it) },
+                    )
+            }
         psbt = updated.right ?: throw IllegalStateException("failed to update PSBT input $index: ${updated.left}")
     }
 
@@ -579,13 +622,15 @@ fun buildSend(params: BuildSendTxParams): BuildSendResult {
         )
     }
 
-    val effectiveParams = if (parsed.kind == WalletSecretKind.ADDRESS && params.amountSats !is SendAmount.Max) {
-        val watched = params.wallet.addresses.firstOrNull()
-            ?: throw IllegalArgumentException("address wallet missing watched address")
-        params.copy(changeAddress = watched.address)
-    } else {
-        params
-    }
+    val effectiveParams =
+        if (parsed.kind == WalletSecretKind.ADDRESS && params.amountSats !is SendAmount.Max) {
+            val watched =
+                params.wallet.addresses.firstOrNull()
+                    ?: throw IllegalArgumentException("address wallet missing watched address")
+            params.copy(changeAddress = watched.address)
+        } else {
+            params
+        }
     val result = buildUnsignedSendPsbt(effectiveParams)
     return PsbtSendResult(
         psbtHex = result.psbtHex,

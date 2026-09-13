@@ -12,15 +12,20 @@ private const val CRYPTO_PSBT_UR_TYPE = "crypto-psbt"
 private const val FOUNTAIN_MIN_FRAGMENT_LENGTH = 10
 
 /** Encode a PSBT as BC-UR v2 `crypto-psbt` fragments (one string per `UREncoder.nextPart()`). */
-fun encodeCryptoPsbtUrFragments(psbt: ByteArray, capacity: Int = BC_UR_PSBT_CAPACITY): List<String> {
+fun encodeCryptoPsbtUrFragments(
+    psbt: ByteArray,
+    capacity: Int = BC_UR_PSBT_CAPACITY,
+): List<String> {
     val message = cborEncodeByteString(psbt)
     val encoder = UrEncoder(message, CRYPTO_PSBT_UR_TYPE, capacity)
     return List(encoder.fragmentsLength) { encoder.nextPart() }
 }
 
 /** Hex-string overload of [encodeCryptoPsbtUrFragments]. */
-fun encodeCryptoPsbtUrFragments(psbtHex: String, capacity: Int = BC_UR_PSBT_CAPACITY): List<String> =
-    encodeCryptoPsbtUrFragments(hexToBytes(psbtHex), capacity)
+fun encodeCryptoPsbtUrFragments(
+    psbtHex: String,
+    capacity: Int = BC_UR_PSBT_CAPACITY,
+): List<String> = encodeCryptoPsbtUrFragments(hexToBytes(psbtHex), capacity)
 
 /** Inverts [encodeCryptoPsbtUrFragments]: reassembles the PSBT bytes from its UR fragments. */
 internal fun decodeCryptoPsbtUrFragments(parts: List<String>): ByteArray {
@@ -89,7 +94,12 @@ private class UrEncoder(
     }
 }
 
-private data class ParsedUrPart(val type: String, val seqNum: Long?, val seqCount: Int?, val body: String)
+private data class ParsedUrPart(
+    val type: String,
+    val seqNum: Long?,
+    val seqCount: Int?,
+    val body: String,
+)
 
 private fun parseUrPart(part: String): ParsedUrPart {
     val trimmed = part.trim()
@@ -164,7 +174,11 @@ private class FountainEncoder(
     }
 
     companion object {
-        fun findNominalFragmentLength(messageLength: Int, minFragmentLength: Int, maxFragmentLength: Int): Int {
+        fun findNominalFragmentLength(
+            messageLength: Int,
+            minFragmentLength: Int,
+            maxFragmentLength: Int,
+        ): Int {
             require(messageLength > 0)
             require(minFragmentLength > 0)
             require(maxFragmentLength >= minFragmentLength)
@@ -177,7 +191,10 @@ private class FountainEncoder(
             return fragmentLength
         }
 
-        fun partitionMessage(message: ByteArray, fragmentLength: Int): List<ByteArray> {
+        fun partitionMessage(
+            message: ByteArray,
+            fragmentLength: Int,
+        ): List<ByteArray> {
             val fragments = mutableListOf<ByteArray>()
             var offset = 0
             while (offset < message.size) {
@@ -190,7 +207,10 @@ private class FountainEncoder(
             return fragments
         }
 
-        private fun ceilDiv(a: Int, b: Int): Int = (a + b - 1) / b
+        private fun ceilDiv(
+            a: Int,
+            b: Int,
+        ): Int = (a + b - 1) / b
     }
 }
 
@@ -198,7 +218,10 @@ private class FountainEncoder(
 // Fountain decoder (ports fountainDecoder.ts, inverse of FountainEncoder)
 // ---------------------------------------------------------------------------------------------
 
-private class FountainDecoderPart(val indexes: List<Int>, val fragment: ByteArray) {
+private class FountainDecoderPart(
+    val indexes: List<Int>,
+    val fragment: ByteArray,
+) {
     fun isSimple(): Boolean = indexes.size == 1
 }
 
@@ -220,7 +243,13 @@ private class FountainDecoder {
 
     fun resultMessage(): ByteArray = if (isSuccess()) result!! else ByteArray(0)
 
-    fun receivePart(seqNum: Long, seqLength: Int, messageLength: Int, checksum: Long, fragment: ByteArray): Boolean {
+    fun receivePart(
+        seqNum: Long,
+        seqLength: Int,
+        messageLength: Int,
+        checksum: Long,
+        fragment: ByteArray,
+    ): Boolean {
         if (isComplete()) return false
         if (!validatePart(seqLength, messageLength, checksum, fragment.size)) return false
 
@@ -233,7 +262,12 @@ private class FountainDecoder {
         return true
     }
 
-    private fun validatePart(seqLength: Int, messageLength: Int, checksum: Long, fragmentLength: Int): Boolean {
+    private fun validatePart(
+        seqLength: Int,
+        messageLength: Int,
+        checksum: Long,
+        fragmentLength: Int,
+    ): Boolean {
         if (expectedPartIndexes.isEmpty()) {
             expectedPartIndexes = (0 until seqLength).toList()
             expectedMessageLength = messageLength
@@ -248,7 +282,10 @@ private class FountainDecoder {
         return true
     }
 
-    private fun reducePartByPart(a: FountainDecoderPart, b: FountainDecoderPart): FountainDecoderPart {
+    private fun reducePartByPart(
+        a: FountainDecoderPart,
+        b: FountainDecoderPart,
+    ): FountainDecoderPart {
         val bSet = b.indexes.toHashSet()
         return if (a.indexes.toHashSet().containsAll(bSet)) {
             val newIndexes = a.indexes.filter { it !in bSet }
@@ -310,7 +347,10 @@ private class FountainDecoder {
     }
 
     companion object {
-        fun joinFragments(fragments: List<ByteArray>, messageLength: Int): ByteArray {
+        fun joinFragments(
+            fragments: List<ByteArray>,
+            messageLength: Int,
+        ): ByteArray {
             val out = ByteArray(fragments.sumOf { it.size })
             var offset = 0
             for (fragment in fragments) {
@@ -322,7 +362,10 @@ private class FountainDecoder {
     }
 }
 
-private fun xorBytes(a: ByteArray, b: ByteArray): ByteArray {
+private fun xorBytes(
+    a: ByteArray,
+    b: ByteArray,
+): ByteArray {
     val length = maxOf(a.size, b.size)
     val out = ByteArray(length)
     for (i in 0 until length) {
@@ -348,7 +391,11 @@ private fun intToBytesBE(value: Long): ByteArray {
  * The first `seqLength` parts are the "pure" fragments, not mixed with any others: generating
  * exactly `seqLength` parts from a [FountainEncoder] therefore always yields a decodable set.
  */
-private fun chooseFragments(seqNum: Long, seqLength: Int, checksum: Long): List<Int> {
+private fun chooseFragments(
+    seqNum: Long,
+    seqLength: Int,
+    checksum: Long,
+): List<Int> {
     if (seqNum <= seqLength) {
         return listOf((seqNum - 1).toInt())
     }
@@ -359,13 +406,19 @@ private fun chooseFragments(seqNum: Long, seqLength: Int, checksum: Long): List<
     return shuffled.take(degree)
 }
 
-private fun chooseDegree(seqLength: Int, rng: Xoshiro256): Int {
+private fun chooseDegree(
+    seqLength: Int,
+    rng: Xoshiro256,
+): Int {
     val probabilities = DoubleArray(seqLength) { 1.0 / (it + 1) }
     val alias = AliasSampler(probabilities)
     return alias.draw(rng) + 1
 }
 
-private fun shuffle(items: List<Int>, rng: Xoshiro256): List<Int> {
+private fun shuffle(
+    items: List<Int>,
+    rng: Xoshiro256,
+): List<Int> {
     val remaining = items.toMutableList()
     val result = mutableListOf<Int>()
     while (remaining.isNotEmpty()) {
@@ -376,7 +429,9 @@ private fun shuffle(items: List<Int>, rng: Xoshiro256): List<Int> {
 }
 
 /** Walker's alias method, matching `@keystonehq/alias-sampling`. */
-private class AliasSampler(probabilities: DoubleArray) {
+private class AliasSampler(
+    probabilities: DoubleArray,
+) {
     private val prob: DoubleArray
     private val alias: IntArray
 
@@ -412,7 +467,9 @@ private class AliasSampler(probabilities: DoubleArray) {
 
 /** Xoshiro256** PRNG seeded by SHA-256(seed), matching `@ngraveio/bc-ur`'s `xoshiro.ts`. */
 @OptIn(ExperimentalUnsignedTypes::class)
-private class Xoshiro256(seed: ByteArray) {
+private class Xoshiro256(
+    seed: ByteArray,
+) {
     private val s = ULongArray(4)
 
     init {
@@ -440,7 +497,10 @@ private class Xoshiro256(seed: ByteArray) {
 
     fun nextDouble(): Double = roll().toDouble() / TWO_POW_64
 
-    fun nextInt(low: Int, high: Int): Int = kotlin.math.floor(nextDouble() * (high - low + 1) + low).toInt()
+    fun nextInt(
+        low: Int,
+        high: Int,
+    ): Int = kotlin.math.floor(nextDouble() * (high - low + 1) + low).toInt()
 
     companion object {
         private const val TWO_POW_64 = 18446744073709551616.0
@@ -451,13 +511,14 @@ private class Xoshiro256(seed: ByteArray) {
 // CRC32 (matches the `crc` npm package's `crc32`: CRC-32/ISO-HDLC)
 // ---------------------------------------------------------------------------------------------
 
-private val CRC32_TABLE: IntArray = IntArray(256) { n ->
-    var c = n
-    repeat(8) {
-        c = if (c and 1 != 0) (0xEDB88320.toInt() xor (c ushr 1)) else (c ushr 1)
+private val CRC32_TABLE: IntArray =
+    IntArray(256) { n ->
+        var c = n
+        repeat(8) {
+            c = if (c and 1 != 0) (0xEDB88320.toInt() xor (c ushr 1)) else (c ushr 1)
+        }
+        c
     }
-    c
-}
 
 private fun crc32(bytes: ByteArray): Long {
     var crc = -1 // 0xFFFFFFFF
@@ -477,17 +538,18 @@ private fun crc32Bytes(bytes: ByteArray): ByteArray {
 // Bytewords, minimal style only (ports bytewords.ts)
 // ---------------------------------------------------------------------------------------------
 
-private const val BYTEWORDS = "ableacidalsoapexaquaarchatomauntawayaxisbackbaldbarnbeltbetabiasblue" +
-    "bodybragbrewbulbbuzzcalmcashcatschefcityclawcodecolacookcostcruxcurlcuspcyandarkdatadaysdelidice" +
-    "dietdoordowndrawdropdrumdulldutyeacheasyechoedgeepicevenexamexiteyesfactfairfernfigsfilmfishfizz" +
-    "flapflewfluxfoxyfreefrogfuelfundgalagamegeargemsgiftgirlglowgoodgraygrimgurugushgyrohalfhanghard" +
-    "hawkheathelphighhillholyhopehornhutsicedideaidleinchinkyintoirisironitemjadejazzjoinjoltjowljudo" +
-    "jugsjumpjunkjurykeepkenokeptkeyskickkilnkingkitekiwiknoblamblavalazyleaflegsliarlimplionlistlogo" +
-    "loudloveluaulucklungmainmanymathmazememomenumeowmildmintmissmonknailnavyneednewsnextnoonnotenumb" +
-    "obeyoboeomitonyxopenovalowlspaidpartpeckplaypluspoempoolposepuffpumapurrquadquizraceramprealredo" +
-    "richroadrockroofrubyruinrunsrustsafesagascarsetssilkskewslotsoapsolosongstubsurfswantacotasktaxi" +
-    "tenttiedtimetinytoiltombtoystriptunatwinuglyundouniturgeuservastveryvetovialvibeviewvisavoidvows" +
-    "wallwandwarmwaspwavewaxywebswhatwhenwhizwolfworkyankyawnyellyogayurtzapszerozestzinczonezoom"
+private const val BYTEWORDS =
+    "ableacidalsoapexaquaarchatomauntawayaxisbackbaldbarnbeltbetabiasblue" +
+        "bodybragbrewbulbbuzzcalmcashcatschefcityclawcodecolacookcostcruxcurlcuspcyandarkdatadaysdelidice" +
+        "dietdoordowndrawdropdrumdulldutyeacheasyechoedgeepicevenexamexiteyesfactfairfernfigsfilmfishfizz" +
+        "flapflewfluxfoxyfreefrogfuelfundgalagamegeargemsgiftgirlglowgoodgraygrimgurugushgyrohalfhanghard" +
+        "hawkheathelphighhillholyhopehornhutsicedideaidleinchinkyintoirisironitemjadejazzjoinjoltjowljudo" +
+        "jugsjumpjunkjurykeepkenokeptkeyskickkilnkingkitekiwiknoblamblavalazyleaflegsliarlimplionlistlogo" +
+        "loudloveluaulucklungmainmanymathmazememomenumeowmildmintmissmonknailnavyneednewsnextnoonnotenumb" +
+        "obeyoboeomitonyxopenovalowlspaidpartpeckplaypluspoempoolposepuffpumapurrquadquizraceramprealredo" +
+        "richroadrockroofrubyruinrunsrustsafesagascarsetssilkskewslotsoapsolosongstubsurfswantacotasktaxi" +
+        "tenttiedtimetinytoiltombtoystriptunatwinuglyundouniturgeuservastveryvetovialvibeviewvisavoidvows" +
+        "wallwandwarmwaspwavewaxywebswhatwhenwhizwolfworkyankyawnyellyogayurtzapszerozestzinczonezoom"
 
 private fun bytewordAt(index: Int): String {
     val start = index * 4
@@ -541,19 +603,23 @@ private fun bytewordsDecodeMinimal(input: String): ByteArray {
 // Minimal CBOR: byte strings, unsigned ints, and the fixed-shape 5-element fountain-part array.
 // ---------------------------------------------------------------------------------------------
 
-private fun cborHeader(majorType: Int, value: Long): ByteArray {
+private fun cborHeader(
+    majorType: Int,
+    value: Long,
+): ByteArray {
     val typeBits = majorType shl 5
     return when {
         value < 24 -> byteArrayOf((typeBits or value.toInt()).toByte())
         value < 256 -> byteArrayOf((typeBits or 24).toByte(), value.toByte())
         value < 65536 -> byteArrayOf((typeBits or 25).toByte(), (value shr 8).toByte(), value.toByte())
-        else -> byteArrayOf(
-            (typeBits or 26).toByte(),
-            (value shr 24).toByte(),
-            (value shr 16).toByte(),
-            (value shr 8).toByte(),
-            value.toByte(),
-        )
+        else ->
+            byteArrayOf(
+                (typeBits or 26).toByte(),
+                (value shr 24).toByte(),
+                (value shr 16).toByte(),
+                (value shr 8).toByte(),
+                value.toByte(),
+            )
     }
 }
 
@@ -569,7 +635,9 @@ private fun cborEncodeFountainPart(part: FountainEncoderPart): ByteArray =
         cborEncodeUInt(part.checksum) +
         cborEncodeByteString(part.fragment)
 
-private class CborReader(private val data: ByteArray) {
+private class CborReader(
+    private val data: ByteArray,
+) {
     private var pos = 0
 
     private fun readByte(): Int = data[pos++].toInt() and 0xFF
@@ -579,17 +647,18 @@ private class CborReader(private val data: ByteArray) {
         return (b shr 5) to (b and 0x1F)
     }
 
-    fun readLength(additionalInfo: Int): Long = when {
-        additionalInfo < 24 -> additionalInfo.toLong()
-        additionalInfo == 24 -> readByte().toLong()
-        additionalInfo == 25 -> (readByte().toLong() shl 8) or readByte().toLong()
-        additionalInfo == 26 -> {
-            var v = 0L
-            repeat(4) { v = (v shl 8) or readByte().toLong() }
-            v
+    fun readLength(additionalInfo: Int): Long =
+        when {
+            additionalInfo < 24 -> additionalInfo.toLong()
+            additionalInfo == 24 -> readByte().toLong()
+            additionalInfo == 25 -> (readByte().toLong() shl 8) or readByte().toLong()
+            additionalInfo == 26 -> {
+                var v = 0L
+                repeat(4) { v = (v shl 8) or readByte().toLong() }
+                v
+            }
+            else -> error("unsupported CBOR additional info: $additionalInfo")
         }
-        else -> error("unsupported CBOR additional info: $additionalInfo")
-    }
 
     fun readBytes(length: Int): ByteArray {
         val out = data.copyOfRange(pos, pos + length)

@@ -84,7 +84,14 @@ class WalletTest {
         val ww = createWallet(wdb)
         assertEquals(WatchWalletKind.WIF, ww.snapshot().kind)
         assertEquals(4, ww.snapshot().addresses.size)
-        assertEquals(ADDR_BECH32, ww.snapshot().addresses.first { it.scriptType == AddressScriptType.P2WPKH }.address)
+        assertEquals(
+            ADDR_BECH32,
+            ww
+                .snapshot()
+                .addresses
+                .first { it.scriptType == AddressScriptType.P2WPKH }
+                .address,
+        )
         wdb.close()
     }
 }

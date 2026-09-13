@@ -90,6 +90,7 @@ fun SendScreen(
         onDispose { off() }
     }
     val selectedSum = snap.utxos.filter { it.key in selectedKeys }.sumOf { it.valueSats }
+
     fun goBack() {
         val previewTxHex = (preview as? SignedSendResult)?.txHex
         val ownsJob = previewTxHex != null && broadcast.txHex == previewTxHex
@@ -129,143 +130,168 @@ fun SendScreen(
         }
     }
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BwColors.Paper)
-            .safeDrawingPadding()
-            .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(BwColors.Paper)
+                .safeDrawingPadding()
+                .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         ScreenHeader(title = "Send", onBack = { goBack() })
         when (step) {
-            SendStep.Utxos -> UtxoStep(
-                modifier = Modifier.weight(1f),
-                utxos = snap.utxos,
-                selectedKeys = selectedKeys,
-                selectedSum = selectedSum,
-                renameKey = renameKey,
-                renameDraft = renameDraft,
-                onRenameDraft = { renameDraft = it },
-                onToggle = { key ->
-                    selectedKeys = if (key in selectedKeys) selectedKeys - key else selectedKeys + key
-                },
-                onBeginRename = { row ->
-                    renameKey = row.key
-                    renameDraft = row.name.orEmpty()
-                },
-                onSaveRename = {
-                    val key = renameKey ?: return@UtxoStep
-                    val w = wallet ?: return@UtxoStep
-                    setUtxoName(db, w, runtime.walletTxsStore, key, renameDraft)
-                    renameKey = null
-                },
-                onContinue = {
-                    if (selectedKeys.isNotEmpty()) step = SendStep.Details
-                },
-            )
-            SendStep.Details -> if (scanning) {
-                QrScanOverlay(
+            SendStep.Utxos ->
+                UtxoStep(
                     modifier = Modifier.weight(1f),
-                    onResult = { payload ->
-                        address = payload
-                        if (invalidField == SendField.Address) invalidField = null
-                        scanning = false
-                    },
-                )
-            } else {
-                DetailsStep(
+                    utxos = snap.utxos,
+                    selectedKeys = selectedKeys,
                     selectedSum = selectedSum,
-                    address = address,
-                    amount = amount,
-                    label = label,
-                    invalid = invalidField,
-                    onAddress = { address = it; if (invalidField == SendField.Address) invalidField = null },
-                    onAmount = { amount = it; if (invalidField == SendField.Amount) invalidField = null },
-                    onLabel = { label = it; if (invalidField == SendField.Label) invalidField = null },
-                    onScan = { scanning = true },
+                    renameKey = renameKey,
+                    renameDraft = renameDraft,
+                    onRenameDraft = { renameDraft = it },
+                    onToggle = { key ->
+                        selectedKeys = if (key in selectedKeys) selectedKeys - key else selectedKeys + key
+                    },
+                    onBeginRename = { row ->
+                        renameKey = row.key
+                        renameDraft = row.name.orEmpty()
+                    },
+                    onSaveRename = {
+                        val key = renameKey ?: return@UtxoStep
+                        val w = wallet ?: return@UtxoStep
+                        setUtxoName(db, w, runtime.walletTxsStore, key, renameDraft)
+                        renameKey = null
+                    },
                     onContinue = {
-                        when (val result = validateSendDetails(address, amount, label, selectedSum)) {
-                            is SendDetailsValidation.Ok -> {
-                                details = result.details
-                                invalidField = null
-                                step = SendStep.FeeRate
+                        if (selectedKeys.isNotEmpty()) step = SendStep.Details
+                    },
+                )
+            SendStep.Details ->
+                if (scanning) {
+                    QrScanOverlay(
+                        modifier = Modifier.weight(1f),
+                        onResult = { payload ->
+                            address = payload
+                            if (invalidField == SendField.Address) invalidField = null
+                            scanning = false
+                        },
+                    )
+                } else {
+                    DetailsStep(
+                        selectedSum = selectedSum,
+                        address = address,
+                        amount = amount,
+                        label = label,
+                        invalid = invalidField,
+                        onAddress = {
+                            address = it
+                            if (invalidField == SendField.Address) invalidField = null
+                        },
+                        onAmount = {
+                            amount = it
+                            if (invalidField == SendField.Amount) invalidField = null
+                        },
+                        onLabel = {
+                            label = it
+                            if (invalidField == SendField.Label) invalidField = null
+                        },
+                        onScan = { scanning = true },
+                        onContinue = {
+                            when (val result = validateSendDetails(address, amount, label, selectedSum)) {
+                                is SendDetailsValidation.Ok -> {
+                                    details = result.details
+                                    invalidField = null
+                                    step = SendStep.FeeRate
+                                }
+                                is SendDetailsValidation.Invalid -> invalidField = result.field
                             }
-                            is SendDetailsValidation.Invalid -> invalidField = result.field
+                        },
+                    )
+                }
+            SendStep.FeeRate ->
+                FeeRateStep(
+                    feeRate = feeRate,
+                    error = feeError,
+                    onFeeRate = {
+                        feeRate = it
+                        feeError = null
+                    },
+                    onContinue = {
+                        val rate = parseFeeRateSatPerVb(feeRate)
+                        val d = details
+                        val w = wallet
+                        if (rate == null) {
+                            feeError = "fee rate must be positive"
+                            return@FeeRateStep
+                        }
+                        if (d == null || w == null) {
+                            feeError = "missing send details"
+                            return@FeeRateStep
+                        }
+                        val picked = pickSelected(snap.utxos, selectedKeys)
+                        if (picked is PickUtxos.Error) {
+                            feeError = picked.error
+                            return@FeeRateStep
+                        }
+                        val selected = (picked as PickUtxos.Ok).selected
+                        try {
+                            val result =
+                                buildActiveSendTx(
+                                    db,
+                                    w,
+                                    SendBuildParams(
+                                        utxos =
+                                            selected.map {
+                                                SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey)
+                                            },
+                                        toAddress = d.toAddress,
+                                        amountSats = d.amountSats,
+                                        feeRateSatPerVb = rate,
+                                    ),
+                                )
+                            val txid =
+                                when (result) {
+                                    is SignedSendResult -> result.txid
+                                    is PsbtSendResult -> result.txid
+                                }
+                            val changeVouts =
+                                when (result) {
+                                    is SignedSendResult -> result.changeVouts
+                                    is PsbtSendResult -> result.changeVouts
+                                }
+                            savePaymentLabel(db, txid, d.paymentLabel, changeVouts)
+                            preview = result
+                            previewInputSum = selected.sumOf { it.valueSats }
+                            feeError = null
+                            cancelArmedForId = null
+                            step = SendStep.Preview
+                        } catch (err: Throwable) {
+                            feeError = err.message ?: err.toString()
                         }
                     },
                 )
-            }
-            SendStep.FeeRate -> FeeRateStep(
-                feeRate = feeRate,
-                error = feeError,
-                onFeeRate = { feeRate = it; feeError = null },
-                onContinue = {
-                    val rate = parseFeeRateSatPerVb(feeRate)
-                    val d = details
-                    val w = wallet
-                    if (rate == null) {
-                        feeError = "fee rate must be positive"
-                        return@FeeRateStep
-                    }
-                    if (d == null || w == null) {
-                        feeError = "missing send details"
-                        return@FeeRateStep
-                    }
-                    val picked = pickSelected(snap.utxos, selectedKeys)
-                    if (picked is PickUtxos.Error) {
-                        feeError = picked.error
-                        return@FeeRateStep
-                    }
-                    val selected = (picked as PickUtxos.Ok).selected
-                    try {
-                        val result = buildActiveSendTx(
-                            db,
-                            w,
-                            SendBuildParams(
-                                utxos = selected.map {
-                                    SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey)
-                                },
-                                toAddress = d.toAddress,
-                                amountSats = d.amountSats,
-                                feeRateSatPerVb = rate,
-                            ),
-                        )
-                        val txid = when (result) {
-                            is SignedSendResult -> result.txid
-                            is PsbtSendResult -> result.txid
-                        }
-                        val changeVouts = when (result) {
-                            is SignedSendResult -> result.changeVouts
-                            is PsbtSendResult -> result.changeVouts
-                        }
-                        savePaymentLabel(db, txid, d.paymentLabel, changeVouts)
-                        preview = result
-                        previewInputSum = selected.sumOf { it.valueSats }
-                        feeError = null
-                        cancelArmedForId = null
-                        step = SendStep.Preview
-                    } catch (err: Throwable) {
-                        feeError = err.message ?: err.toString()
-                    }
-                },
-            )
-            SendStep.Preview -> PreviewStep(
-                preview = preview,
-                details = details,
-                inputSum = previewInputSum,
-                broadcast = broadcast,
-                onBroadcast = {
-                    val signed = preview as? SignedSendResult ?: return@PreviewStep
-                    val id = prepareUiBroadcast(runtime.broadcastStore, signed.txHex) ?: return@PreviewStep
-                    runtime.bus.emit(Event.BroadcastRequest, BroadcastRequestPayload(id, signed.txHex))
-                },
-            )
+            SendStep.Preview ->
+                PreviewStep(
+                    preview = preview,
+                    details = details,
+                    inputSum = previewInputSum,
+                    broadcast = broadcast,
+                    onBroadcast = {
+                        val signed = preview as? SignedSendResult ?: return@PreviewStep
+                        val id = prepareUiBroadcast(runtime.broadcastStore, signed.txHex) ?: return@PreviewStep
+                        runtime.bus.emit(Event.BroadcastRequest, BroadcastRequestPayload(id, signed.txHex))
+                    },
+                )
         }
     }
 }
 
-private fun pickSelected(utxos: List<WalletUtxoRow>, keys: Set<String>): PickUtxos<WalletUtxoRow> =
-    io.bluewallet.blueberry.parse.pickUtxosByKeys(utxos, keys.toList()) { it.key }
+private fun pickSelected(
+    utxos: List<WalletUtxoRow>,
+    keys: Set<String>,
+): PickUtxos<WalletUtxoRow> =
+    io.bluewallet.blueberry.parse
+        .pickUtxosByKeys(utxos, keys.toList()) { it.key }
 
 @Composable
 private fun UtxoStep(
@@ -316,10 +342,11 @@ private fun UtxoStep(
             items(utxos, key = { it.key }) { u ->
                 val checked = u.key in selectedKeys
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onToggle(u.key) }
-                        .padding(vertical = BwSpace.Gap),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggle(u.key) }
+                            .padding(vertical = BwSpace.Gap),
                     horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -464,12 +491,13 @@ private fun PreviewStep(
     if (showBroadcast && broadcastJobInFlight(broadcast.phase)) {
         Text("Broadcasting via Tor", color = BwColors.Accent, fontFamily = BwFontFamily, fontWeight = BwType.Label)
         Text(
-            text = listOfNotNull(
-                broadcast.phase,
-                broadcast.attempt?.let { "attempt $it/${broadcast.maxAttempts ?: "?"}" },
-                broadcast.peer,
-                broadcast.detail,
-            ).joinToString(" · "),
+            text =
+                listOfNotNull(
+                    broadcast.phase,
+                    broadcast.attempt?.let { "attempt $it/${broadcast.maxAttempts ?: "?"}" },
+                    broadcast.peer,
+                    broadcast.detail,
+                ).joinToString(" · "),
             color = BwColors.InkMuted,
             fontFamily = BwFontFamily,
             fontSize = BwType.BodySize,
@@ -509,13 +537,14 @@ private fun PreviewStep(
 
 @Composable
 private fun UrQr(psbtHex: String) {
-    val parts = remember(psbtHex) {
-        try {
-            encodeCryptoPsbtUrFragments(psbtHex)
-        } catch (_: Throwable) {
-            emptyList()
+    val parts =
+        remember(psbtHex) {
+            try {
+                encodeCryptoPsbtUrFragments(psbtHex)
+            } catch (_: Throwable) {
+                emptyList()
+            }
         }
-    }
     var index by remember(psbtHex) { mutableStateOf(0) }
     LaunchedEffect(parts) {
         if (parts.size <= 1) return@LaunchedEffect

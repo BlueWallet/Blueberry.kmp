@@ -33,7 +33,10 @@ internal fun parseInt10(v: String?): Double? {
     return if (negative) -value else value
 }
 
-fun saveWatchGaps(db: Database, gaps: WatchGaps) {
+fun saveWatchGaps(
+    db: Database,
+    gaps: WatchGaps,
+) {
     db.keyValue.set(WATCH_EXTERNAL_KEY, gaps.external.toString())
     db.keyValue.set(WATCH_INTERNAL_KEY, gaps.internal.toString())
 }
@@ -59,7 +62,10 @@ fun loadWatchGaps(db: Database): WatchGaps {
     return WatchGaps(external, internal)
 }
 
-data class GrowWatchGapsResult(val gaps: WatchGaps, val grew: Boolean)
+data class GrowWatchGapsResult(
+    val gaps: WatchGaps,
+    val grew: Boolean,
+)
 
 fun growWatchGapsIfNeeded(
     gaps: WatchGaps,
@@ -67,7 +73,10 @@ fun growWatchGapsIfNeeded(
     usedInternal: List<Int>,
     gapLimit: Int = GAP_LIMIT,
 ): GrowWatchGapsResult {
-    fun bump(n: Int, idxs: List<Int>): Int {
+    fun bump(
+        n: Int,
+        idxs: List<Int>,
+    ): Int {
         val start = if (n < gapLimit) 0 else n - gapLimit
         if (idxs.none { it >= start && it < n }) return n
         return minOf(n + gapLimit, MAX_WATCH_COUNT)

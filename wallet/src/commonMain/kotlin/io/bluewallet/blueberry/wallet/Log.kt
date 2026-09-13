@@ -1,4 +1,7 @@
 package io.bluewallet.blueberry.wallet
 
-fun log(scope: String, message: String) {
+fun log(
+    scope: String,
+    message: String,
+) {
 }

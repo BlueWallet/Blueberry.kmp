@@ -28,13 +28,15 @@ class TrustedChainTest {
         val db = createSqliteDatabase(":memory:")
         db.headers.ensureCheckpoint(checkpointDbRecord())
         val tip = db.headers.tip()!!
-        val gap = listOf(
-            tip,
-            tip.copy(height = tip.height + 2, hashInternalHex = "ab".repeat(32)),
-        )
-        val ex = assertFailsWith<IllegalStateException> {
-            trustedChainFromStored(gap, BLUEBERRY_HEADER_CONSENSUS)
-        }
+        val gap =
+            listOf(
+                tip,
+                tip.copy(height = tip.height + 2, hashInternalHex = "ab".repeat(32)),
+            )
+        val ex =
+            assertFailsWith<IllegalStateException> {
+                trustedChainFromStored(gap, BLUEBERRY_HEADER_CONSENSUS)
+            }
         assertTrue(ex.message!!.contains("trusted chain gap"))
         db.close()
     }

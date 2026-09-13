@@ -32,8 +32,13 @@ const val MSG_BLOCK: UInt = 2u
 const val MSG_WITNESS_BLOCK: UInt = 1_073_741_826u
 
 sealed class BlockBatchResult<out T> {
-    data class Ok<T>(val value: T) : BlockBatchResult<T>()
-    data class Err(val error: String) : BlockBatchResult<Nothing>()
+    data class Ok<T>(
+        val value: T,
+    ) : BlockBatchResult<T>()
+
+    data class Err(
+        val error: String,
+    ) : BlockBatchResult<Nothing>()
 }
 
 class BlockSyncOptions(
@@ -45,7 +50,9 @@ class BlockSyncOptions(
 
 interface BlockSessionApi {
     val services: ULong
+
     suspend fun getBlock(hashInternal: ByteArray): BlockPayload
+
     suspend fun close()
 }
 
@@ -55,16 +62,17 @@ private suspend fun connectOrAbort(
     port: Int,
 ): ByteDuplex {
     val pending = CompletableDeferred<ByteDuplex>()
-    val connectJob = CoroutineScope(coroutineContext).launch {
-        try {
-            pending.complete(connect(host, port))
-        } catch (e: CancellationException) {
-            pending.cancel(e)
-            throw e
-        } catch (e: Throwable) {
-            pending.completeExceptionally(e)
+    val connectJob =
+        CoroutineScope(coroutineContext).launch {
+            try {
+                pending.complete(connect(host, port))
+            } catch (e: CancellationException) {
+                pending.cancel(e)
+                throw e
+            } catch (e: Throwable) {
+                pending.completeExceptionally(e)
+            }
         }
-    }
     try {
         return pending.await()
     } catch (e: CancellationException) {
@@ -76,15 +84,20 @@ private suspend fun connectOrAbort(
     }
 }
 
-private suspend fun handshake(duplex: ByteDuplex, port: Int): Pair<Protocol, ULong> {
-    val protocol = Protocol.connect(
-        duplex,
-        ProtocolOptions(role = Role.Initiator, network = Networks.mainnet),
-    )
-    val result = completeVersionHandshake(
-        protocol,
-        VersionHandshakeOptions(port = port, name = APP_NAME, version = APP_VERSION),
-    )
+private suspend fun handshake(
+    duplex: ByteDuplex,
+    port: Int,
+): Pair<Protocol, ULong> {
+    val protocol =
+        Protocol.connect(
+            duplex,
+            ProtocolOptions(role = Role.Initiator, network = Networks.mainnet),
+        )
+    val result =
+        completeVersionHandshake(
+            protocol,
+            VersionHandshakeOptions(port = port, name = APP_NAME, version = APP_VERSION),
+        )
     return protocol to result.services
 }
 
@@ -92,23 +105,24 @@ private fun wrapSessionClose(
     session: BlockSessionApi,
     duplex: ByteDuplex,
     protocol: Protocol?,
-): BlockSessionApi = object : BlockSessionApi by session {
-    override suspend fun close() {
-        session.close()
-        if (protocol != null) {
-            try {
-                protocol.close()
-            } catch (_: Throwable) {
-                duplex.close()
-            }
-        } else {
-            try {
-                duplex.close()
-            } catch (_: Throwable) {
+): BlockSessionApi =
+    object : BlockSessionApi by session {
+        override suspend fun close() {
+            session.close()
+            if (protocol != null) {
+                try {
+                    protocol.close()
+                } catch (_: Throwable) {
+                    duplex.close()
+                }
+            } else {
+                try {
+                    duplex.close()
+                } catch (_: Throwable) {
+                }
             }
         }
     }
-}
 
 private fun createBlockSessionApi(
     protocol: Protocol,
@@ -127,7 +141,10 @@ private fun createBlockSessionApi(
         }
     }
 
-    suspend fun <T> withSyncTimeout(label: String, work: suspend () -> T): T =
+    suspend fun <T> withSyncTimeout(
+        label: String,
+        work: suspend () -> T,
+    ): T =
         try {
             withTimeout(syncTimeoutMs) { work() }
         } catch (e: TimeoutCancellationException) {
@@ -152,10 +169,11 @@ private fun createBlockSessionApi(
                     when (message) {
                         is Message.Block -> return@withSyncTimeout message.payload
                         is Message.NotFound -> {
-                            val containsRequested = message.payload.inventory.any { item ->
-                                (item.type == MSG_WITNESS_BLOCK || item.type == MSG_BLOCK) &&
-                                    equalBytes(item.hash, hashInternal)
-                            }
+                            val containsRequested =
+                                message.payload.inventory.any { item ->
+                                    (item.type == MSG_WITNESS_BLOCK || item.type == MSG_BLOCK) &&
+                                        equalBytes(item.hash, hashInternal)
+                                }
                             if (!containsRequested) {
                                 throw Exception("notfound did not contain requested block")
                             }
