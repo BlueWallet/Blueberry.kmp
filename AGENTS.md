@@ -2,6 +2,10 @@
 
 Operational guardrails for automated work in this repo.
 
+## Superpowers
+
+Use the full Superpowers workflow on every coding task in this repo (brainstorming, TDD, writing-plans, subagent-driven-development). Invoke as `superpowers:<name>` (for example `superpowers:brainstorming`). Bare names miss the Hermes catalog. If `skill_view` misses, read `~/.hermes/plugins/superpowers/skills/<name>/SKILL.md` — do not skip the chain.
+
 ## Before building
 
 - Run `git submodule update --init` if `vendor/*` directories are empty. Gradle fails with "Missing vendor/..." otherwise.
