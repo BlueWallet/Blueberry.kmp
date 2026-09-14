@@ -19,7 +19,7 @@ private fun utxoAt(
     txid = "11".repeat(32),
     vout = 0,
     valueSats = 100_000L,
-    scriptPubKey = wallet.addresses.first { !it.change && it.index == index }.scriptPubKey,
+    scriptPubKey = wallet.hd(AddressScriptType.P2WPKH, index).scriptPubKey,
 )
 
 private fun baseParams(
@@ -337,6 +337,41 @@ class BuildSendTxTest {
                 .amount
                 .toLong(),
         )
+    }
+
+    @Test
+    fun signs_bip44_and_bip86_inputs_together() {
+        val wallet = deriveWatchWallet(ABANDON, WatchGaps(1, 1))
+        val p2pkh = wallet.hd(AddressScriptType.P2PKH, 0)
+        val p2tr = wallet.hd(AddressScriptType.P2TR, 0)
+        val fundLegacy = testFundingTx(p2pkh.scriptPubKey, 80_000L, salt = 1)
+        val result =
+            buildSignedSendTx(
+                baseParams(
+                    wallet = wallet,
+                    utxos =
+                        listOf(
+                            SendInputUtxo(
+                                txid = fundLegacy.txid,
+                                vout = 0,
+                                valueSats = 80_000L,
+                                scriptPubKey = p2pkh.scriptPubKey,
+                                nonWitnessUtxo = fundLegacy.bytes,
+                            ),
+                            SendInputUtxo(
+                                txid = "22".repeat(32),
+                                vout = 0,
+                                valueSats = 70_000L,
+                                scriptPubKey = p2tr.scriptPubKey,
+                            ),
+                        ),
+                    amount = SendAmount.Exact(100_000L),
+                    feeRate = 1.0,
+                ),
+            )
+        val tx = parseSigned(result.txHex)
+        assertEquals(2, tx.txIn.size)
+        assertTrue(result.feeSats > 0L)
     }
 
     @Test

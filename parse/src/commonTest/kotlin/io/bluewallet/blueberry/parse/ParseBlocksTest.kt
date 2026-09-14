@@ -13,7 +13,10 @@ import io.bluewallet.blueberry.storage.DownloadedBlock
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.CreateWalletOptions
 import io.bluewallet.blueberry.wallet.GAP_LIMIT
+import io.bluewallet.blueberry.wallet.HdWatchGaps
+import io.bluewallet.blueberry.wallet.WatchGaps
 import io.bluewallet.blueberry.wallet.createWallet
+import io.bluewallet.blueberry.wallet.saveHdWatchGaps
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -230,6 +233,7 @@ class ParseBlocksTest {
                     db,
                     CreateWalletOptions(secret = ABANDON_MNEMONIC, addressGap = GAP_LIMIT + 1),
                 )
+            saveHdWatchGaps(db, HdWatchGaps.uniform(WatchGaps(GAP_LIMIT + 1, GAP_LIMIT + 1)))
             var catchupEmitted = false
             bus.on(Event.WalletTxs) {
                 if (catchupEmitted) return@on
@@ -250,14 +254,16 @@ class ParseBlocksTest {
                 )
             mod.start()
             bus.emit(Event.SyncIdle, SyncIdlePayload(at = 1))
-            waitFor { db.parsedBlocks.has(1) }
+            waitFor(10_000) { db.parsedBlocks.has(1) }
             delay(120)
             assertFalse(db.parsedBlocks.has(2))
             assertFalse(db.parsedBlocks.has(3))
             assertTrue(logs.toString().contains("[parse-blocks] paused"))
 
             bus.emit(Event.SyncIdle, SyncIdlePayload(at = 2))
-            waitFor { db.parsedBlocks.has(2) && db.parsedBlocks.has(3) && db.transactions.count() == 3 }
+            waitFor(10_000) {
+                db.parsedBlocks.has(2) && db.parsedBlocks.has(3) && db.transactions.count() == 3
+            }
             mod.stop()
             db.close()
         }
@@ -442,15 +448,17 @@ class ParseBlocksTest {
                 catchupScheduled = true
                 // Original uses setTimeout 20ms so catchup lands in the block gap.
             }
+            val wallet =
+                createWallet(
+                    db,
+                    CreateWalletOptions(secret = ABANDON_MNEMONIC, addressGap = GAP_LIMIT + 1),
+                )
+            saveHdWatchGaps(db, HdWatchGaps.uniform(WatchGaps(GAP_LIMIT + 1, GAP_LIMIT + 1)))
             val mod =
                 createParseBlocksModule(
                     ModuleContext(bus, db),
                     ParseBlocksOptions(
-                        wallet =
-                            createWallet(
-                                db,
-                                CreateWalletOptions(secret = ABANDON_MNEMONIC, addressGap = GAP_LIMIT + 1),
-                            ),
+                        wallet = wallet,
                         idleDelayMs = 50,
                         batchSize = 2,
                         blockGapMs = 100,

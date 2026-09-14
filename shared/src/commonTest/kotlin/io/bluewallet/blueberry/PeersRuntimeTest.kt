@@ -8,6 +8,8 @@ import io.bluewallet.blueberry.bus.PeersUpdatedPayload
 import io.bluewallet.blueberry.bus.createMessageBus
 import io.bluewallet.blueberry.storage.PeerWrite
 import io.bluewallet.blueberry.storage.createSqliteDatabase
+import io.bluewallet.blueberry.wallet.AddressScriptType
+import io.bluewallet.blueberry.wallet.hd
 import io.bluewallet.blueberry.wallet.saveWalletSecret
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -80,11 +82,7 @@ class PeersRuntimeTest {
             )
             val runtime = PeersRuntime(db)
             runtime.start()
-            val first =
-                runtime.wallet!!
-                    .snapshot()
-                    .addresses
-                    .first { !it.change && it.index == 0 }
+            val first = runtime.wallet!!.snapshot().hd(AddressScriptType.P2WPKH, 0)
             assertEquals("bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", first.address)
             assertEquals(first.address, currentReceiveAddress(runtime, db))
             runtime.stop()

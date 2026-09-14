@@ -20,9 +20,9 @@ interface Wallet {
 
     fun scripts(): List<ByteArray>
 
-    fun gaps(): WatchGaps
+    fun gaps(): HdWatchGaps
 
-    fun peekGaps(): WatchGaps
+    fun peekGaps(): HdWatchGaps
 
     fun refresh(): WatchWallet
 
@@ -38,28 +38,20 @@ fun createWallet(
 
     if (options.addressGap != null) {
         val n = max(0, floor(options.addressGap.toDouble()).toInt())
-        saveWatchGaps(db, WatchGaps(n, n))
+        saveHdWatchGaps(db, HdWatchGaps.uniform(WatchGaps(n, n)))
     }
 
-    var currentGaps = loadWatchGaps(db)
+    var currentGaps = loadHdWatchGaps(db)
     var current = deriveWatchWallet(secret, currentGaps)
-    log(
-        "wallet",
-        "ready kind=${current.kind} external=${currentGaps.external} internal=${currentGaps.internal}",
-    )
+    log("wallet", "ready kind=${current.kind} gaps=$currentGaps")
 
     val syncFromDbImpl: () -> SyncFromDbResult = {
-        val gaps = loadWatchGaps(db)
-        val grew =
-            gaps.external != currentGaps.external ||
-                gaps.internal != currentGaps.internal
+        val gaps = loadHdWatchGaps(db)
+        val grew = gaps != currentGaps
         if (grew) {
             currentGaps = gaps
             current = deriveWatchWallet(secret, currentGaps)
-            log(
-                "wallet",
-                "gaps grew external=${gaps.external} internal=${gaps.internal}",
-            )
+            log("wallet", "gaps grew gaps=$gaps")
         }
         SyncFromDbResult(grew)
     }
@@ -69,9 +61,9 @@ fun createWallet(
 
         override fun scripts(): List<ByteArray> = current.scripts
 
-        override fun gaps(): WatchGaps = currentGaps
+        override fun gaps(): HdWatchGaps = currentGaps
 
-        override fun peekGaps(): WatchGaps = loadWatchGaps(db)
+        override fun peekGaps(): HdWatchGaps = loadHdWatchGaps(db)
 
         override fun refresh(): WatchWallet {
             syncFromDbImpl()

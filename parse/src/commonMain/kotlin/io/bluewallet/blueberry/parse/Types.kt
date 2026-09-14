@@ -51,8 +51,3 @@ data class TxRow(
     val txIndex: Int,
     val tx: ByteArray,
 )
-
-data class UsedWatchIndexes(
-    val external: List<Int>,
-    val internal: List<Int>,
-)
