@@ -1,12 +1,11 @@
 package io.bluewallet.blueberry
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,7 +16,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,12 +44,8 @@ import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.PsbtSendResult
-import io.bluewallet.blueberry.wallet.SendAmount
 import io.bluewallet.blueberry.wallet.SendInputUtxo
 import io.bluewallet.blueberry.wallet.SignedSendResult
-import io.bluewallet.blueberry.wallet.encodeCryptoPsbtUrFragments
-import io.github.alexzhirkevich.qrose.rememberQrCodePainter
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private enum class SendStep { Utxos, Details, FeeRate, Preview }
@@ -271,17 +265,19 @@ fun SendScreen(
                     },
                 )
             SendStep.Preview ->
-                PreviewStep(
-                    preview = preview,
-                    details = details,
-                    inputSum = previewInputSum,
-                    broadcast = broadcast,
-                    onBroadcast = {
-                        val signed = preview as? SignedSendResult ?: return@PreviewStep
-                        val id = prepareUiBroadcast(runtime.broadcastStore, signed.txHex) ?: return@PreviewStep
-                        runtime.bus.emit(Event.BroadcastRequest, BroadcastRequestPayload(id, signed.txHex))
-                    },
-                )
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    PreviewStep(
+                        preview = preview,
+                        details = details,
+                        inputSum = previewInputSum,
+                        broadcast = broadcast,
+                        onBroadcast = {
+                            val signed = preview as? SignedSendResult ?: return@PreviewStep
+                            val id = prepareUiBroadcast(runtime.broadcastStore, signed.txHex) ?: return@PreviewStep
+                            runtime.bus.emit(Event.BroadcastRequest, BroadcastRequestPayload(id, signed.txHex))
+                        },
+                    )
+                }
         }
     }
 }
@@ -458,121 +454,4 @@ private fun FeeRateStep(
         Text(error, color = BwColors.Danger, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
     }
     PillButton(text = "Continue", onClick = onContinue, modifier = Modifier.fillMaxWidth())
-}
-
-@Composable
-private fun PreviewStep(
-    preview: BuildSendResult?,
-    details: SendDetails?,
-    inputSum: Long,
-    broadcast: BroadcastSnapshot,
-    onBroadcast: () -> Unit,
-) {
-    if (preview == null || details == null) {
-        Text("Missing preview", color = BwColors.InkMuted)
-        return
-    }
-    val feeSats: Long
-    val vsize: Int
-    val changeSats: Long
-    val signed = preview as? SignedSendResult
-    val psbt = preview as? PsbtSendResult
-    if (signed != null) {
-        feeSats = signed.feeSats
-        vsize = signed.vsize
-        changeSats = signed.changeSats
-    } else {
-        feeSats = psbt!!.feeSats
-        vsize = psbt.vsize
-        changeSats = psbt.changeSats
-    }
-    val paid = if (details.amountSats is SendAmount.Max) inputSum - feeSats - changeSats else (details.amountSats as SendAmount.Exact).sats
-    val showBroadcast = broadcast.txHex != null && signed != null && broadcast.txHex == signed.txHex
-    if (showBroadcast && broadcastJobInFlight(broadcast.phase)) {
-        Text("Broadcasting via Tor", color = BwColors.Accent, fontFamily = BwFontFamily, fontWeight = BwType.Label)
-        Text(
-            text =
-                listOfNotNull(
-                    broadcast.phase,
-                    broadcast.attempt?.let { "attempt $it/${broadcast.maxAttempts ?: "?"}" },
-                    broadcast.peer,
-                    broadcast.detail,
-                ).joinToString(" · "),
-            color = BwColors.InkMuted,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.BodySize,
-        )
-        return
-    }
-    if (showBroadcast && broadcast.phase == "success") {
-        Text("Broadcast succeeded", color = BwColors.Success, fontFamily = BwFontFamily, fontWeight = BwType.Label)
-        Text(broadcast.peer.orEmpty(), color = BwColors.InkMuted)
-        return
-    }
-    if (showBroadcast && broadcast.phase == "error") {
-        Text("Broadcast failed", color = BwColors.Danger, fontFamily = BwFontFamily, fontWeight = BwType.Label)
-        Text(broadcast.error.orEmpty(), color = BwColors.InkMuted)
-        return
-    }
-    if (psbt != null) {
-        UrQr(psbt.psbtHex)
-        return
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
-        Text(details.toAddress, color = BwColors.Ink, fontFamily = BwFontFamily, fontSize = BwType.BodySize)
-        BtcAmountText(sats = paid, color = BwColors.Ink)
-        if (details.amountSats is SendAmount.Max) {
-            Text("max", color = BwColors.InkMuted, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
-        }
-        Text("fee $vsize vB", color = BwColors.InkMuted, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
-        BtcAmountText(sats = feeSats, color = BwColors.InkMuted)
-        if (changeSats > 0) {
-            Text("change", color = BwColors.InkMuted, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
-            BtcAmountText(sats = changeSats, color = BwColors.InkMuted)
-        }
-        Text(details.paymentLabel, color = BwColors.Ink, fontFamily = BwFontFamily, fontSize = BwType.BodySize)
-        PillButton(text = "Broadcast", onClick = onBroadcast, modifier = Modifier.fillMaxWidth())
-    }
-}
-
-@Composable
-private fun UrQr(psbtHex: String) {
-    val parts =
-        remember(psbtHex) {
-            try {
-                encodeCryptoPsbtUrFragments(psbtHex)
-            } catch (_: Throwable) {
-                emptyList()
-            }
-        }
-    var index by remember(psbtHex) { mutableStateOf(0) }
-    LaunchedEffect(parts) {
-        if (parts.size <= 1) return@LaunchedEffect
-        while (true) {
-            delay(1000)
-            index = (index + 1) % parts.size
-        }
-    }
-    val part = parts.getOrNull(index) ?: parts.firstOrNull()
-    if (part == null) {
-        Text("Failed to render PSBT QR", color = BwColors.Danger)
-        return
-    }
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-    ) {
-        Image(
-            painter = rememberQrCodePainter(part),
-            contentDescription = "PSBT UR QR",
-            modifier = Modifier.fillMaxWidth(0.72f).aspectRatio(1f),
-        )
-        Text(
-            text = if (parts.size > 1) "BC-UR v2 · part ${index + 1}/${parts.size}" else "BC-UR v2 · crypto-psbt",
-            color = BwColors.InkMuted,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.CaptionSize,
-        )
-    }
 }

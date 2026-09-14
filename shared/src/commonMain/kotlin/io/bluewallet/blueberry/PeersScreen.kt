@@ -304,10 +304,10 @@ fun PeersScreen(
                         val tx = walletTxs.txs[index]
                         val incoming = tx.netDeltaSats >= 0
                         if (index > 0) StatusDivider()
-                        val muted = txListSecondaryMuted(tx.paymentLabel)
+                        val muted = txListSecondaryMuted(tx.paymentLabel, tx.utxoLabel)
                         StatusRow(
                             label = tx.timeLabel,
-                            secondary = txListSecondary(tx.shortTxid, tx.paymentLabel),
+                            secondary = txListSecondary(tx.shortTxid, tx.paymentLabel, tx.utxoLabel),
                             secondaryColor = if (muted) BwColors.InkMuted else BwColors.Ink,
                             secondaryFontSize = if (muted) 12.sp else BwType.BodySize,
                             secondaryFontWeight = if (muted) FontWeight.Normal else BwType.Body,

@@ -5,6 +5,7 @@ import io.bluewallet.blueberry.bus.MessageBus
 import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.parse.TxFee
 import io.bluewallet.blueberry.parse.TxRow
+import io.bluewallet.blueberry.parse.firstUtxoLabelByTxid
 import io.bluewallet.blueberry.parse.formatBlockTimeLabel
 import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.parse.formatNetDelta
@@ -28,6 +29,7 @@ data class WalletTxRow(
     val netDeltaSats: Long,
     val netDeltaLabel: String,
     val paymentLabel: String? = null,
+    val utxoLabel: String? = null,
     val fee: TxFee? = null,
 )
 
@@ -170,6 +172,8 @@ fun snapshotFromDb(
     val balanceSats = stored.fold(0L) { s, t -> s + t.netDeltaSats }
     val timeLabels = mutableMapOf<Int, String>()
     val labelByTxid = db.txPaymentLabels.list().associate { it.txid to it.label }
+    val nameByOutpoint = db.utxoNames.list().associate { it.outpoint to it.name }
+    val utxoLabelByTxid = firstUtxoLabelByTxid(nameByOutpoint)
 
     var utxos = emptyList<WalletUtxoRow>()
     var fees = emptyMap<String, TxFee>()
@@ -186,7 +190,6 @@ fun snapshotFromDb(
         for (u in map.values) {
             if (u.value > maxValue) maxValue = u.value
         }
-        val nameByOutpoint = db.utxoNames.list().associate { it.outpoint to it.name }
         val changeScripts =
             wallet
                 .snapshot()
@@ -236,6 +239,7 @@ fun snapshotFromDb(
                     netDeltaSats = tx.netDeltaSats,
                     netDeltaLabel = formatNetDelta(tx.netDeltaSats),
                     paymentLabel = labelByTxid[tx.txid],
+                    utxoLabel = utxoLabelByTxid[tx.txid],
                     fee = fees[tx.txid],
                 )
             },
