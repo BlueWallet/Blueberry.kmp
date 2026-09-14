@@ -23,4 +23,13 @@ class TxListCaptionTest {
         assertFalse(txListSecondaryMuted("coffee"))
         assertFalse(txListSecondaryMuted("  coffee  "))
     }
+
+    @Test
+    fun utxo_label_fills_in_when_note_is_blank() {
+        assertEquals("donation", txListSecondary("abcd…efgh", null, "donation"))
+        assertEquals("donation", txListSecondary("abcd…efgh", "   ", "  donation  "))
+        assertEquals("rent", txListSecondary("abcd…efgh", "rent", "donation"))
+        assertFalse(txListSecondaryMuted(null, "donation"))
+        assertTrue(txListSecondaryMuted(null, "   "))
+    }
 }
