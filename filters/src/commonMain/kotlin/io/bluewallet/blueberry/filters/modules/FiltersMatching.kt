@@ -16,8 +16,8 @@ import io.bluewallet.blueberry.peers.logError
 import io.bluewallet.blueberry.peers.modules.Module
 import io.bluewallet.blueberry.peers.modules.ModuleContext
 import io.bluewallet.blueberry.peers.modules.detachLoop
+import io.bluewallet.blueberry.wallet.HdWatchGaps
 import io.bluewallet.blueberry.wallet.Wallet
-import io.bluewallet.blueberry.wallet.WatchGaps
 import io.bluewallet.blueberry.wallet.compactFilterFrom
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -69,7 +69,7 @@ fun createFiltersMatchingModule(
     var unsubProgress: (() -> Unit)? = null
     var loopJob: Job? = null
     var parentJob: Job? = null
-    var loadedGaps: WatchGaps? = null
+    var loadedGaps: HdWatchGaps? = null
     var scannedCount = 0
     var totalCount = 0
 
@@ -125,15 +125,10 @@ fun createFiltersMatchingModule(
                 // Use loadedGaps, not syncFromDb().grew — parse-blocks refresh() would
                 // hide growth and skip re-queue after an in-flight markScanned.
                 val previous = loadedGaps
-                if (
-                    previous != null &&
-                    (previous.external != gaps.external || previous.internal != gaps.internal)
-                ) {
+                if (previous != null && previous != gaps) {
                     val fromHeight = compactFilterFrom(ctx.db) ?: ctx.db.transactions.minHeight()
                     if (fromHeight != null) {
-                        diagnosticLog(
-                            "rematch from=$fromHeight external=${gaps.external} internal=${gaps.internal}",
-                        )
+                        diagnosticLog("rematch from=$fromHeight gaps=$gaps")
                         ctx.db.filters.markUnscannedFrom(fromHeight)
                     }
                 }
@@ -143,9 +138,7 @@ fun createFiltersMatchingModule(
                 val scanTotal = ctx.db.filters.count()
                 val scanScanned = ctx.db.filters.countScanned()
                 if (scanTotal != scanScanned) {
-                    diagnosticLog(
-                        "scan start scanned=$scanScanned total=$scanTotal external=${gaps.external} internal=${gaps.internal}",
-                    )
+                    diagnosticLog("scan start scanned=$scanScanned total=$scanTotal gaps=$gaps")
                 }
                 val advanced =
                     scanFiltersForMatches(
@@ -181,8 +174,7 @@ fun createFiltersMatchingModule(
                                     false
                                 } else {
                                     val g = wallet.peekGaps()
-                                    g.external == scannedWith.external &&
-                                        g.internal == scannedWith.internal
+                                    g == scannedWith
                                 }
                             },
                         ),
@@ -194,10 +186,7 @@ fun createFiltersMatchingModule(
                 }
                 // Peek only — sync here would advance loadedGaps before rematch.
                 val gapsNow = wallet.peekGaps()
-                if (
-                    scannedWith.external != gapsNow.external ||
-                    scannedWith.internal != gapsNow.internal
-                ) {
+                if (scannedWith != gapsNow) {
                     needsRun.store(true)
                 }
             } catch (err: CancellationException) {

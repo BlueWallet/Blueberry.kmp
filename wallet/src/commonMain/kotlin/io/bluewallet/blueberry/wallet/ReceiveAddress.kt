@@ -2,13 +2,21 @@ package io.bluewallet.blueberry.wallet
 
 import fr.acinq.bitcoin.Transaction
 
+fun firstUnusedIndex(used: List<Int>): Int {
+    val set = used.toSet()
+    var i = 0
+    while (i in set && i < MAX_WATCH_COUNT - 1) i++
+    return i
+}
+
 fun firstUnusedExternalAddress(
     wallet: WatchWallet,
     usedExternal: List<Int>,
+    scriptType: AddressScriptType = AddressScriptType.P2WPKH,
 ): WatchAddress? {
     val used = usedExternal.toSet()
     return wallet.addresses
-        .filter { !it.change }
+        .filter { !it.change && it.resolvedScriptType() == scriptType }
         .sortedBy { it.index }
         .firstOrNull { it.index !in used }
 }
@@ -16,10 +24,11 @@ fun firstUnusedExternalAddress(
 fun firstUnusedInternalAddress(
     wallet: WatchWallet,
     usedInternal: List<Int>,
+    scriptType: AddressScriptType = AddressScriptType.P2WPKH,
 ): WatchAddress? {
     val used = usedInternal.toSet()
     return wallet.addresses
-        .filter { it.change }
+        .filter { it.change && it.resolvedScriptType() == scriptType }
         .sortedBy { it.index }
         .firstOrNull { it.index !in used }
 }
@@ -88,9 +97,10 @@ fun resolveReceiveAddress(
     wallet: WatchWallet,
     usedExternal: List<Int> = emptyList(),
     wifTxs: List<WifReceiveTxRow> = emptyList(),
+    receiveType: AddressScriptType = AddressScriptType.P2WPKH,
 ): WatchAddress? =
     when (wallet.kind) {
-        WatchWalletKind.BIP84 -> firstUnusedExternalAddress(wallet, usedExternal)
+        WatchWalletKind.BIP84 -> firstUnusedExternalAddress(wallet, usedExternal, receiveType)
         WatchWalletKind.WIF -> preferredWifReceiveAddress(wallet, wifTxs)
         WatchWalletKind.ADDRESS -> wallet.addresses.firstOrNull()
     }

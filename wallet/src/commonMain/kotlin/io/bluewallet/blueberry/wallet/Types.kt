@@ -45,10 +45,101 @@ data class WatchWallet(
     override fun toString(): String = "WatchWallet(kind=$kind, secret=[redacted], addresses=$addresses, scripts=$scripts)"
 }
 
+fun WatchWallet.hd(
+    type: AddressScriptType,
+    index: Int,
+    change: Boolean = false,
+): WatchAddress = addresses.first { it.resolvedScriptType() == type && it.index == index && it.change == change }
+
 data class WatchGaps(
     val external: Int,
     val internal: Int,
 )
+
+val HD_SCRIPT_TYPES =
+    listOf(
+        AddressScriptType.P2PKH,
+        AddressScriptType.P2SH_P2WPKH,
+        AddressScriptType.P2WPKH,
+        AddressScriptType.P2TR,
+    )
+
+fun AddressScriptType.accountPath(): String =
+    when (this) {
+        AddressScriptType.P2PKH -> BIP44_ACCOUNT_PATH
+        AddressScriptType.P2SH_P2WPKH -> BIP49_ACCOUNT_PATH
+        AddressScriptType.P2WPKH -> BIP84_ACCOUNT_PATH
+        AddressScriptType.P2TR -> BIP86_ACCOUNT_PATH
+    }
+
+fun AddressScriptType.watchKeys(): Pair<String, String> =
+    when (this) {
+        AddressScriptType.P2PKH -> WATCH_EXTERNAL_P2PKH_KEY to WATCH_INTERNAL_P2PKH_KEY
+        AddressScriptType.P2SH_P2WPKH -> WATCH_EXTERNAL_P2SH_P2WPKH_KEY to WATCH_INTERNAL_P2SH_P2WPKH_KEY
+        AddressScriptType.P2WPKH -> WATCH_EXTERNAL_P2WPKH_KEY to WATCH_INTERNAL_P2WPKH_KEY
+        AddressScriptType.P2TR -> WATCH_EXTERNAL_P2TR_KEY to WATCH_INTERNAL_P2TR_KEY
+    }
+
+fun AddressScriptType.receiveLabel(): String =
+    when (this) {
+        AddressScriptType.P2PKH -> "Legacy (BIP44)"
+        AddressScriptType.P2SH_P2WPKH -> "Nested SegWit (BIP49)"
+        AddressScriptType.P2WPKH -> "Native SegWit (BIP84)"
+        AddressScriptType.P2TR -> "Taproot (BIP86)"
+    }
+
+data class HdWatchGaps(
+    val p2pkh: WatchGaps,
+    val p2shP2wpkh: WatchGaps,
+    val p2wpkh: WatchGaps,
+    val p2tr: WatchGaps,
+) {
+    operator fun get(type: AddressScriptType): WatchGaps =
+        when (type) {
+            AddressScriptType.P2PKH -> p2pkh
+            AddressScriptType.P2SH_P2WPKH -> p2shP2wpkh
+            AddressScriptType.P2WPKH -> p2wpkh
+            AddressScriptType.P2TR -> p2tr
+        }
+
+    fun with(
+        type: AddressScriptType,
+        gaps: WatchGaps,
+    ): HdWatchGaps =
+        when (type) {
+            AddressScriptType.P2PKH -> copy(p2pkh = gaps)
+            AddressScriptType.P2SH_P2WPKH -> copy(p2shP2wpkh = gaps)
+            AddressScriptType.P2WPKH -> copy(p2wpkh = gaps)
+            AddressScriptType.P2TR -> copy(p2tr = gaps)
+        }
+
+    fun mergeMax(other: HdWatchGaps): HdWatchGaps {
+        var out = this
+        for (type in HD_SCRIPT_TYPES) {
+            val a = out[type]
+            val b = other[type]
+            out = out.with(type, WatchGaps(maxOf(a.external, b.external), maxOf(a.internal, b.internal)))
+        }
+        return out
+    }
+
+    companion object {
+        fun uniform(gaps: WatchGaps): HdWatchGaps = HdWatchGaps(gaps, gaps, gaps, gaps)
+
+        fun initial(): HdWatchGaps = uniform(WatchGaps(INITIAL_WATCH_COUNT, INITIAL_WATCH_COUNT))
+    }
+}
+
+data class UsedChainIndexes(
+    val external: List<Int> = emptyList(),
+    val internal: List<Int> = emptyList(),
+)
+
+data class UsedHdIndexes(
+    val byType: Map<AddressScriptType, UsedChainIndexes> = emptyMap(),
+) {
+    fun get(type: AddressScriptType): UsedChainIndexes = byType[type] ?: UsedChainIndexes()
+}
 
 sealed class SendAmount {
     data class Exact(

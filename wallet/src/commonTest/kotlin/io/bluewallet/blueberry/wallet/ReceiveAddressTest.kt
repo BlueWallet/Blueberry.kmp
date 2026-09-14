@@ -96,9 +96,15 @@ class ReceiveAddressTest {
     @Test
     fun resolve_bip84_uses_first_unused_external() {
         val w = deriveWatchWallet(ABANDON, WatchGaps(5, 2))
-        val addr = resolveReceiveAddress(w, usedExternal = listOf(0, 1, 3))!!
+        val addr =
+            resolveReceiveAddress(
+                w,
+                usedExternal = listOf(0, 1, 3),
+                receiveType = AddressScriptType.P2TR,
+            )!!
         assertEquals(2, addr.index)
         assertEquals(false, addr.change)
+        assertEquals(AddressScriptType.P2TR, addr.resolvedScriptType())
     }
 
     @Test

@@ -21,9 +21,9 @@ import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.WatchWalletKind
 import io.bluewallet.blueberry.wallet.compactFilterFrom
-import io.bluewallet.blueberry.wallet.growWatchGapsIfNeeded
-import io.bluewallet.blueberry.wallet.loadWatchGaps
-import io.bluewallet.blueberry.wallet.saveWatchGaps
+import io.bluewallet.blueberry.wallet.growHdWatchGapsIfNeeded
+import io.bluewallet.blueberry.wallet.loadHdWatchGaps
+import io.bluewallet.blueberry.wallet.saveHdWatchGaps
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -152,18 +152,18 @@ fun createParseBlocksModule(
                     .map { it.tx },
                 snap,
             )
-        val result = growWatchGapsIfNeeded(loadWatchGaps(ctx.db), used.external, used.internal)
+        val result = growHdWatchGapsIfNeeded(loadHdWatchGaps(ctx.db), used)
         if (!result.grew) {
             wallet.syncFromDb()
             val gaps = wallet.gaps()
-            if (gaps.external == lastGaps.external && gaps.internal == lastGaps.internal) return false
+            if (gaps == lastGaps) return false
             lastGaps = gaps
             needsRun.store(true)
             return true
         }
         val fromHeight = compactFilterFrom(ctx.db) ?: ctx.db.transactions.minHeight()
         ctx.db.transaction {
-            saveWatchGaps(ctx.db, result.gaps)
+            saveHdWatchGaps(ctx.db, loadHdWatchGaps(ctx.db).mergeMax(result.gaps))
             if (fromHeight != null) {
                 ctx.db.filters.markUnscannedFrom(fromHeight)
                 ctx.db.parsedBlocks.clearFrom(fromHeight)

@@ -9,6 +9,18 @@ import fr.acinq.bitcoin.TxOut
 
 const val ABANDON =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+const val HONEY_BIP49 =
+    "honey risk juice trip orient galaxy win situate shoot anchor bounce remind horse traffic exotic since escape mimic ramp skin judge owner topple erode"
+const val BIP44_ABANDON_EXT_0 = "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA"
+const val BIP44_ACCOUNT1_EXT_0 = "15qucUWKf95Fo58FdCBhUTSAtsm22HHE2Q"
+const val BIP44_ACCOUNT1_INT_0 = "1DgjtFUiXvqxGic9A9fiDPrHNyKC4cGtTH"
+const val BIP49_HONEY_EXT_0 = "3GcKN7q7gZuZ8eHygAhHrvPa5zZbG5Q1rK"
+const val BIP49_HONEY_EXT_1 = "35p5LwCAE7mH2css7onyQ1VuS1jgWtQ4U3"
+const val BIP49_HONEY_INT_0 = "32yn5CdevZQLk3ckuZuA8fEKBco8mEkLei"
+const val BIP86_ABANDON_EXT_0 = "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr"
+const val BIP86_ABANDON_EXT_1 = "bc1p4qhjn9zdvkux4e44uhx8tc55attvtyu358kutcqkudyccelu0was9fqzwh"
+const val BIP86_ABANDON_INT_0 = "bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7"
+
 const val BLUE_ZPUB =
     "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs"
 const val BLUE_EXTERNAL_0 = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"

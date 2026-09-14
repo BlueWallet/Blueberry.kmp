@@ -15,9 +15,10 @@ class WalletTest {
         val db = createSqliteDatabase(":memory:")
         saveWalletSecret(db, ABANDON)
         val wallet = createWallet(db)
-        assertEquals(WatchGaps(INITIAL_WATCH_COUNT, INITIAL_WATCH_COUNT), wallet.gaps())
-        assertEquals(BLUE_EXTERNAL_0, wallet.snapshot().addresses[0].address)
-        assertEquals(INITIAL_WATCH_COUNT * 2, wallet.scripts().size)
+        assertEquals(HdWatchGaps.initial(), wallet.gaps())
+        assertEquals(INITIAL_WATCH_COUNT.toString(), db.keyValue.get(WATCH_EXTERNAL_P2WPKH_KEY))
+        assertEquals(BLUE_EXTERNAL_0, wallet.snapshot().hd(AddressScriptType.P2WPKH, 0).address)
+        assertEquals(INITIAL_WATCH_COUNT * 2 * 4, wallet.scripts().size)
         db.close()
     }
 
@@ -25,10 +26,10 @@ class WalletTest {
     fun secret_override_and_address_gap_does_not_write_secret() {
         val db = createSqliteDatabase(":memory:")
         val wallet = createWallet(db, CreateWalletOptions(secret = ABANDON, addressGap = 3))
-        assertEquals(WatchGaps(3, 3), wallet.gaps())
-        assertEquals(6, wallet.snapshot().addresses.size)
+        assertEquals(HdWatchGaps.uniform(WatchGaps(3, 3)), wallet.gaps())
+        assertEquals(HdWatchGaps.uniform(WatchGaps(3, 3)), loadHdWatchGaps(db))
+        assertEquals(24, wallet.snapshot().addresses.size)
         assertNull(db.keyValue.get(WALLET_SECRET_KEY))
-        assertEquals(WatchGaps(3, 3), loadWatchGaps(db))
         db.close()
     }
 
@@ -47,16 +48,16 @@ class WalletTest {
     fun sync_from_db_rederives_only_when_gaps_change() {
         val db = createSqliteDatabase(":memory:")
         val wallet = createWallet(db, CreateWalletOptions(secret = ABANDON, addressGap = 2))
-        assertEquals(4, wallet.scripts().size)
+        assertEquals(16, wallet.scripts().size)
         val scripts1 = wallet.scripts()
         assertFalse(wallet.syncFromDb().grew)
         assertSame(scripts1, wallet.scripts())
         assertSame(wallet.snapshot(), wallet.refresh())
-        saveWatchGaps(db, WatchGaps(5, 2))
+        saveHdWatchGaps(db, HdWatchGaps.uniform(WatchGaps(5, 2)))
         assertTrue(wallet.syncFromDb().grew)
-        assertEquals(WatchGaps(5, 2), wallet.gaps())
-        assertEquals(7, wallet.scripts().size)
-        assertEquals(BLUE_EXTERNAL_0, wallet.snapshot().addresses[0].address)
+        assertEquals(HdWatchGaps.uniform(WatchGaps(5, 2)), wallet.gaps())
+        assertEquals(28, wallet.scripts().size)
+        assertEquals(BLUE_EXTERNAL_0, wallet.snapshot().hd(AddressScriptType.P2WPKH, 0).address)
         db.close()
     }
 
@@ -64,10 +65,10 @@ class WalletTest {
     fun peek_gaps_does_not_change_memory() {
         val db = createSqliteDatabase(":memory:")
         val wallet = createWallet(db, CreateWalletOptions(secret = ABANDON, addressGap = 2))
-        saveWatchGaps(db, WatchGaps(9, 2))
-        assertEquals(WatchGaps(9, 2), wallet.peekGaps())
-        assertEquals(WatchGaps(2, 2), wallet.gaps())
-        assertEquals(4, wallet.scripts().size)
+        saveHdWatchGaps(db, HdWatchGaps.uniform(WatchGaps(9, 2)))
+        assertEquals(HdWatchGaps.uniform(WatchGaps(9, 2)), wallet.peekGaps())
+        assertEquals(HdWatchGaps.uniform(WatchGaps(2, 2)), wallet.gaps())
+        assertEquals(16, wallet.scripts().size)
         db.close()
     }
 

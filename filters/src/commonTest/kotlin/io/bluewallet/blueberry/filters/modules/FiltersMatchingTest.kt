@@ -12,15 +12,18 @@ import io.bluewallet.blueberry.storage.FilterRecord
 import io.bluewallet.blueberry.storage.HeaderWrite
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.storage.createSqliteDatabase
+import io.bluewallet.blueberry.wallet.AddressScriptType
 import io.bluewallet.blueberry.wallet.CreateWalletOptions
+import io.bluewallet.blueberry.wallet.HdWatchGaps
 import io.bluewallet.blueberry.wallet.INITIAL_WATCH_COUNT
 import io.bluewallet.blueberry.wallet.SyncFromDbResult
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.WatchGaps
 import io.bluewallet.blueberry.wallet.createWallet
 import io.bluewallet.blueberry.wallet.deriveWatchWallet
+import io.bluewallet.blueberry.wallet.hd
+import io.bluewallet.blueberry.wallet.saveHdWatchGaps
 import io.bluewallet.blueberry.wallet.saveWalletSecret
-import io.bluewallet.blueberry.wallet.saveWatchGaps
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -332,7 +335,7 @@ class FiltersMatchingTest {
             assertEquals(emptyList(), hits)
             assertEquals(0, db.matchedBlocks.count())
 
-            saveWatchGaps(db, WatchGaps(8, 4))
+            saveHdWatchGaps(db, HdWatchGaps.uniform(WatchGaps(8, 4)))
             db.filters.markUnscanned(listOf(600))
             bus.emit(Event.FiltersProgress, FiltersProgressPayload(at = 1, downloaded = 1, total = 1))
 
@@ -390,7 +393,7 @@ class FiltersMatchingTest {
             mod.start()
             waitFor { gated }
 
-            saveWatchGaps(db, WatchGaps(8, 4))
+            saveHdWatchGaps(db, HdWatchGaps.uniform(WatchGaps(8, 4)))
             wallet.refresh()
             db.filters.markUnscannedFrom(700)
             bus.emit(Event.FiltersProgress, FiltersProgressPayload(at = 1, downloaded = 1, total = 1))
@@ -443,7 +446,7 @@ class FiltersMatchingTest {
                             yields++
                             if (!grown && yields >= 2) {
                                 grown = true
-                                saveWatchGaps(db, WatchGaps(8, 4))
+                                saveHdWatchGaps(db, HdWatchGaps.uniform(WatchGaps(8, 4)))
                                 wallet.refresh()
                                 db.filters.markUnscannedFrom(1)
                                 bus.emit(
@@ -620,7 +623,7 @@ class FiltersMatchingTest {
             saveWalletSecret(db, ABANDON_MNEMONIC)
             val bus = createMessageBus()
             val wallet = createWallet(db)
-            assertEquals(BLUE_EXTERNAL_0, wallet.snapshot().addresses[0].address)
+            assertEquals(BLUE_EXTERNAL_0, wallet.snapshot().hd(AddressScriptType.P2WPKH, 0).address)
 
             val mod =
                 createFiltersMatchingModule(
@@ -628,7 +631,7 @@ class FiltersMatchingTest {
                     FiltersMatchingOptions(wallet = wallet, batchGapMs = 0),
                 )
             mod.start()
-            assertEquals(INITIAL_WATCH_COUNT * 2, wallet.scripts().size)
+            assertEquals(INITIAL_WATCH_COUNT * 2 * 4, wallet.scripts().size)
             mod.stop()
             db.close()
         }

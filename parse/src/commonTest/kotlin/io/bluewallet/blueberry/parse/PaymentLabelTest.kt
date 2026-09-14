@@ -1,11 +1,13 @@
 package io.bluewallet.blueberry.parse
 
 import io.bluewallet.blueberry.storage.createSqliteDatabase
+import io.bluewallet.blueberry.wallet.AddressScriptType
 import io.bluewallet.blueberry.wallet.SendAmount
 import io.bluewallet.blueberry.wallet.SendInputUtxo
 import io.bluewallet.blueberry.wallet.WatchGaps
 import io.bluewallet.blueberry.wallet.buildSignedSendTx
 import io.bluewallet.blueberry.wallet.deriveWatchWallet
+import io.bluewallet.blueberry.wallet.hd
 import io.bluewallet.blueberry.wallet.outpointKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -20,7 +22,7 @@ class PaymentLabelTest {
     fun trims_label_and_names_change_outpoints() {
         val db = createSqliteDatabase(":memory:")
         val wallet = deriveWatchWallet(ABANDON_MNEMONIC, WatchGaps(2, 2))
-        val recv = wallet.addresses.first { !it.change && it.index == 0 }
+        val recv = wallet.hd(AddressScriptType.P2WPKH, 0)
         val built =
             buildSignedSendTx(
                 io.bluewallet.blueberry.wallet.BuildSendTxParams(
@@ -47,7 +49,7 @@ class PaymentLabelTest {
     fun send_max_stores_label_without_utxo_name() {
         val db = createSqliteDatabase(":memory:")
         val wallet = deriveWatchWallet(ABANDON_MNEMONIC, WatchGaps(2, 2))
-        val recv = wallet.addresses.first { !it.change && it.index == 0 }
+        val recv = wallet.hd(AddressScriptType.P2WPKH, 0)
         val built =
             buildSignedSendTx(
                 io.bluewallet.blueberry.wallet.BuildSendTxParams(

@@ -33,35 +33,6 @@ internal fun parseInt10(v: String?): Double? {
     return if (negative) -value else value
 }
 
-fun saveWatchGaps(
-    db: Database,
-    gaps: WatchGaps,
-) {
-    db.keyValue.set(WATCH_EXTERNAL_KEY, gaps.external.toString())
-    db.keyValue.set(WATCH_INTERNAL_KEY, gaps.internal.toString())
-}
-
-fun loadWatchGaps(db: Database): WatchGaps {
-    fun parse(v: String?): Int {
-        val n = parseInt10(v)
-        if (n == null || n < 0 || !n.isFinite()) return INITIAL_WATCH_COUNT
-        return minOf(floor(n).toInt(), MAX_WATCH_COUNT)
-    }
-    val extRaw = db.keyValue.get(WATCH_EXTERNAL_KEY)
-    val intRaw = db.keyValue.get(WATCH_INTERNAL_KEY)
-    val external = parse(extRaw)
-    val internal = parse(intRaw)
-    if (
-        extRaw == null ||
-        intRaw == null ||
-        extRaw != external.toString() ||
-        intRaw != internal.toString()
-    ) {
-        saveWatchGaps(db, WatchGaps(external, internal))
-    }
-    return WatchGaps(external, internal)
-}
-
 data class GrowWatchGapsResult(
     val gaps: WatchGaps,
     val grew: Boolean,
@@ -87,4 +58,74 @@ fun growWatchGapsIfNeeded(
         WatchGaps(external, internal),
         external != gaps.external || internal != gaps.internal,
     )
+}
+
+fun saveWatchGaps(
+    db: Database,
+    type: AddressScriptType,
+    gaps: WatchGaps,
+) {
+    val (extKey, intKey) = type.watchKeys()
+    db.keyValue.set(extKey, gaps.external.toString())
+    db.keyValue.set(intKey, gaps.internal.toString())
+}
+
+fun saveHdWatchGaps(
+    db: Database,
+    gaps: HdWatchGaps,
+) {
+    for (type in HD_SCRIPT_TYPES) {
+        saveWatchGaps(db, type, gaps[type])
+    }
+}
+
+fun loadHdWatchGaps(db: Database): HdWatchGaps {
+    fun parseKey(key: String): Int {
+        val raw = db.keyValue.get(key)
+        val n = parseInt10(raw)
+        if (n == null || n < 0 || !n.isFinite()) return INITIAL_WATCH_COUNT
+        return minOf(floor(n).toInt(), MAX_WATCH_COUNT)
+    }
+
+    var result = HdWatchGaps.initial()
+    var dirty = false
+    for (type in HD_SCRIPT_TYPES) {
+        val (extKey, intKey) = type.watchKeys()
+        val extRaw = db.keyValue.get(extKey)
+        val intRaw = db.keyValue.get(intKey)
+        val external = parseKey(extKey)
+        val internal = parseKey(intKey)
+        result = result.with(type, WatchGaps(external, internal))
+        if (
+            extRaw == null ||
+            intRaw == null ||
+            extRaw != external.toString() ||
+            intRaw != internal.toString()
+        ) {
+            dirty = true
+        }
+    }
+    if (dirty) saveHdWatchGaps(db, result)
+    return result
+}
+
+data class GrowHdWatchGapsResult(
+    val gaps: HdWatchGaps,
+    val grew: Boolean,
+)
+
+fun growHdWatchGapsIfNeeded(
+    gaps: HdWatchGaps,
+    used: UsedHdIndexes,
+    gapLimit: Int = GAP_LIMIT,
+): GrowHdWatchGapsResult {
+    var next = gaps
+    var grew = false
+    for (type in HD_SCRIPT_TYPES) {
+        val chain = used.get(type)
+        val one = growWatchGapsIfNeeded(gaps[type], chain.external, chain.internal, gapLimit)
+        next = next.with(type, one.gaps)
+        if (one.grew) grew = true
+    }
+    return GrowHdWatchGapsResult(next, grew)
 }

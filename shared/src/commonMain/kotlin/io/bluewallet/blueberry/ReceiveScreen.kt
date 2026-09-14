@@ -4,12 +4,15 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -34,8 +37,15 @@ import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.ScreenHeader
+import io.bluewallet.blueberry.wallet.HD_SCRIPT_TYPES
+import io.bluewallet.blueberry.wallet.WalletSecretKind
 import io.bluewallet.blueberry.wallet.compactFilterFrom
 import io.bluewallet.blueberry.wallet.createWallet
+import io.bluewallet.blueberry.wallet.loadReceiveScriptType
+import io.bluewallet.blueberry.wallet.loadWalletSecret
+import io.bluewallet.blueberry.wallet.parseWalletSecret
+import io.bluewallet.blueberry.wallet.receiveLabel
+import io.bluewallet.blueberry.wallet.saveReceiveScriptType
 import io.github.alexzhirkevich.qrose.rememberQrCodePainter
 import kotlinx.coroutines.launch
 import kotlin.math.max
@@ -48,7 +58,7 @@ fun currentReceiveAddress(
     val before = wallet.gaps()
     val address = snapshotReceiveAddress(db, wallet)
     val after = wallet.gaps()
-    if (after.external != before.external || after.internal != before.internal) {
+    if (after != before) {
         val downloaded = db.filters.count()
         val filterFrom = compactFilterFrom(db)
         val tip = db.headers.tip()
@@ -66,6 +76,10 @@ fun currentReceiveAddress(
     return address
 }
 
+fun showsReceiveTypePicker(db: Database): Boolean =
+    runCatching { parseWalletSecret(loadWalletSecret(db)).kind == WalletSecretKind.MNEMONIC }
+        .getOrDefault(false)
+
 @Composable
 fun ReceiveScreen(
     runtime: PeersRuntime,
@@ -74,6 +88,8 @@ fun ReceiveScreen(
 ) {
     var address by remember(runtime, db) { mutableStateOf(currentReceiveAddress(runtime, db)) }
     var copied by remember { mutableStateOf(false) }
+    var receiveType by remember(db) { mutableStateOf(loadReceiveScriptType(db)) }
+    var menuOpen by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     DisposableEffect(runtime.walletTxsStore) {
@@ -93,6 +109,34 @@ fun ReceiveScreen(
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         ScreenHeader(title = "Receive", onBack = onBack)
+        if (showsReceiveTypePicker(db)) {
+            Box {
+                Text(
+                    text = receiveType.receiveLabel(),
+                    color = BwColors.Link,
+                    fontFamily = BwFontFamily,
+                    fontSize = BwType.BodySize,
+                    fontWeight = BwType.Body,
+                    modifier = Modifier.clickable { menuOpen = true },
+                )
+                DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                ) {
+                    for (type in HD_SCRIPT_TYPES) {
+                        DropdownMenuItem(
+                            text = { Text(type.receiveLabel()) },
+                            onClick = {
+                                saveReceiveScriptType(db, type)
+                                receiveType = type
+                                menuOpen = false
+                                address = currentReceiveAddress(runtime, db)
+                            },
+                        )
+                    }
+                }
+            }
+        }
         Column(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(BwSpace.Gap, Alignment.CenterVertically),
