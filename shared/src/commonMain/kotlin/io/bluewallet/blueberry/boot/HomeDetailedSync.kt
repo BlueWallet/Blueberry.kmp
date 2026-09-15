@@ -4,7 +4,7 @@ import io.bluewallet.blueberry.storage.Database
 
 const val HOME_DETAILED_SYNC_KEY = "home_detailed_sync"
 
-fun loadHomeDetailedSync(db: Database): Boolean = db.keyValue.get(HOME_DETAILED_SYNC_KEY) != "0"
+fun loadHomeDetailedSync(db: Database): Boolean = db.keyValue.get(HOME_DETAILED_SYNC_KEY) == "1"
 
 fun saveHomeDetailedSync(
     db: Database,

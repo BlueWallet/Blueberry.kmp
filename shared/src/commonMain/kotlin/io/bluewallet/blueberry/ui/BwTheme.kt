@@ -3,7 +3,7 @@ package io.bluewallet.blueberry.ui
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -13,36 +13,36 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Tokens from the sister BlueWallet dashboard (`bw_ext.png`) plus
- * BlueWallet `themes.ts` light palette. Shared across Android / iOS / desktop.
+ * Dark home tokens from the Blueberry redesign mocks. Shared across
+ * Android / iOS / desktop.
  */
 object BwColors {
-    val Paper = Color(0xFFF7F8FA)
-    val Card = Color(0xFFFFFFFF)
-    val Section = Color(0xFFF9F9F9)
-    val Ink = Color(0xFF0C2550)
-    val InkSecondary = Color(0xFF81868E)
-    val InkMuted = Color(0xFF9AA0AA)
+    val Paper = Color(0xFF000000)
+    val Card = Color(0xFF181B1D)
+    val Section = Color(0xFF1E2224)
+    val Ink = Color(0xFFFFFFFF)
+    val InkSecondary = Color(0xFF606C73)
+    val InkMuted = Color(0xFF606C73)
 
-    /** Sister "Refresh" / "Sidebar" — BlueWallet `secondButtonTextColor`. */
-    val Action = Color(0xFF50555C)
-    val Link = Color(0xFF0F5CC0)
-    val Accent = Color(0xFF007AFF)
-    val AccentSoft = Color(0xFFCCDDF9)
-    val BarTrack = Color(0xFFE4EEFB)
-    val Success = Color(0xFF37C0A1)
-    val Danger = Color(0xFFD0021B)
-    val Warning = Color(0xFFF38C47)
-    val Border = Color(0xFFEDEDED)
-    val OnAccent = Color(0xFFFFFFFF)
+    val Action = Color(0xFFC7C7CC)
+    val Link = Color(0xFF00AAE0)
+    val Accent = Color(0xFF00AAE0)
+    val AccentSoft = Color(0xFF012234)
+    val BarTrack = Color(0xFF2A3033)
+    val Success = Color(0xFF32D74B)
+    val Danger = Color(0xFFFF453A)
+    val Warning = Color(0xFFFF9F0A)
+    val Border = Color(0xFF181B1D)
+    val OnAccent = Color(0xFF012234)
+    val Mesh = Color(0xFF00AAE0)
 }
 
 object BwSpace {
-    val ScreenX = 10.dp
-    val ScreenY = 6.dp
-    val Gap = 6.dp
-    val Card = 8.dp
-    val Radius = 12.dp
+    val ScreenX = 16.dp
+    val ScreenY = 8.dp
+    val Gap = 10.dp
+    val Card = 12.dp
+    val Radius = 16.dp
     val Hairline = 1.dp
 }
 
@@ -56,16 +56,16 @@ object BwType {
     val Value = FontWeight.Bold
     val Hero = FontWeight.ExtraBold
     val Caption = FontWeight.Normal
-    val ActionSize = 15.sp
-    val LabelSize = 11.sp
-    val BodySize = 13.sp
-    val ValueSize = 18.sp
+    val ActionSize = 16.sp
+    val LabelSize = 13.sp
+    val BodySize = 15.sp
+    val ValueSize = 22.sp
     val HeroSize = 26.sp
-    val CaptionSize = 11.sp
+    val CaptionSize = 12.sp
 }
 
 private val BwColorScheme =
-    lightColorScheme(
+    darkColorScheme(
         primary = BwColors.Accent,
         onPrimary = BwColors.OnAccent,
         primaryContainer = BwColors.AccentSoft,
@@ -78,15 +78,12 @@ private val BwColorScheme =
         onSurface = BwColors.Ink,
         surfaceVariant = BwColors.Section,
         onSurfaceVariant = BwColors.InkSecondary,
-        outline = BwColors.Border,
+        outline = BwColors.BarTrack,
         error = BwColors.Danger,
     )
 
 /**
- * Applies the light palette and paints the window with [BwColors.Paper]. The
- * app has no dark palette; without this Surface the host window's own color
- * (black when the OS is in dark mode) bleeds through screens that never set a
- * background, leaving [BwColors.Ink] text invisible.
+ * Applies the dark palette and paints the window with [BwColors.Paper].
  */
 @Composable
 fun BwTheme(content: @Composable () -> Unit) {

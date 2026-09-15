@@ -1,6 +1,5 @@
 package io.bluewallet.blueberry
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,8 +18,8 @@ import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.ScannableQr
 import io.bluewallet.blueberry.ui.ScreenHeader
-import io.github.alexzhirkevich.qrose.rememberQrCodePainter
 
 @Composable
 fun SecretScreen(
@@ -44,8 +43,8 @@ fun SecretScreen(
         ) {
             val shown = secret
             if (shown != null) {
-                Image(
-                    painter = rememberQrCodePainter(shown),
+                ScannableQr(
+                    data = shown,
                     contentDescription = "Wallet secret QR code",
                     modifier = Modifier.size(200.dp),
                 )

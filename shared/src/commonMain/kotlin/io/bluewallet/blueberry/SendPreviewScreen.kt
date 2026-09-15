@@ -1,6 +1,5 @@
 package io.bluewallet.blueberry
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,12 +27,12 @@ import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.PillButton
+import io.bluewallet.blueberry.ui.ScannableQr
 import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.PsbtSendResult
 import io.bluewallet.blueberry.wallet.SignedSendResult
 import io.bluewallet.blueberry.wallet.encodeCryptoPsbtUrFragments
 import io.bluewallet.blueberry.wallet.psbtBase64FromHex
-import io.github.alexzhirkevich.qrose.rememberQrCodePainter
 import kotlinx.coroutines.delay
 
 private fun previewTotals(preview: BuildSendResult): SendPreviewTotals =
@@ -247,8 +246,8 @@ private fun UrQr(psbtHex: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
-        Image(
-            painter = rememberQrCodePainter(part),
+        ScannableQr(
+            data = part,
             contentDescription = "PSBT UR QR",
             modifier = Modifier.fillMaxWidth(0.72f).aspectRatio(1f),
         )

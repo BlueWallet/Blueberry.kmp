@@ -1,6 +1,5 @@
 package io.bluewallet.blueberry
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +35,7 @@ import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.ScannableQr
 import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.wallet.HD_SCRIPT_TYPES
 import io.bluewallet.blueberry.wallet.WalletSecretKind
@@ -46,7 +46,6 @@ import io.bluewallet.blueberry.wallet.loadWalletSecret
 import io.bluewallet.blueberry.wallet.parseWalletSecret
 import io.bluewallet.blueberry.wallet.receiveLabel
 import io.bluewallet.blueberry.wallet.saveReceiveScriptType
-import io.github.alexzhirkevich.qrose.rememberQrCodePainter
 import kotlinx.coroutines.launch
 import kotlin.math.max
 
@@ -144,8 +143,8 @@ fun ReceiveScreen(
         ) {
             val shown = address
             if (shown != null) {
-                Image(
-                    painter = rememberQrCodePainter(shown),
+                ScannableQr(
+                    data = shown,
                     contentDescription = "Receive address QR code",
                     modifier = Modifier.size(200.dp),
                 )

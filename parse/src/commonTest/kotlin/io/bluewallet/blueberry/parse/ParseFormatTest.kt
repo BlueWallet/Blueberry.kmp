@@ -39,11 +39,11 @@ class ParseFormatTest {
 
     @Test
     fun styleBtc_puts_dot_with_trailing_when_amount_is_all_zeros() {
-        assertEquals(BtcStyled("0", ".00000000 BTC"), styleBtc(0))
-        assertEquals(BtcStyled("1", ".00000000 BTC"), styleBtc(100_000_000))
-        assertEquals(BtcStyled("0.00001", "000 BTC"), styleBtc(1000))
-        assertEquals(BtcStyled("+0.000001", "00 BTC"), styleBtc(100, plus = true))
-        assertEquals(BtcStyled("-0.0000005", "0 BTC"), styleBtc(-50, plus = true))
+        assertEquals(BtcStyled("0", ".00000000"), styleBtc(0))
+        assertEquals(BtcStyled("1", ".00000000"), styleBtc(100_000_000))
+        assertEquals(BtcStyled("0.00001", "000"), styleBtc(1000))
+        assertEquals(BtcStyled("+0.000001", "00"), styleBtc(100, plus = true))
+        assertEquals(BtcStyled("-0.0000005", "0"), styleBtc(-50, plus = true))
     }
 
     @Test

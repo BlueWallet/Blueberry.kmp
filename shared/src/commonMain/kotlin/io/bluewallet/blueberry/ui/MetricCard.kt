@@ -89,7 +89,7 @@ fun ProgressMetricCard(
             modifier
                 .fillMaxWidth()
                 .clip(shape)
-                .background(BwColors.Card, shape)
+                .background(BwColors.Section, shape)
                 .border(BwSpace.Hairline, BwColors.Border, shape)
                 .padding(BwSpace.Card),
         verticalArrangement = Arrangement.spacedBy(6.dp),

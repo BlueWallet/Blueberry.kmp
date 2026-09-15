@@ -12,7 +12,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import io.bluewallet.blueberry.parse.styleBtc
 
-/** Significant digits in [color]; trailing zeros (and " BTC") muted — same split as formatBtc. */
+/** Significant digits in [color]; trailing zeros muted. Prefix is the Bitcoin sign ₿. */
 @Composable
 fun BtcAmountText(
     sats: Long,
@@ -28,6 +28,9 @@ fun BtcAmountText(
     Text(
         text =
             buildAnnotatedString {
+                withStyle(SpanStyle(color = trailingColor, fontWeight = fontWeight)) {
+                    append("₿")
+                }
                 withStyle(SpanStyle(color = color, fontWeight = fontWeight)) {
                     append(parts.significant)
                 }
