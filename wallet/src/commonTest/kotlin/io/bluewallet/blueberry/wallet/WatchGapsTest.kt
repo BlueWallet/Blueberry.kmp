@@ -63,6 +63,19 @@ class WatchGapsTest {
     }
 
     @Test
+    fun initial_watch_count_is_double_gap_limit() {
+        assertEquals(GAP_LIMIT * 2, INITIAL_WATCH_COUNT)
+    }
+
+    @Test
+    fun first_used_index_does_not_grow_the_initial_window() {
+        val start = WatchGaps(INITIAL_WATCH_COUNT, INITIAL_WATCH_COUNT)
+        val r = growWatchGapsIfNeeded(start, listOf(0), emptyList())
+        assertFalse(r.grew)
+        assertEquals(start, r.gaps)
+    }
+
+    @Test
     fun grows_when_used_index_in_danger_zone() {
         val r = growWatchGapsIfNeeded(WatchGaps(40, 40), listOf(25), emptyList(), 20)
         assertTrue(r.grew)
