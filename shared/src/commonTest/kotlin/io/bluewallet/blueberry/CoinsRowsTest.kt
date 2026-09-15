@@ -60,6 +60,18 @@ class CoinsRowsTest {
     }
 
     @Test
+    fun copies_address() {
+        val rows = coinsRows(listOf(row("aa:0", 2).copy(address = "bc1qabc"), row("aa:1", 1)))
+        assertEquals(listOf("bc1qabc", null), rows.map { it.address })
+    }
+
+    @Test
+    fun copies_path() {
+        val rows = coinsRows(listOf(row("aa:0", 2).copy(path = "m/84'/0'/0'/0/0"), row("aa:1", 1)))
+        assertEquals(listOf("m/84'/0'/0'/0/0", null), rows.map { it.path })
+    }
+
+    @Test
     fun copies_ageLabel() {
         val padded = "3 years ago".padEnd(16)
         val rows =
@@ -73,11 +85,19 @@ class CoinsRowsTest {
     }
 
     @Test
-    fun caption_is_trimmed_age_then_name_like_send() {
-        assertEquals(null, coinsRowCaption("", null))
-        assertEquals(null, coinsRowCaption("   ", null))
-        assertEquals("3 years ago", coinsRowCaption("3 years ago".padEnd(16), null))
-        assertEquals("coffee", coinsRowCaption("", "coffee"))
-        assertEquals("3 years ago  coffee", coinsRowCaption("3 years ago".padEnd(16), "coffee"))
+    fun caption_is_address_dot_age_dot_name() {
+        assertEquals(null, coinsRowCaption(null, "", null))
+        assertEquals(null, coinsRowCaption("  ", "   ", null))
+        assertEquals("3 years ago", coinsRowCaption(null, "3 years ago".padEnd(16), null))
+        assertEquals("bc1qabc", coinsRowCaption("bc1qabc", "", null))
+        assertEquals("bc1qabc · 3 years ago", coinsRowCaption("bc1qabc", "3 years ago".padEnd(16), null))
+        assertEquals(
+            "bc1qhezl…gwryfcr9 · 3 years ago",
+            coinsRowCaption("bc1qhezl2peu0uv6qxjh0lmznp7vq8htm8gwryfcr9", "3 years ago".padEnd(16), null),
+        )
+        assertEquals("coffee", coinsRowCaption(null, "", "coffee"))
+        assertEquals("3 years ago · coffee", coinsRowCaption(null, "3 years ago".padEnd(16), "coffee"))
+        assertEquals("bc1qabc · coffee", coinsRowCaption("bc1qabc", "", "coffee"))
+        assertEquals("bc1qabc · 3 years ago · coffee", coinsRowCaption("bc1qabc", "3 years ago".padEnd(16), "coffee"))
     }
 }

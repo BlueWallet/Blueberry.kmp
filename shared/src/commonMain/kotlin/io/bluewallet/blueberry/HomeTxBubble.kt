@@ -24,6 +24,16 @@ import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import kotlin.math.abs
 
+fun Modifier.listRowPanel(onClick: () -> Unit): Modifier {
+    val shape = RoundedCornerShape(BwSpace.Radius)
+    return this
+        .fillMaxWidth()
+        .clip(shape)
+        .background(BwColors.Card, shape)
+        .clickable(onClick = onClick)
+        .padding(horizontal = 14.dp, vertical = 14.dp)
+}
+
 @Composable
 fun HomeTxBubble(
     tx: WalletTxRow,
@@ -31,16 +41,9 @@ fun HomeTxBubble(
 ) {
     val incoming = tx.netDeltaSats >= 0
     val muted = txListSecondaryMuted(tx.paymentLabel, tx.utxoLabel)
-    val shape = RoundedCornerShape(BwSpace.Radius)
     Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clip(shape)
-                .background(BwColors.Card, shape)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 14.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.Top,
+        modifier = Modifier.listRowPanel(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
@@ -73,7 +76,7 @@ fun HomeTxBubble(
         }
         BtcAmountText(
             sats = abs(tx.netDeltaSats),
-            color = BwColors.Accent,
+            color = if (incoming) BwColors.Accent else BwColors.Danger.copy(alpha = 0.7f),
         )
     }
 }

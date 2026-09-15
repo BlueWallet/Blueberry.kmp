@@ -212,6 +212,8 @@ class WalletTxsHydrateTest {
         assertTrue(store.get().utxos.isNotEmpty(), "second hydrate with wallet must not skip UTXO rebuild")
         assertEquals(9_664L, store.get().utxos[0].valueSats)
         assertEquals(false, store.get().utxos[0].isChange)
+        assertEquals(recv.address, store.get().utxos[0].address)
+        assertEquals(recv.path, store.get().utxos[0].path)
         db.close()
     }
 
@@ -243,6 +245,10 @@ class WalletTxsHydrateTest {
         val byValue = store.get().utxos.associateBy { it.valueSats }
         assertEquals(false, byValue.getValue(50_000L).isChange)
         assertEquals(true, byValue.getValue(25_000L).isChange)
+        assertEquals(ext.address, byValue.getValue(50_000L).address)
+        assertEquals(intern.address, byValue.getValue(25_000L).address)
+        assertEquals(ext.path, byValue.getValue(50_000L).path)
+        assertEquals(intern.path, byValue.getValue(25_000L).path)
         db.close()
     }
 

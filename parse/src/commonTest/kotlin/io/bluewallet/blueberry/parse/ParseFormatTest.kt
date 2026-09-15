@@ -13,6 +13,9 @@ class ParseFormatTest {
         assertEquals("+0.00000100 BTC", formatNetDelta(100))
         assertEquals("-0.00000050 BTC", formatNetDelta(-50))
         assertEquals("${"a".repeat(8)}…${"a".repeat(8)}", shortTxid("a".repeat(64)))
+        assertEquals("bc1qhezl…gwryfcr9", shortTxid("bc1qhezl2peu0uv6qxjh0lmznp7vq8htm8gwryfcr9"))
+        assertEquals("19GUye5w…RHs5UHLE", shortTxid("19GUye5w7vYqR7W58BUdprd8RqRHs5UHLE"))
+        assertEquals("bc1qabc", shortTxid("bc1qabc"))
     }
 
     @Test
