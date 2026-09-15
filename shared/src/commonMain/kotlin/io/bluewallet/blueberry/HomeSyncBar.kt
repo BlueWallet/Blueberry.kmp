@@ -19,6 +19,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,10 +36,18 @@ fun HomeSyncDock(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val dockFade =
+        Brush.verticalGradient(
+            0f to Color.Transparent,
+            0.28f to Color.Black.copy(alpha = 0.7f),
+            0.48f to Color.Black,
+            1f to Color.Black,
+        )
     Column(
         modifier =
             modifier
                 .fillMaxWidth()
+                .background(dockFade)
                 .navigationBarsPadding(),
     ) {
         ListScrollStrip(
@@ -85,7 +95,7 @@ fun HomeSyncBar(
         modifier =
             modifier
                 .fillMaxWidth()
-                .shadow(8.dp, shape)
+                .shadow(16.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
                 .clip(shape)
                 .background(BwColors.Card, shape)
                 .clickable(onClick = onClick)

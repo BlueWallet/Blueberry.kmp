@@ -296,7 +296,7 @@ private fun HomeTxList(
         modifier = modifier.fillMaxSize(),
         state = listState,
         contentPadding = PaddingValues(start = BwSpace.ScreenX, end = BwSpace.ScreenX, top = 8.dp, bottom = 240.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (walletTxs.txs.isEmpty()) {
             item {

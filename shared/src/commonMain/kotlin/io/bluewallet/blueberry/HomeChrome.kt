@@ -1,6 +1,7 @@
 package io.bluewallet.blueberry
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,10 +22,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import blueberry.shared.generated.resources.Res
+import blueberry.shared.generated.resources.blueberry_mark
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwType
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun HomeOverflowButton(onClick: () -> Unit) {
@@ -117,6 +122,8 @@ private fun HomeActionButton(
     }
 }
 
+fun directionGlyphRotationDeg(incoming: Boolean): Float = if (incoming) -45f else 180f
+
 @Composable
 fun DirectionGlyph(
     incoming: Boolean,
@@ -135,7 +142,7 @@ fun DirectionGlyph(
         path.lineTo(w * 0.62f, h * 0.50f)
         path.lineTo(w * 0.82f, h * 0.50f)
         path.close()
-        rotate(if (incoming) 45f else 180f) {
+        rotate(directionGlyphRotationDeg(incoming)) {
             drawPath(path, color)
         }
     }
@@ -143,31 +150,10 @@ fun DirectionGlyph(
 
 @Composable
 fun SyncMark(modifier: Modifier = Modifier) {
-    Box(modifier = modifier.size(36.dp)) {
-        val disc = 18.dp
-        Box(
-            modifier =
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .size(disc)
-                    .clip(CircleShape)
-                    .background(Color(0xFF00AAE0)),
-        )
-        Box(
-            modifier =
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(disc)
-                    .clip(CircleShape)
-                    .background(Color(0xFF5EEAD4)),
-        )
-        Box(
-            modifier =
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .size(disc)
-                    .clip(CircleShape)
-                    .background(Color(0xFF38BDF8)),
-        )
-    }
+    Image(
+        painter = painterResource(Res.drawable.blueberry_mark),
+        contentDescription = null,
+        modifier = modifier.size(36.dp),
+        contentScale = ContentScale.Fit,
+    )
 }

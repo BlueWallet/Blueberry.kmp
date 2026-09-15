@@ -11,6 +11,7 @@ import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.parse.formatNetDelta
 import io.bluewallet.blueberry.parse.padBlockTimeLabel
 import io.bluewallet.blueberry.parse.scanWatchTxs
+import io.bluewallet.blueberry.parse.scriptHex
 import io.bluewallet.blueberry.parse.shortOutpoint
 import io.bluewallet.blueberry.parse.shortTxid
 import io.bluewallet.blueberry.parse.utxoValueBar
@@ -40,6 +41,8 @@ data class WalletUtxoRow(
     val outpointShort: String,
     val valueSats: Long,
     val scriptPubKey: ByteArray,
+    val address: String? = null,
+    val path: String? = null,
     val amountLabel: String,
     val height: Int,
     val ageLabel: String,
@@ -190,17 +193,15 @@ fun snapshotFromDb(
         for (u in map.values) {
             if (u.value > maxValue) maxValue = u.value
         }
-        val changeScripts =
-            wallet
-                .snapshot()
-                .addresses
-                .filter { it.change }
-                .map { it.scriptPubKey }
+        val watched = wallet.snapshot().addresses
+        val watchByScript = watched.associateBy { scriptHex(it.scriptPubKey) }
+        val changeScripts = watched.filter { it.change }.map { it.scriptPubKey }
         utxos =
             map.entries
                 .map { (key, u) ->
                     val (txid, vout) = parseOutpointKey(key)
                     val height = u.height ?: 0
+                    val watch = watchByScript[scriptHex(u.scriptPubKey)]
                     WalletUtxoRow(
                         key = key,
                         txid = txid,
@@ -208,6 +209,8 @@ fun snapshotFromDb(
                         outpointShort = shortOutpoint(txid, vout),
                         valueSats = u.value,
                         scriptPubKey = u.scriptPubKey,
+                        address = watch?.address,
+                        path = watch?.path,
                         amountLabel = formatBtc(u.value),
                         height = height,
                         ageLabel = timeLabelForHeight(db, height, nowMs, timeLabels),
