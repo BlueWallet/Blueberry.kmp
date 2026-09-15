@@ -93,9 +93,9 @@ fun styleBtc(
 ): BtcStyled {
     val p = splitBtc(sats, plus)
     return if (p.fracSignificant.isEmpty()) {
-        BtcStyled("${p.sign}${p.whole}", ".${p.fracTrailing} BTC")
+        BtcStyled("${p.sign}${p.whole}", ".${p.fracTrailing}")
     } else {
-        BtcStyled("${p.sign}${p.whole}.${p.fracSignificant}", "${p.fracTrailing} BTC")
+        BtcStyled("${p.sign}${p.whole}.${p.fracSignificant}", p.fracTrailing)
     }
 }
 

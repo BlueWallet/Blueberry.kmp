@@ -1,12 +1,12 @@
 package io.bluewallet.blueberry
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -22,14 +22,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
-import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 
-private val CircleSize = 22.dp
-private val CircleStep = 12.dp
+private val CircleSize = 28.dp
+private val CircleStep = 16.dp
 
 @Composable
 fun CoinsPanel(
@@ -37,24 +37,24 @@ fun CoinsPanel(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(BwSpace.Radius)
+    val shape = RoundedCornerShape(24.dp)
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
+                .defaultMinSize(minHeight = 76.dp)
                 .clip(shape)
                 .background(BwColors.Card, shape)
-                .border(BwSpace.Hairline, BwColors.Border, shape)
                 .clickable(onClick = onClick)
-                .padding(BwSpace.Card),
+                .padding(horizontal = 18.dp, vertical = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(
             text = formatGrouped(utxos.size),
             color = BwColors.Ink,
             fontFamily = BwFontFamily,
-            fontSize = BwType.ValueSize,
+            fontSize = 36.sp,
             fontWeight = BwType.Value,
         )
         BoxWithConstraints(

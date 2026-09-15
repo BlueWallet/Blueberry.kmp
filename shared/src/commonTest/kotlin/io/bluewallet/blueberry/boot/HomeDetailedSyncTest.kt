@@ -8,17 +8,17 @@ import kotlin.test.assertTrue
 
 class HomeDetailedSyncTest {
     @Test
-    fun missing_or_invalid_kv_loads_as_advanced() {
+    fun missing_or_invalid_kv_loads_as_collapsed() {
         val db = createSqliteDatabase(":memory:")
-        assertTrue(loadHomeDetailedSync(db))
+        assertFalse(loadHomeDetailedSync(db))
         assertEquals(null, db.keyValue.get(HOME_DETAILED_SYNC_KEY))
 
         db.keyValue.set(HOME_DETAILED_SYNC_KEY, "nope")
-        assertTrue(loadHomeDetailedSync(db))
+        assertFalse(loadHomeDetailedSync(db))
         db.keyValue.set(HOME_DETAILED_SYNC_KEY, "")
-        assertTrue(loadHomeDetailedSync(db))
+        assertFalse(loadHomeDetailedSync(db))
         db.keyValue.set(HOME_DETAILED_SYNC_KEY, "2")
-        assertTrue(loadHomeDetailedSync(db))
+        assertFalse(loadHomeDetailedSync(db))
         db.close()
     }
 

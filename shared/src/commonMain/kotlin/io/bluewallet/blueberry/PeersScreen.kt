@@ -1,27 +1,31 @@
 package io.bluewallet.blueberry
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.expandVertically
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -32,8 +36,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.bluewallet.blueberry.boot.loadHomeDetailedSync
@@ -43,15 +46,6 @@ import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
-import io.bluewallet.blueberry.ui.BwWordmark
-import io.bluewallet.blueberry.ui.HorizontalProgressBar
-import io.bluewallet.blueberry.ui.MetricCard
-import io.bluewallet.blueberry.ui.PillButton
-import io.bluewallet.blueberry.ui.ProgressMetricCard
-import io.bluewallet.blueberry.ui.StatusDivider
-import io.bluewallet.blueberry.ui.StatusList
-import io.bluewallet.blueberry.ui.StatusRow
-import io.bluewallet.blueberry.ui.TextAction
 import kotlinx.coroutines.launch
 
 @Composable
@@ -83,249 +77,252 @@ fun PeersScreen(
         detailedSync = value
         onDetailedSyncChange(value)
     }
-    val hideDetailedSync =
-        Modifier
-            .clip(RoundedCornerShape(BwSpace.Radius))
-            .clickable { setDetailedSync(false) }
     DisposableEffect(store) {
-        val off =
-            store.subscribe {
-                uiScope.launch { counts = store.get() }
-            }
+        val off = store.subscribe { uiScope.launch { counts = store.get() } }
         onDispose { off() }
     }
     DisposableEffect(headersStore) {
-        val off =
-            headersStore.subscribe {
-                uiScope.launch { headers = headersStore.get() }
-            }
+        val off = headersStore.subscribe { uiScope.launch { headers = headersStore.get() } }
         onDispose { off() }
     }
     DisposableEffect(filtersStore) {
-        val off =
-            filtersStore.subscribe {
-                uiScope.launch { filters = filtersStore.get() }
-            }
+        val off = filtersStore.subscribe { uiScope.launch { filters = filtersStore.get() } }
         onDispose { off() }
     }
     DisposableEffect(matchingStore) {
-        val off =
-            matchingStore.subscribe {
-                uiScope.launch { matching = matchingStore.get() }
-            }
+        val off = matchingStore.subscribe { uiScope.launch { matching = matchingStore.get() } }
         onDispose { off() }
     }
     DisposableEffect(blocksStore) {
-        val off =
-            blocksStore.subscribe {
-                uiScope.launch { blocks = blocksStore.get() }
-            }
+        val off = blocksStore.subscribe { uiScope.launch { blocks = blocksStore.get() } }
         onDispose { off() }
     }
     DisposableEffect(walletTxsStore) {
-        val off =
-            walletTxsStore.subscribe {
-                uiScope.launch { walletTxs = walletTxsStore.get() }
-            }
+        val off = walletTxsStore.subscribe { uiScope.launch { walletTxs = walletTxsStore.get() } }
         onDispose { off() }
     }
-    Column(
+    val unified =
+        unifiedSyncPercent(
+            headers.percent,
+            filters.percent,
+            matching.percent,
+            blocks.percent,
+        )
+    val etaMs =
+        overallSyncEtaMs(
+            percent = unified,
+            chainEtaMs = headers.etaMs,
+            filtersEtaMs = filters.etaMs,
+            matchEtaMs = matching.etaMs,
+            blocksEtaMs = blocks.etaMs,
+        )
+    val syncUi =
+        HomeSyncUi(
+            percent = unified,
+            etaMs = etaMs,
+            chainAge = rememberRelativeAge(headers.tipTimeS),
+            counts = counts,
+            headers = headers,
+            filters = filters,
+            matching = matching,
+            blocks = blocks,
+        )
+    val listState = rememberLazyListState()
+    Box(
         modifier =
             Modifier
                 .fillMaxSize()
-                .background(BwColors.Paper)
-                .safeDrawingPadding()
-                .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
-        verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+                .background(BwColors.Paper),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BwWordmark()
-            Spacer(modifier = Modifier.weight(1f))
-            TextAction(text = "Settings", onClick = onOpenSettings)
-        }
-        Text(
-            text = "Balance",
-            color = BwColors.InkSecondary,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.LabelSize,
-            fontWeight = BwType.Label,
-        )
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(if (detailedSync) BwSpace.Gap else 2.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .safeDrawingPadding(),
         ) {
-            BtcAmountText(
-                sats = walletTxs.balanceSats,
-                color = BwColors.Ink,
-                fontSize = BwType.HeroSize,
-                fontWeight = BwType.Hero,
+            HomeTopBar(onOpenSettings = onOpenSettings)
+            HomePinnedChrome(
+                walletTxs = walletTxs,
+                onOpenReceive = onOpenReceive,
+                onOpenSend = onOpenSend,
+                onOpenCoins = onOpenCoins,
             )
-            AnimatedContent(
-                targetState = detailedSync,
-                modifier = Modifier.fillMaxWidth(),
-                transitionSpec = {
-                    (fadeIn() + expandVertically()) togetherWith (fadeOut() + shrinkVertically())
-                },
-                label = "home-sync",
-            ) { showDetails ->
-                if (showDetails) {
-                    Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-                        ) {
-                            ProgressMetricCard(
-                                label = "Chain tip",
-                                value = "${headers.percent}%",
-                                caption = chainTipCaption(headers.height, rememberRelativeAge(headers.tipTimeS)),
-                                percent = headers.percent,
-                                modifier = Modifier.weight(1f).then(hideDetailedSync),
-                            )
-                            ProgressMetricCard(
-                                label = "Filters DL",
-                                value = "${filters.percent}%",
-                                caption = progressCaption(filters.downloaded, filters.total, filters.percent, filters.etaMs),
-                                percent = filters.percent,
-                                modifier = Modifier.weight(1f).then(hideDetailedSync),
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-                        ) {
-                            ProgressMetricCard(
-                                label = "Filters match",
-                                value = "${matching.percent}%",
-                                caption = progressCaption(matching.scanned, matching.total, matching.percent, matching.etaMs),
-                                percent = matching.percent,
-                                modifier = Modifier.weight(1f).then(hideDetailedSync),
-                            )
-                            ProgressMetricCard(
-                                label = "Blocks DL",
-                                value = "${blocks.percent}%",
-                                caption = progressCaption(blocks.downloaded, blocks.matched, blocks.percent, blocks.etaMs),
-                                percent = blocks.percent,
-                                modifier = Modifier.weight(1f).then(hideDetailedSync),
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-                        ) {
-                            MetricCard(
-                                label = "Peers",
-                                value = formatGrouped(counts.known),
-                                caption = "known",
-                                modifier = Modifier.weight(1f).fillMaxHeight().then(hideDetailedSync),
-                            )
-                            StatusList(modifier = Modifier.weight(1f).then(hideDetailedSync)) {
-                                Column {
-                                    StatusRow(label = "probe", value = counts.probe.toString(), dotColor = BwColors.Accent)
-                                    StatusDivider()
-                                    StatusRow(label = "hdr", value = counts.hdr.toString(), dotColor = BwColors.Link)
-                                    StatusDivider()
-                                    StatusRow(label = "filt", value = counts.filt.toString(), dotColor = BwColors.Warning)
-                                    StatusDivider()
-                                    StatusRow(label = "blk", value = counts.blk.toString(), dotColor = BwColors.Success)
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    HorizontalProgressBar(
-                        percent =
-                            unifiedSyncPercent(
-                                headers.percent,
-                                filters.percent,
-                                matching.percent,
-                                blocks.percent,
-                            ),
-                        modifier = Modifier.clickable { setDetailedSync(true) },
-                    )
-                }
-            }
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-        ) {
-            PillButton(
-                text = "Receive",
-                onClick = onOpenReceive,
-                modifier = Modifier.weight(1f),
-            )
-            PillButton(
-                text = "Send",
-                onClick = onOpenSend,
+            HomeTxList(
+                walletTxs = walletTxs,
+                listState = listState,
+                onOpenTx = onOpenTx,
                 modifier = Modifier.weight(1f),
             )
         }
-        Text(
-            text = "Coins",
-            color = BwColors.InkSecondary,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.LabelSize,
-            fontWeight = BwType.Label,
-        )
-        CoinsPanel(utxos = walletTxs.utxos, onClick = onOpenCoins)
-        Text(
-            text = "Transactions",
-            color = BwColors.InkSecondary,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.LabelSize,
-            fontWeight = BwType.Label,
-        )
-        if (walletTxs.blocksTotal > walletTxs.blocksParsed) {
-            Text(
-                text = formatParseProgress(walletTxs.blocksParsed, walletTxs.blocksTotal, walletTxs.etaMs),
-                color = BwColors.InkMuted,
-                fontFamily = BwFontFamily,
-                fontSize = BwType.CaptionSize,
+        if (showSyncMesh(unified)) {
+            SyncMeshGradient(
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(187.dp),
+                phase = 0f,
             )
         }
-        StatusList(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                if (walletTxs.txs.isEmpty()) {
-                    item {
-                        StatusRow(
-                            label = if (walletTxs.blocksTotal > walletTxs.blocksParsed) "Parsing…" else "No transactions",
-                            value = "—",
-                            valueColor = BwColors.InkMuted,
-                            dotColor = BwColors.InkMuted,
-                        )
-                    }
-                } else {
-                    items(walletTxs.txs.size, key = { walletTxs.txs[it].txid }) { index ->
-                        val tx = walletTxs.txs[index]
-                        val incoming = tx.netDeltaSats >= 0
-                        if (index > 0) StatusDivider()
-                        val muted = txListSecondaryMuted(tx.paymentLabel, tx.utxoLabel)
-                        StatusRow(
-                            label = tx.timeLabel,
-                            secondary = txListSecondary(tx.shortTxid, tx.paymentLabel, tx.utxoLabel),
-                            secondaryColor = if (muted) BwColors.InkMuted else BwColors.Ink,
-                            secondaryFontSize = if (muted) 12.sp else BwType.BodySize,
-                            secondaryFontWeight = if (muted) FontWeight.Normal else BwType.Body,
-                            onClick = { onOpenTx(tx.txid) },
-                            value = tx.netDeltaLabel,
-                            valueColor = if (incoming) BwColors.Success else BwColors.Danger,
-                            dotColor = if (incoming) BwColors.Success else BwColors.Danger,
-                            valueContent = {
-                                BtcAmountText(
-                                    sats = tx.netDeltaSats,
-                                    plus = true,
-                                    color = if (incoming) BwColors.Success else BwColors.Danger,
-                                )
-                            },
-                        )
-                    }
-                }
+        AnimatedVisibility(
+            visible = detailedSync,
+            enter = fadeIn(animationSpec = tween(220)),
+            exit = fadeOut(animationSpec = tween(180)),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.78f))
+                        .clickable { setDetailedSync(false) },
+            )
+        }
+        AnimatedVisibility(
+            visible = detailedSync,
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+            enter =
+                slideInVertically(
+                    animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+                    initialOffsetY = { it },
+                ) + fadeIn(animationSpec = tween(200)),
+            exit =
+                slideOutVertically(
+                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                    targetOffsetY = { it },
+                ) + fadeOut(animationSpec = tween(160)),
+        ) {
+            HomeSyncSheet(
+                ui = syncUi,
+                onToggle = { setDetailedSync(false) },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 640.dp)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+            )
+        }
+        AnimatedVisibility(
+            visible = !detailedSync,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter =
+                fadeIn(animationSpec = tween(200)) +
+                    slideInVertically(
+                        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                        initialOffsetY = { it / 3 },
+                    ),
+            exit =
+                fadeOut(animationSpec = tween(150)) +
+                    slideOutVertically(
+                        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+                        targetOffsetY = { it / 3 },
+                    ),
+        ) {
+            HomeSyncDock(
+                percent = unified,
+                etaMs = etaMs,
+                listState = listState,
+                onClick = { setDetailedSync(true) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeTopBar(onOpenSettings: () -> Unit) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = BwSpace.ScreenX, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Spacer(modifier = Modifier.weight(1f))
+        HomeOverflowButton(onClick = onOpenSettings)
+    }
+}
+
+@Composable
+private fun HomePinnedChrome(
+    walletTxs: WalletTxsSnapshot,
+    onOpenReceive: () -> Unit,
+    onOpenSend: () -> Unit,
+    onOpenCoins: () -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = BwSpace.ScreenX)
+                .padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        BtcAmountText(
+            sats = walletTxs.balanceSats,
+            color = BwColors.Ink,
+            fontSize = 42.sp,
+            fontWeight = BwType.Hero,
+        )
+        HomeActionRow(onReceive = onOpenReceive, onSend = onOpenSend)
+        Column {
+            HomeSectionLabel("Coins")
+            CoinsPanel(utxos = walletTxs.utxos, onClick = onOpenCoins)
+        }
+        Column {
+            HomeSectionLabel("Transactions")
+            if (walletTxs.blocksTotal > walletTxs.blocksParsed) {
+                Text(
+                    text = formatParseProgress(walletTxs.blocksParsed, walletTxs.blocksTotal, walletTxs.etaMs),
+                    color = BwColors.InkMuted,
+                    fontFamily = BwFontFamily,
+                    fontSize = BwType.CaptionSize,
+                )
             }
         }
     }
+}
+
+@Composable
+private fun HomeTxList(
+    walletTxs: WalletTxsSnapshot,
+    listState: LazyListState,
+    onOpenTx: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        state = listState,
+        contentPadding = PaddingValues(start = BwSpace.ScreenX, end = BwSpace.ScreenX, top = 8.dp, bottom = 240.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        if (walletTxs.txs.isEmpty()) {
+            item {
+                Text(
+                    text = if (walletTxs.blocksTotal > walletTxs.blocksParsed) "Parsing…" else "No transactions",
+                    color = BwColors.InkMuted,
+                    fontFamily = BwFontFamily,
+                    fontSize = BwType.BodySize,
+                )
+            }
+        } else {
+            items(walletTxs.txs, key = { it.txid }) { tx ->
+                HomeTxBubble(tx = tx, onClick = { onOpenTx(tx.txid) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeSectionLabel(text: String) {
+    Text(
+        text = text,
+        color = BwColors.InkSecondary,
+        fontFamily = BwFontFamily,
+        fontSize = 15.sp,
+        fontWeight = BwType.Label,
+        modifier = Modifier.padding(bottom = 6.dp),
+    )
 }
