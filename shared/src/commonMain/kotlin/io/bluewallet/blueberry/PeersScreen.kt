@@ -160,7 +160,7 @@ fun PeersScreen(
                     Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(187.dp),
+                        .height(SYNC_MESH_HEIGHT_DP.dp),
                 phase = 0f,
             )
         }

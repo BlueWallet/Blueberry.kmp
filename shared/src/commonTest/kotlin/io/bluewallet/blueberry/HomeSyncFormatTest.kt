@@ -30,6 +30,12 @@ class HomeSyncFormatTest {
     }
 
     @Test
+    fun home_sync_dock_does_not_paint_opaque_pixels_over_mesh_teal() {
+        assertTrue(dockOverlayHidesSyncMeshTeal(overlayOpaqueFrom = 0.48f))
+        assertFalse(dockOverlayHidesSyncMeshTeal())
+    }
+
+    @Test
     fun overallSyncEtaMs_is_slowest_incomplete_bar() {
         assertNull(
             overallSyncEtaMs(
