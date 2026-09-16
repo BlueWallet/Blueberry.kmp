@@ -48,10 +48,9 @@ jobs:
           key: ${{ runner.os }}-konan-${{ hashFiles('**/gradle/libs.versions.toml', '**/gradle-wrapper.properties') }}
 
       - name: Compute versions
-        id: versions
         run: |
-          python3 scripts/app-version.py | tee -a "$GITHUB_ENV"
-          python3 scripts/app-version.py >> "$GITHUB_OUTPUT"
+          echo "MARKETING_VERSION=$(date -u +%Y.%m.%d)" >> "$GITHUB_ENV"
+          echo "CURRENT_PROJECT_VERSION=$(date -u +%Y%m%d%H%M)" >> "$GITHUB_ENV"
 
       - name: Import App Store Connect API key
         env:

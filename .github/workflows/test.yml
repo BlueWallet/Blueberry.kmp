@@ -14,14 +14,6 @@ permissions:
   contents: read
 
 jobs:
-  app-version:
-    name: app-version
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Self-test date versions
-        run: python3 scripts/app-version.py --self-test
-
   ktlint:
     name: ktlint
     runs-on: ubuntu-latest
