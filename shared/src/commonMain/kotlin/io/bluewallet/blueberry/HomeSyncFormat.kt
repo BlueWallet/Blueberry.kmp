@@ -11,6 +11,8 @@ fun connectedPeersLabel(known: Int): String = "Connected Peers (${formatGrouped(
 
 fun showSyncMesh(unifiedPercent: Int): Boolean = unifiedPercent < 100
 
+const val SYNC_MESH_HEIGHT_DP = 187
+
 fun overallSyncEtaMs(
     percent: Int,
     chainEtaMs: Long?,
