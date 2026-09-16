@@ -111,18 +111,12 @@ jobs:
             archive
 
       - name: Export IPA
-        env:
-          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           xcodebuild \
             -exportArchive \
             -archivePath iosApp/build/Blueberry.xcarchive \
             -exportPath iosApp/build/export \
-            -exportOptionsPlist iosApp/ExportOptions.plist \
-            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8" \
-            -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
-            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
+            -exportOptionsPlist iosApp/ExportOptions.plist
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v7
