@@ -18,7 +18,9 @@ import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.plus
+import kotlinx.cinterop.readValue
 import kotlinx.cinterop.reinterpret
+import kotlinx.cinterop.useContents
 import kotlinx.cinterop.usePinned
 import platform.AVFoundation.AVAuthorizationStatusAuthorized
 import platform.AVFoundation.AVAuthorizationStatusDenied
@@ -34,6 +36,8 @@ import platform.AVFoundation.AVLayerVideoGravityResizeAspectFill
 import platform.AVFoundation.AVMediaTypeVideo
 import platform.AVFoundation.authorizationStatusForMediaType
 import platform.AVFoundation.requestAccessForMediaType
+import platform.CoreGraphics.CGRectMake
+import platform.CoreGraphics.CGRectZero
 import platform.CoreMedia.CMSampleBufferGetImageBuffer
 import platform.CoreMedia.CMSampleBufferRef
 import platform.CoreVideo.CVPixelBufferGetBaseAddressOfPlane
@@ -47,6 +51,7 @@ import platform.CoreVideo.kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
 import platform.Foundation.NSNumber
 import platform.QuartzCore.CATransaction
 import platform.QuartzCore.kCATransactionDisableActions
+import platform.UIKit.UIColor
 import platform.UIKit.UIView
 import platform.darwin.NSObject
 import platform.darwin.dispatch_async
@@ -137,18 +142,26 @@ private fun IosCameraPreview(
     }
     UIKitView(
         factory = {
-            val view = UIView()
-            previewLayer.frame = view.bounds
-            view.layer.addSublayer(previewLayer)
-            view
+            object : UIView(frame = CGRectZero.readValue()) {
+                override fun layoutSubviews() {
+                    super.layoutSubviews()
+                    val local =
+                        bounds.useContents {
+                            previewLayerLocalFrame(size.width, size.height)
+                        }
+                    CATransaction.begin()
+                    CATransaction.setValue(true, kCATransactionDisableActions)
+                    layer.setFrame(frame)
+                    previewLayer.setFrame(CGRectMake(local.x, local.y, local.width, local.height))
+                    CATransaction.commit()
+                }
+            }.apply {
+                backgroundColor = UIColor.blackColor
+                clipsToBounds = true
+                layer.addSublayer(previewLayer)
+            }
         },
         modifier = modifier,
-        update = { view ->
-            CATransaction.begin()
-            CATransaction.setValue(true, kCATransactionDisableActions)
-            previewLayer.frame = view.bounds
-            CATransaction.commit()
-        },
     )
 }
 
