@@ -20,7 +20,6 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.plus
 import kotlinx.cinterop.readValue
 import kotlinx.cinterop.reinterpret
-import kotlinx.cinterop.useContents
 import kotlinx.cinterop.usePinned
 import platform.AVFoundation.AVAuthorizationStatusAuthorized
 import platform.AVFoundation.AVAuthorizationStatusDenied
@@ -36,7 +35,6 @@ import platform.AVFoundation.AVLayerVideoGravityResizeAspectFill
 import platform.AVFoundation.AVMediaTypeVideo
 import platform.AVFoundation.authorizationStatusForMediaType
 import platform.AVFoundation.requestAccessForMediaType
-import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGRectZero
 import platform.CoreMedia.CMSampleBufferGetImageBuffer
 import platform.CoreMedia.CMSampleBufferRef
@@ -145,14 +143,9 @@ private fun IosCameraPreview(
             object : UIView(frame = CGRectZero.readValue()) {
                 override fun layoutSubviews() {
                     super.layoutSubviews()
-                    val local =
-                        bounds.useContents {
-                            previewLayerLocalFrame(size.width, size.height)
-                        }
                     CATransaction.begin()
                     CATransaction.setValue(true, kCATransactionDisableActions)
-                    layer.setFrame(frame)
-                    previewLayer.setFrame(CGRectMake(local.x, local.y, local.width, local.height))
+                    previewLayer.setFrame(bounds)
                     CATransaction.commit()
                 }
             }.apply {
