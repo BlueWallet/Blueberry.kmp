@@ -15,7 +15,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import io.bluewallet.blueberry.boot.AppearancePreference
+import io.bluewallet.blueberry.boot.appearanceLabel
+import io.bluewallet.blueberry.boot.cycleAppearance
 import io.bluewallet.blueberry.boot.loadAlwaysShowSyncProgress
+import io.bluewallet.blueberry.boot.loadAppearance
 import io.bluewallet.blueberry.boot.saveAlwaysShowSyncProgress
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.BwColors
@@ -41,6 +45,8 @@ fun SettingsScreen(
     var confirmClear by remember { mutableStateOf(false) }
     var showSecret by remember { mutableStateOf(false) }
     var alwaysShowSync by remember(db) { mutableStateOf(loadAlwaysShowSyncProgress(db)) }
+    var appearance by remember(db) { mutableStateOf(loadAppearance(db)) }
+    val onAppearanceChange = LocalAppearanceChange.current
     if (showSecret) {
         SecretScreen(secret = secret, onBack = { showSecret = false })
         return
@@ -55,76 +61,132 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         ScreenHeader(title = "Settings", onBack = onBack)
-        MetricCard(
-            label = "Always show sync progress",
-            value = "",
-            caption = "Keep Private Sync visible when idle",
-            modifier = Modifier.fillMaxWidth(),
-            trailing = {
-                BwSwitch(
-                    checked = alwaysShowSync,
-                    onCheckedChange = { on ->
-                        alwaysShowSync = on
-                        saveAlwaysShowSyncProgress(db, on)
-                    },
-                )
+        ThemeCard(
+            appearance = appearance,
+            onCycle = {
+                val next = cycleAppearance(appearance)
+                appearance = next
+                onAppearanceChange(next)
             },
         )
-        MetricCard(
-            label = "Secret",
-            value = secretKindLabel(secret),
-            caption = "QR code and text",
-            modifier = Modifier.fillMaxWidth(),
-            trailing = {
-                PillButton(text = "Show", onClick = { showSecret = true })
+        AlwaysShowSyncCard(
+            checked = alwaysShowSync,
+            onCheckedChange = { on ->
+                alwaysShowSync = on
+                saveAlwaysShowSyncProgress(db, on)
             },
         )
-        MetricCard(
-            label = "Storage",
-            value = databaseSize,
-            caption = "Deletes the local database and restarts onboarding",
-            modifier = Modifier.fillMaxWidth(),
-            trailing = {
-                PillButton(text = "Clear", onClick = { confirmClear = true })
-            },
-        )
+        SecretCard(secret = secret, onShow = { showSecret = true })
+        StorageCard(databaseSize = databaseSize, onClear = { confirmClear = true })
         ClickMeContent()
     }
     if (confirmClear) {
-        AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            title = {
-                Text(
-                    text = "Clear database?",
-                    color = BwColors.Ink,
-                    fontFamily = BwFontFamily,
-                    fontWeight = BwType.Value,
-                )
+        SettingsClearDialog(
+            onDismiss = { confirmClear = false },
+            onConfirm = {
+                confirmClear = false
+                onClearStorage()
             },
-            text = {
-                Text(
-                    text = "This deletes the local database and restarts onboarding.",
-                    color = BwColors.InkSecondary,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.BodySize,
-                    fontWeight = BwType.Caption,
-                )
-            },
-            confirmButton = {
-                PillButton(
-                    text = "Clear",
-                    onClick = {
-                        confirmClear = false
-                        onClearStorage()
-                    },
-                )
-            },
-            dismissButton = {
-                TextAction(text = "Cancel", onClick = { confirmClear = false })
-            },
-            containerColor = BwColors.Card,
         )
     }
+}
+
+@Composable
+private fun ThemeCard(
+    appearance: AppearancePreference,
+    onCycle: () -> Unit,
+) {
+    MetricCard(
+        label = "Theme",
+        value = appearanceLabel(appearance),
+        caption = "Light, dark, or follow the phone",
+        modifier = Modifier.fillMaxWidth(),
+        trailing = {
+            PillButton(text = "Change", onClick = onCycle)
+        },
+    )
+}
+
+@Composable
+private fun AlwaysShowSyncCard(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    MetricCard(
+        label = "Always show sync progress",
+        value = "",
+        caption = "Keep Private Sync visible when idle",
+        modifier = Modifier.fillMaxWidth(),
+        trailing = {
+            BwSwitch(checked = checked, onCheckedChange = onCheckedChange)
+        },
+    )
+}
+
+@Composable
+private fun SecretCard(
+    secret: String?,
+    onShow: () -> Unit,
+) {
+    MetricCard(
+        label = "Secret",
+        value = secretKindLabel(secret),
+        caption = "QR code and text",
+        modifier = Modifier.fillMaxWidth(),
+        trailing = {
+            PillButton(text = "Show", onClick = onShow)
+        },
+    )
+}
+
+@Composable
+private fun StorageCard(
+    databaseSize: String,
+    onClear: () -> Unit,
+) {
+    MetricCard(
+        label = "Storage",
+        value = databaseSize,
+        caption = "Deletes the local database and restarts onboarding",
+        modifier = Modifier.fillMaxWidth(),
+        trailing = {
+            PillButton(text = "Clear", onClick = onClear)
+        },
+    )
+}
+
+@Composable
+private fun SettingsClearDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Clear database?",
+                color = BwColors.Ink,
+                fontFamily = BwFontFamily,
+                fontWeight = BwType.Value,
+            )
+        },
+        text = {
+            Text(
+                text = "This deletes the local database and restarts onboarding.",
+                color = BwColors.InkSecondary,
+                fontFamily = BwFontFamily,
+                fontSize = BwType.BodySize,
+                fontWeight = BwType.Caption,
+            )
+        },
+        confirmButton = {
+            PillButton(text = "Clear", onClick = onConfirm)
+        },
+        dismissButton = {
+            TextAction(text = "Cancel", onClick = onDismiss)
+        },
+        containerColor = BwColors.Card,
+    )
 }
 
 private fun secretKindLabel(secret: String?): String {

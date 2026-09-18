@@ -24,12 +24,14 @@ import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import kotlin.math.abs
 
+@Composable
 fun Modifier.listRowPanel(onClick: () -> Unit): Modifier {
     val shape = RoundedCornerShape(BwSpace.Radius)
+    val card = BwColors.Card
     return this
         .fillMaxWidth()
         .clip(shape)
-        .background(BwColors.Card, shape)
+        .background(card, shape)
         .clickable(onClick = onClick)
         .padding(horizontal = 14.dp, vertical = 14.dp)
 }

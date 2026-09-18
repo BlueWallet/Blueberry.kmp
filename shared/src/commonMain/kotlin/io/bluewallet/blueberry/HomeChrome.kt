@@ -28,7 +28,9 @@ import blueberry.shared.generated.resources.Res
 import blueberry.shared.generated.resources.blueberry_mark
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
+import io.bluewallet.blueberry.ui.BwPalette
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.LocalDarkPalette
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
@@ -39,7 +41,7 @@ fun HomeOverflowButton(onClick: () -> Unit) {
                 .size(36.dp)
                 .clip(CircleShape)
                 .background(BwColors.Card)
-                .border(1.dp, Color(0xFF2A3033), CircleShape)
+                .border(1.dp, BwColors.BarTrack, CircleShape)
                 .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -81,6 +83,30 @@ fun HomeActionRow(
     }
 }
 
+class HomeActionColors(
+    val fill: Color,
+    val label: Color,
+    val disc: Color,
+    val glyph: Color,
+)
+
+fun homeActionColors(dark: Boolean): HomeActionColors =
+    if (dark) {
+        HomeActionColors(
+            fill = BwPalette.Dark.AccentSoft,
+            label = BwPalette.Dark.Accent,
+            disc = BwPalette.Dark.Accent,
+            glyph = BwPalette.Dark.AccentSoft,
+        )
+    } else {
+        HomeActionColors(
+            fill = BwPalette.Light.Accent,
+            label = BwPalette.Light.OnAccent,
+            disc = BwPalette.Light.OnAccent,
+            glyph = BwPalette.Light.Accent,
+        )
+    }
+
 @Composable
 private fun HomeActionButton(
     text: String,
@@ -88,13 +114,14 @@ private fun HomeActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = homeActionColors(LocalDarkPalette.current)
     val shape = RoundedCornerShape(50)
     Row(
         modifier =
             modifier
                 .height(44.dp)
                 .clip(shape)
-                .background(BwColors.AccentSoft, shape)
+                .background(colors.fill, shape)
                 .clickable(onClick = onClick)
                 .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -106,14 +133,14 @@ private fun HomeActionButton(
                     Modifier
                         .size(30.dp)
                         .clip(CircleShape)
-                        .background(BwColors.Accent),
+                        .background(colors.disc),
                 contentAlignment = Alignment.Center,
             ) {
-                DirectionGlyph(incoming = incoming, color = BwColors.AccentSoft)
+                DirectionGlyph(incoming = incoming, color = colors.glyph)
             }
             Text(
                 text = text,
-                color = BwColors.Accent,
+                color = colors.label,
                 fontFamily = BwFontFamily,
                 fontSize = BwType.ActionSize,
                 fontWeight = BwType.Action,
