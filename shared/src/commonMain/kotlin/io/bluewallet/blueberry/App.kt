@@ -131,6 +131,7 @@ fun App(databasePath: String) {
                     remember(databasePath, session) {
                         (inspectWalletSecret(db) as? WalletSecretInspection.Ok)?.value
                     },
+                db = db,
                 onClearStorage = {
                     scope.launch {
                         try {

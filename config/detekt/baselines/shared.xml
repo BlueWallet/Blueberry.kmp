@@ -29,7 +29,7 @@
     <ID>LongMethod:SendScreen.kt$@Composable fun SendScreen( runtime: PeersRuntime, db: Database, onBack: () -&gt; Unit, )</ID>
     <ID>LongMethod:SendScreen.kt$@Composable private fun PreviewStep( preview: BuildSendResult?, details: SendDetails?, inputSum: Long, broadcast: BroadcastSnapshot, onBroadcast: () -&gt; Unit, )</ID>
     <ID>LongMethod:SendScreen.kt$@Composable private fun UtxoStep( modifier: Modifier = Modifier, utxos: List&lt;WalletUtxoRow&gt;, selectedKeys: Set&lt;String&gt;, selectedSum: Long, renameKey: String?, renameDraft: String, onRenameDraft: (String) -&gt; Unit, onToggle: (String) -&gt; Unit, onBeginRename: (WalletUtxoRow) -&gt; Unit, onSaveRename: () -&gt; Unit, onContinue: () -&gt; Unit, )</ID>
-    <ID>LongMethod:SettingsScreen.kt$@Composable fun SettingsScreen( databaseSize: String, secret: String?, onClearStorage: () -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>LongMethod:SettingsScreen.kt$@Composable fun SettingsScreen( databaseSize: String, secret: String?, db: Database, onClearStorage: () -&gt; Unit, onBack: () -&gt; Unit, )</ID>
     <ID>LongMethod:WalletTxsStore.kt$fun snapshotFromDb( db: Database, at: Long, nowMs: Long = nowMillis(), wallet: Wallet? = null, ): WalletTxsSnapshot</ID>
     <ID>LongParameterList:BlocksMatchedStore.kt$( samples: List&lt;BlockProgressSample&gt;, prevDownloaded: Int, prevMatched: Int, at: Long, downloaded: Int, matched: Int, )</ID>
     <ID>LongParameterList:BtcAmountText.kt$( sats: Long, modifier: Modifier = Modifier, plus: Boolean = false, color: Color = BwColors.Ink, trailingColor: Color = BwColors.InkMuted, fontSize: TextUnit = BwType.BodySize, fontWeight: FontWeight = BwType.Value, maxLines: Int = 1, )</ID>

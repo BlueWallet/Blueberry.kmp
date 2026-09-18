@@ -2,9 +2,7 @@ package io.bluewallet.blueberry
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class HomeSyncFormatTest {
     @Test
@@ -18,15 +16,6 @@ class HomeSyncFormatTest {
     fun connectedPeersLabel_includes_known_on_same_line() {
         assertEquals("Connected Peers (0 known)", connectedPeersLabel(0))
         assertEquals("Connected Peers (25,685 known)", connectedPeersLabel(25_685))
-    }
-
-    @Test
-    fun showSyncMesh_only_while_unified_percent_is_incomplete() {
-        assertTrue(showSyncMesh(0))
-        assertTrue(showSyncMesh(75))
-        assertTrue(showSyncMesh(99))
-        assertFalse(showSyncMesh(100))
-        assertFalse(showSyncMesh(140))
     }
 
     @Test
@@ -78,5 +67,21 @@ class HomeSyncFormatTest {
                 blocksEtaMs = 0,
             ),
         )
+    }
+
+    @Test
+    fun sync_dock_is_idle_only_when_fully_synced_and_parse_is_done() {
+        assertEquals(false, isSyncDockIdle(percent = 99, parseBusy = false))
+        assertEquals(false, isSyncDockIdle(percent = 100, parseBusy = true))
+        assertEquals(true, isSyncDockIdle(percent = 100, parseBusy = false))
+        assertEquals(true, isSyncDockIdle(percent = 140, parseBusy = false))
+    }
+
+    @Test
+    fun sync_dock_stays_hidden_when_already_idle_unless_always_show() {
+        assertEquals(false, syncDockShownImmediately(idle = true, alwaysShow = false))
+        assertEquals(true, syncDockShownImmediately(idle = true, alwaysShow = true))
+        assertEquals(true, syncDockShownImmediately(idle = false, alwaysShow = false))
+        assertEquals(true, syncDockShownImmediately(idle = false, alwaysShow = true))
     }
 }

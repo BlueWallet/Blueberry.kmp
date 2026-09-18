@@ -34,7 +34,6 @@ object BwColors {
     val Warning = Color(0xFFFF9F0A)
     val Border = Color(0xFF181B1D)
     val OnAccent = Color(0xFF012234)
-    val Mesh = Color(0xFF00AAE0)
 }
 
 object BwSpace {
