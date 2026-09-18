@@ -40,7 +40,8 @@ fun echaloteStreamToByteDuplex(
     }
 
 fun createTorByteDuplexDialer(options: ExitDialerOptions = ExitDialerOptions()): TorByteDuplexDialer {
-    val dialer = Echalote.createExitDialer(options)
+    val isolated = options != ExitDialerOptions()
+    val owned = if (isolated) Echalote.createExitDialer(options) else null
     return object : TorByteDuplexDialer {
         override suspend fun dial(
             host: String,
@@ -55,7 +56,12 @@ fun createTorByteDuplexDialer(options: ExitDialerOptions = ExitDialerOptions()):
                     if (job.isCancelled) abort.abort(Exception("cancelled"))
                 }
             try {
-                val stream = dialer.dial(host, port, abort)
+                val stream =
+                    if (owned != null) {
+                        owned.dial(host, port, abort)
+                    } else {
+                        Echalote.dial(host, port, abort)
+                    }
                 log("tor", "dial ok $host:$port elapsedMs=${nowMs() - startedAt}")
                 return echaloteStreamToByteDuplex(stream.outer) { stream.close() }
             } catch (err: Throwable) {
@@ -68,7 +74,7 @@ fun createTorByteDuplexDialer(options: ExitDialerOptions = ExitDialerOptions()):
 
         override suspend fun dispose() {
             log("tor", "dialer dispose")
-            dialer.dispose()
+            owned?.dispose()
         }
     }
 }
