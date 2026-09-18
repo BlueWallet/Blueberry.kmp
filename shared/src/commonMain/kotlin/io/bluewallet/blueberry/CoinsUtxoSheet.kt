@@ -192,6 +192,7 @@ private fun CoinsSheetFact(
 
 @Composable
 private fun SheetBackArrow(onClick: () -> Unit) {
+    val ink = BwColors.Ink
     Canvas(
         modifier =
             Modifier
@@ -204,7 +205,7 @@ private fun SheetBackArrow(onClick: () -> Unit) {
         path.lineTo(size.width * 0.58f, size.height * 0.72f)
         drawPath(
             path,
-            BwColors.Ink,
+            ink,
             style =
                 Stroke(
                     width = 2.dp.toPx(),
