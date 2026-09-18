@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -29,6 +28,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.bluewallet.blueberry.boot.loadAlwaysShowSyncProgress
 import io.bluewallet.blueberry.boot.loadHomeDetailedSync
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.BtcAmountText
@@ -46,6 +47,7 @@ import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -128,6 +130,22 @@ fun PeersScreen(
             blocks = blocks,
         )
     val listState = rememberLazyListState()
+    val parseBusy = walletTxs.blocksTotal > walletTxs.blocksParsed
+    val dockIdle = isSyncDockIdle(unified, parseBusy)
+    val alwaysShowSync = remember(db) { loadAlwaysShowSyncProgress(db) }
+    var showDock by remember {
+        mutableStateOf(syncDockShownImmediately(dockIdle, alwaysShowSync))
+    }
+    LaunchedEffect(dockIdle, alwaysShowSync) {
+        if (alwaysShowSync) {
+            showDock = true
+        } else if (dockIdle) {
+            delay(SYNC_DOCK_HIDE_DELAY_MS)
+            showDock = false
+        } else {
+            showDock = true
+        }
+    }
     Box(
         modifier =
             Modifier
@@ -151,17 +169,8 @@ fun PeersScreen(
                 walletTxs = walletTxs,
                 listState = listState,
                 onOpenTx = onOpenTx,
+                dockVisible = showDock && !detailedSync,
                 modifier = Modifier.weight(1f),
-            )
-        }
-        if (showSyncMesh(unified)) {
-            SyncMeshGradient(
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(SYNC_MESH_HEIGHT_DP.dp),
-                phase = 0f,
             )
         }
         AnimatedVisibility(
@@ -206,7 +215,7 @@ fun PeersScreen(
             )
         }
         AnimatedVisibility(
-            visible = !detailedSync,
+            visible = !detailedSync && showDock,
             modifier = Modifier.align(Alignment.BottomCenter),
             enter =
                 fadeIn(animationSpec = tween(200)) +
@@ -290,12 +299,19 @@ private fun HomeTxList(
     walletTxs: WalletTxsSnapshot,
     listState: LazyListState,
     onOpenTx: (String) -> Unit,
+    dockVisible: Boolean,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         state = listState,
-        contentPadding = PaddingValues(start = BwSpace.ScreenX, end = BwSpace.ScreenX, top = 8.dp, bottom = 240.dp),
+        contentPadding =
+            PaddingValues(
+                start = BwSpace.ScreenX,
+                end = BwSpace.ScreenX,
+                top = 8.dp,
+                bottom = if (dockVisible) 240.dp else 24.dp,
+            ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (walletTxs.txs.isEmpty()) {

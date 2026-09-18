@@ -15,9 +15,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import io.bluewallet.blueberry.boot.loadAlwaysShowSyncProgress
+import io.bluewallet.blueberry.boot.saveAlwaysShowSyncProgress
+import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
+import io.bluewallet.blueberry.ui.BwSwitch
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.MetricCard
 import io.bluewallet.blueberry.ui.PillButton
@@ -30,11 +34,13 @@ import io.bluewallet.blueberry.wallet.parseWalletSecret
 fun SettingsScreen(
     databaseSize: String,
     secret: String?,
+    db: Database,
     onClearStorage: () -> Unit,
     onBack: () -> Unit,
 ) {
     var confirmClear by remember { mutableStateOf(false) }
     var showSecret by remember { mutableStateOf(false) }
+    var alwaysShowSync by remember(db) { mutableStateOf(loadAlwaysShowSyncProgress(db)) }
     if (showSecret) {
         SecretScreen(secret = secret, onBack = { showSecret = false })
         return
@@ -49,6 +55,21 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         ScreenHeader(title = "Settings", onBack = onBack)
+        MetricCard(
+            label = "Always show sync progress",
+            value = "",
+            caption = "Keep Private Sync visible when idle",
+            modifier = Modifier.fillMaxWidth(),
+            trailing = {
+                BwSwitch(
+                    checked = alwaysShowSync,
+                    onCheckedChange = { on ->
+                        alwaysShowSync = on
+                        saveAlwaysShowSyncProgress(db, on)
+                    },
+                )
+            },
+        )
         MetricCard(
             label = "Secret",
             value = secretKindLabel(secret),

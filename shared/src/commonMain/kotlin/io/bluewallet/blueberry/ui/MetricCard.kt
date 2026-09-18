@@ -49,15 +49,17 @@ fun MetricCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = value,
-                color = valueColor,
-                fontFamily = BwFontFamily,
-                fontSize = BwType.ValueSize,
-                fontWeight = BwType.Value,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (value.isNotEmpty()) {
+                Text(
+                    text = value,
+                    color = valueColor,
+                    fontFamily = BwFontFamily,
+                    fontSize = BwType.ValueSize,
+                    fontWeight = BwType.Value,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (caption != null) {
                 Text(
                     text = caption,

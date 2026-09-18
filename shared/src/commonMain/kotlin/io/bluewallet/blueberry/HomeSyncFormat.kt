@@ -9,9 +9,17 @@ fun connectedPeersCount(
 
 fun connectedPeersLabel(known: Int): String = "Connected Peers (${formatGrouped(known)} known)"
 
-fun showSyncMesh(unifiedPercent: Int): Boolean = unifiedPercent < 100
+const val SYNC_DOCK_HIDE_DELAY_MS = 2_000L
 
-const val SYNC_MESH_HEIGHT_DP = 187
+fun isSyncDockIdle(
+    percent: Int,
+    parseBusy: Boolean,
+): Boolean = percent >= 100 && !parseBusy
+
+fun syncDockShownImmediately(
+    idle: Boolean,
+    alwaysShow: Boolean,
+): Boolean = alwaysShow || !idle
 
 fun overallSyncEtaMs(
     percent: Int,
