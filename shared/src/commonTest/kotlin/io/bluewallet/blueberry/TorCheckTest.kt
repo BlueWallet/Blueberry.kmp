@@ -47,6 +47,29 @@ class TorCheckTest {
         }
 
     @Test
+    fun torCheckUrl_isRocketxConfigs() {
+        assertEquals("api.rocketx.exchange", TOR_CHECK_HOST)
+        assertEquals("https://api.rocketx.exchange/v1/configs", TOR_CHECK_URL)
+    }
+
+    @Test
+    fun parseTorCheckResponse_acceptsNestedJson() {
+        val body = """{"ok":true,"data":{"chains":[1]}}""".encodeToByteArray()
+        val got = parseTorCheckResponse(200, body)
+        assertEquals(true, got.isTor)
+        assertEquals("api.rocketx.exchange", got.ip)
+    }
+
+    @Test
+    fun parseTorCheckResponse_rejectsNonJson() {
+        val ex =
+            kotlin.test.assertFails {
+                parseTorCheckResponse(200, "Just a moment...".encodeToByteArray())
+            }
+        assertTrue(ex.message?.contains("unexpected body") == true)
+    }
+
+    @Test
     fun formatTorCheckElapsed_rounds_to_tenths() {
         assertEquals("0s", formatTorCheckElapsed(0))
         assertEquals("0s", formatTorCheckElapsed(49))

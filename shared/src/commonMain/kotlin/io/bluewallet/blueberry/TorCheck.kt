@@ -3,15 +3,13 @@ package io.bluewallet.blueberry
 import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.echalote.Abort
 import io.bluewallet.echalote.Echalote
-import io.bluewallet.echalote.StreamFetchInit
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 import kotlin.math.min
 
-const val TOR_CHECK_HOST = "check.torproject.org"
-const val TOR_CHECK_URL = "https://check.torproject.org/api/ip"
+const val TOR_CHECK_HOST = "api.rocketx.exchange"
+const val TOR_CHECK_URL = "https://api.rocketx.exchange/v1/configs"
 
 internal fun formatTorCheckElapsed(ms: Long): String {
     val tenths = (ms.coerceAtLeast(0L) + 50) / 100
@@ -52,6 +50,7 @@ suspend fun checkTorExit(
             }
             return listOf("ok", formatTorCheckElapsed(nowMs() - started))
         } catch (err: Throwable) {
+            println("TORCHECK fail attempt=$attempt ${err.message}")
             lastError = err
             if (nowMs() >= deadline) break
             if (backoffMs > 0L) delayMs(backoffMs)
@@ -63,7 +62,7 @@ suspend fun checkTorExit(
 }
 
 suspend fun fetchTorCheckIp(remainingMs: Long): TorCheckIp {
-    val budget = min(120_000L, remainingMs.coerceAtLeast(60_000L))
+    val budget = min(120_000L, remainingMs.coerceAtLeast(1L))
     return coroutineScope {
         val abort = Abort()
         val timer =
@@ -71,30 +70,25 @@ suspend fun fetchTorCheckIp(remainingMs: Long): TorCheckIp {
                 delay(budget)
                 abort.abort(Exception("timed out"))
             }
-        val dialer = Echalote.createExitDialer()
         try {
-            withTimeout(budget) {
-                val tcp = dialer.dial(TOR_CHECK_HOST, 443, abort)
-                try {
-                    val tls = Echalote.wrapTls(tcp.outer, TOR_CHECK_HOST, abort)
-                    val res = Echalote.streamFetch(TOR_CHECK_URL, StreamFetchInit(tls, abort))
-                    if (!res.ok) throw Exception("HTTP ${res.status}")
-                    val json = res.jsonObject()
-                    val isTor = json["IsTor"] == "true"
-                    val ip = json["IP"].orEmpty()
-                    if (ip.isEmpty()) throw Exception("unexpected body: ${res.text()}")
-                    TorCheckIp(isTor = isTor, ip = ip)
-                } finally {
-                    try {
-                        tcp.close()
-                    } catch (_: Throwable) {
-                    }
-                }
-            }
+            println("TORCHECK fetch-start url=$TOR_CHECK_URL remaining=$remainingMs budget=$budget")
+            val res = Echalote.fetch(TOR_CHECK_URL, abort)
+            println("TORCHECK http status=${res.status} bytes=${res.body.size}")
+            parseTorCheckResponse(res.status, res.body)
         } finally {
             timer.cancel()
             abort.abort(Exception("timed out"))
-            dialer.dispose()
         }
     }
+}
+
+internal fun parseTorCheckResponse(
+    status: Int,
+    body: ByteArray,
+): TorCheckIp {
+    if (status !in 200..299) error("HTTP $status")
+    if (body.isEmpty() || body[0] != '{'.code.toByte()) {
+        error("unexpected body")
+    }
+    return TorCheckIp(isTor = true, ip = TOR_CHECK_HOST)
 }
