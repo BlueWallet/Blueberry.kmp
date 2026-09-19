@@ -54,7 +54,7 @@ import io.bluewallet.blueberry.wallet.SendInputUtxo
 import io.bluewallet.blueberry.wallet.SignedSendResult
 import kotlinx.coroutines.launch
 
-private enum class SendStep { Utxos, Details, FeeRate, Preview }
+private enum class SendStep { Utxos, Details, Preview }
 
 @Composable
 fun SendScreen(
@@ -91,6 +91,23 @@ fun SendScreen(
     }
     val selectedSum = snap.utxos.filter { it.key in selectedKeys }.sumOf { it.valueSats }
 
+    fun applySendPayload(payload: String) {
+        val next =
+            applyBip21Payload(
+                payload,
+                SendFormFields(address = address, amount = amount, label = label),
+            )
+        address = next.address
+        amount = next.amount
+        label = next.label
+        if (invalidField == SendField.Address ||
+            invalidField == SendField.Amount ||
+            invalidField == SendField.Label
+        ) {
+            invalidField = null
+        }
+    }
+
     fun goBack() {
         val previewTxHex = (preview as? SignedSendResult)?.txHex
         val ownsJob = previewTxHex != null && broadcast.txHex == previewTxHex
@@ -122,10 +139,9 @@ fun SendScreen(
         when (step) {
             SendStep.Utxos -> onBack()
             SendStep.Details -> step = SendStep.Utxos
-            SendStep.FeeRate -> step = SendStep.Details
             SendStep.Preview -> {
                 preview = null
-                step = SendStep.FeeRate
+                step = SendStep.Details
             }
         }
     }
@@ -178,105 +194,98 @@ fun SendScreen(
                     QrScanOverlay(
                         modifier = Modifier.weight(1f),
                         onResult = { payload ->
-                            address = payload
-                            if (invalidField == SendField.Address) invalidField = null
+                            applySendPayload(payload)
                             scanning = false
                         },
                     )
                 } else {
                     DetailsStep(
-                        selectedSum = selectedSum,
-                        address = address,
-                        amount = amount,
-                        label = label,
-                        invalid = invalidField,
-                        onAddress = {
-                            address = it
-                            if (invalidField == SendField.Address) invalidField = null
-                        },
-                        onAmount = {
-                            amount = it
-                            if (invalidField == SendField.Amount) invalidField = null
-                        },
-                        onLabel = {
-                            label = it
-                            if (invalidField == SendField.Label) invalidField = null
-                        },
-                        onScan = { scanning = true },
-                        onContinue = {
-                            when (val result = validateSendDetails(address, amount, label, selectedSum)) {
-                                is SendDetailsValidation.Ok -> {
-                                    details = result.details
-                                    invalidField = null
-                                    step = SendStep.FeeRate
+                        form =
+                            DetailsForm(
+                                selectedSum = selectedSum,
+                                address = address,
+                                amount = amount,
+                                label = label,
+                                feeRate = feeRate,
+                                invalid = invalidField,
+                                feeError = feeError,
+                            ),
+                        onEvent = handler@{ event ->
+                            when (event) {
+                                is DetailsEvent.Address -> applySendPayload(event.value)
+                                is DetailsEvent.Amount -> {
+                                    amount = event.value
+                                    if (invalidField == SendField.Amount) invalidField = null
                                 }
-                                is SendDetailsValidation.Invalid -> invalidField = result.field
+                                is DetailsEvent.Label -> {
+                                    label = event.value
+                                    if (invalidField == SendField.Label) invalidField = null
+                                }
+                                is DetailsEvent.FeeRate -> {
+                                    feeRate = event.value
+                                    feeError = null
+                                    if (invalidField == SendField.FeeRate) invalidField = null
+                                }
+                                DetailsEvent.Scan -> scanning = true
+                                DetailsEvent.Continue -> {
+                                    when (val result = validateSendDetails(address, amount, label, selectedSum, feeRate)) {
+                                        is SendDetailsValidation.Ok -> {
+                                            details = result.details
+                                            invalidField = null
+                                            val w = wallet
+                                            if (w == null) {
+                                                feeError = "missing send details"
+                                                return@handler
+                                            }
+                                            val picked = pickSelected(snap.utxos, selectedKeys)
+                                            if (picked is PickUtxos.Error) {
+                                                feeError = picked.error
+                                                return@handler
+                                            }
+                                            val selected = (picked as PickUtxos.Ok).selected
+                                            val d = result.details
+                                            try {
+                                                val built =
+                                                    buildActiveSendTx(
+                                                        db,
+                                                        w,
+                                                        SendBuildParams(
+                                                            utxos =
+                                                                selected.map {
+                                                                    SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey)
+                                                                },
+                                                            toAddress = d.toAddress,
+                                                            amountSats = d.amountSats,
+                                                            feeRateSatPerVb = result.feeRateSatPerVb,
+                                                        ),
+                                                    )
+                                                val txid =
+                                                    when (built) {
+                                                        is SignedSendResult -> built.txid
+                                                        is PsbtSendResult -> built.txid
+                                                    }
+                                                val changeVouts =
+                                                    when (built) {
+                                                        is SignedSendResult -> built.changeVouts
+                                                        is PsbtSendResult -> built.changeVouts
+                                                    }
+                                                savePaymentLabel(db, txid, d.paymentLabel, changeVouts)
+                                                preview = built
+                                                previewInputSum = selected.sumOf { it.valueSats }
+                                                feeError = null
+                                                cancelArmedForId = null
+                                                step = SendStep.Preview
+                                            } catch (err: Throwable) {
+                                                feeError = err.message ?: err.toString()
+                                            }
+                                        }
+                                        is SendDetailsValidation.Invalid -> invalidField = result.field
+                                    }
+                                }
                             }
                         },
                     )
                 }
-            SendStep.FeeRate ->
-                FeeRateStep(
-                    feeRate = feeRate,
-                    error = feeError,
-                    onFeeRate = {
-                        feeRate = it
-                        feeError = null
-                    },
-                    onContinue = {
-                        val rate = parseFeeRateSatPerVb(feeRate)
-                        val d = details
-                        val w = wallet
-                        if (rate == null) {
-                            feeError = "fee rate must be positive"
-                            return@FeeRateStep
-                        }
-                        if (d == null || w == null) {
-                            feeError = "missing send details"
-                            return@FeeRateStep
-                        }
-                        val picked = pickSelected(snap.utxos, selectedKeys)
-                        if (picked is PickUtxos.Error) {
-                            feeError = picked.error
-                            return@FeeRateStep
-                        }
-                        val selected = (picked as PickUtxos.Ok).selected
-                        try {
-                            val result =
-                                buildActiveSendTx(
-                                    db,
-                                    w,
-                                    SendBuildParams(
-                                        utxos =
-                                            selected.map {
-                                                SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey)
-                                            },
-                                        toAddress = d.toAddress,
-                                        amountSats = d.amountSats,
-                                        feeRateSatPerVb = rate,
-                                    ),
-                                )
-                            val txid =
-                                when (result) {
-                                    is SignedSendResult -> result.txid
-                                    is PsbtSendResult -> result.txid
-                                }
-                            val changeVouts =
-                                when (result) {
-                                    is SignedSendResult -> result.changeVouts
-                                    is PsbtSendResult -> result.changeVouts
-                                }
-                            savePaymentLabel(db, txid, d.paymentLabel, changeVouts)
-                            preview = result
-                            previewInputSum = selected.sumOf { it.valueSats }
-                            feeError = null
-                            cancelArmedForId = null
-                            step = SendStep.Preview
-                        } catch (err: Throwable) {
-                            feeError = err.message ?: err.toString()
-                        }
-                    },
-                )
             SendStep.Preview ->
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     PreviewStep(
@@ -391,29 +400,53 @@ private fun UtxoStep(
     )
 }
 
+private sealed class DetailsEvent {
+    data class Address(
+        val value: String,
+    ) : DetailsEvent()
+
+    data class Amount(
+        val value: String,
+    ) : DetailsEvent()
+
+    data class Label(
+        val value: String,
+    ) : DetailsEvent()
+
+    data class FeeRate(
+        val value: String,
+    ) : DetailsEvent()
+
+    data object Scan : DetailsEvent()
+
+    data object Continue : DetailsEvent()
+}
+
+private data class DetailsForm(
+    val selectedSum: Long,
+    val address: String,
+    val amount: String,
+    val label: String,
+    val feeRate: String,
+    val invalid: SendField?,
+    val feeError: String?,
+)
+
 @Composable
 private fun DetailsStep(
-    selectedSum: Long,
-    address: String,
-    amount: String,
-    label: String,
-    invalid: SendField?,
-    onAddress: (String) -> Unit,
-    onAmount: (String) -> Unit,
-    onLabel: (String) -> Unit,
-    onScan: () -> Unit,
-    onContinue: () -> Unit,
+    form: DetailsForm,
+    onEvent: (DetailsEvent) -> Unit,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
         Text("Selected", color = BwColors.InkMuted, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
-        BtcAmountText(sats = selectedSum, color = BwColors.Ink)
+        BtcAmountText(sats = form.selectedSum, color = BwColors.Ink)
     }
     OutlinedTextField(
-        value = address,
-        onValueChange = onAddress,
+        value = form.address,
+        onValueChange = { onEvent(DetailsEvent.Address(it)) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        isError = invalid == SendField.Address,
+        isError = form.invalid == SendField.Address,
         label = { Text("Address") },
         placeholder = { Text("bc1…") },
         trailingIcon = {
@@ -422,49 +455,39 @@ private fun DetailsStep(
                 color = BwColors.Link,
                 fontFamily = BwFontFamily,
                 fontSize = BwType.CaptionSize,
-                modifier = Modifier.clickable(onClick = onScan),
+                modifier = Modifier.clickable { onEvent(DetailsEvent.Scan) },
             )
         },
     )
     OutlinedTextField(
-        value = amount,
-        onValueChange = onAmount,
+        value = form.amount,
+        onValueChange = { onEvent(DetailsEvent.Amount(it)) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        isError = invalid == SendField.Amount,
+        isError = form.invalid == SendField.Amount,
         label = { Text("Amount") },
         placeholder = { Text("0.00000000 or MAX") },
     )
     OutlinedTextField(
-        value = label,
-        onValueChange = onLabel,
+        value = form.label,
+        onValueChange = { onEvent(DetailsEvent.Label(it)) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        isError = invalid == SendField.Label,
+        isError = form.invalid == SendField.Label,
         label = { Text("Payment label") },
         placeholder = { Text("groceries") },
     )
-    PillButton(text = "Continue", onClick = onContinue, modifier = Modifier.fillMaxWidth())
-}
-
-@Composable
-private fun FeeRateStep(
-    feeRate: String,
-    error: String?,
-    onFeeRate: (String) -> Unit,
-    onContinue: () -> Unit,
-) {
     OutlinedTextField(
-        value = feeRate,
-        onValueChange = onFeeRate,
+        value = form.feeRate,
+        onValueChange = { onEvent(DetailsEvent.FeeRate(it)) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        isError = error != null,
+        isError = form.invalid == SendField.FeeRate || form.feeError != null,
         label = { Text("Fee rate (sat/vB)") },
         placeholder = { Text("1") },
     )
-    if (error != null) {
-        Text(error, color = BwColors.Danger, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
+    if (form.feeError != null) {
+        Text(form.feeError, color = BwColors.Danger, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
     }
-    PillButton(text = "Continue", onClick = onContinue, modifier = Modifier.fillMaxWidth())
+    PillButton(text = "Continue", onClick = { onEvent(DetailsEvent.Continue) }, modifier = Modifier.fillMaxWidth())
 }
