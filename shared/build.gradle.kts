@@ -173,7 +173,7 @@ val generateBuildSecrets =
 
 tasks
     .matching {
-        (it.name.startsWith("compile") && it.name.contains("Kotlin")) ||
+        it.name.startsWith("compile") ||
             it.name.contains("Ktlint", ignoreCase = true)
     }.configureEach {
         dependsOn(generateBuildSecrets)
