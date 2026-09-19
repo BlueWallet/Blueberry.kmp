@@ -30,7 +30,7 @@ internal actual fun BoxScope.IosEdgeSwipeHandle(
     Box(
         modifier =
             Modifier
-                .align(Alignment.Start)
+                .align(Alignment.CenterStart)
                 .fillMaxHeight()
                 .width(EDGE_SWIPE_WIDTH_DP.dp)
                 .pointerInput(edgeWidthPx, thresholdPx) {
