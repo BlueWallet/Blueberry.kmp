@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalComposeUiApi::class)
+
 package io.bluewallet.blueberry
 
 import androidx.compose.animation.AnimatedVisibility
@@ -35,11 +37,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.bluewallet.blueberry.boot.loadAlwaysShowSyncProgress
 import io.bluewallet.blueberry.boot.loadHomeDetailedSync
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.BtcAmountText
@@ -79,6 +82,7 @@ fun PeersScreen(
         detailedSync = value
         onDetailedSyncChange(value)
     }
+    BackHandler(enabled = detailedSync) { setDetailedSync(false) }
     DisposableEffect(store) {
         val off = store.subscribe { uiScope.launch { counts = store.get() } }
         onDispose { off() }
@@ -132,7 +136,7 @@ fun PeersScreen(
     val listState = rememberLazyListState()
     val parseBusy = walletTxs.blocksTotal > walletTxs.blocksParsed
     val dockIdle = isSyncDockIdle(unified, parseBusy)
-    val alwaysShowSync = remember(db) { loadAlwaysShowSyncProgress(db) }
+    val alwaysShowSync = LocalAlwaysShowSync.current
     var showDock by remember {
         mutableStateOf(syncDockShownImmediately(dockIdle, alwaysShowSync))
     }

@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalComposeUiApi::class)
+
 package io.bluewallet.blueberry
 
 import androidx.compose.foundation.background
@@ -20,9 +22,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.alpha
 import io.bluewallet.blueberry.bus.BroadcastCancelPayload
 import io.bluewallet.blueberry.bus.BroadcastRequestPayload
@@ -42,6 +47,7 @@ import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.HorizontalProgressBar
 import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.ScreenHeader
+import io.bluewallet.blueberry.ui.overlayBackStack
 import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.PsbtSendResult
 import io.bluewallet.blueberry.wallet.SendInputUtxo
@@ -122,6 +128,13 @@ fun SendScreen(
                 step = SendStep.FeeRate
             }
         }
+    }
+    BackHandler { goBack() }
+    val latestGoBack by rememberUpdatedState { goBack() }
+    DisposableEffect(Unit) {
+        val cb: () -> Unit = { latestGoBack() }
+        overlayBackStack.push(cb)
+        onDispose { overlayBackStack.pop(cb) }
     }
     Column(
         modifier =
