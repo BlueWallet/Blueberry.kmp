@@ -34,6 +34,12 @@ class SendValidationTest {
     }
 
     @Test
+    fun continue_opens_private_send_when_checked() {
+        assertEquals(SendContinueTarget.PrivateSend, sendContinueTarget(privateSend = true))
+        assertEquals(SendContinueTarget.OnchainPreview, sendContinueTarget(privateSend = false))
+    }
+
+    @Test
     fun fee_rate_must_be_positive_finite() {
         assertNull(parseFeeRateSatPerVb(""))
         assertNull(parseFeeRateSatPerVb("0"))

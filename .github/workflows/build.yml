@@ -46,6 +46,8 @@ jobs:
           key: ${{ runner.os }}-konan-${{ hashFiles('**/gradle/libs.versions.toml', '**/gradle-wrapper.properties') }}
 
       - name: Assemble debug APK
+        env:
+          ROCKETX_API_KEY: ${{ secrets.ROCKETX_API_KEY }}
         run: ./gradlew :androidApp:assembleDebug --no-daemon
 
       - uses: actions/upload-artifact@v7
@@ -131,6 +133,8 @@ jobs:
 
       - name: Package ${{ matrix.name }}
         shell: bash
+        env:
+          ROCKETX_API_KEY: ${{ secrets.ROCKETX_API_KEY }}
         run: ./gradlew ${{ matrix.gradle }} --no-daemon
 
       - uses: actions/upload-artifact@v7
@@ -175,6 +179,8 @@ jobs:
           key: ${{ runner.os }}-konan-${{ hashFiles('**/gradle/libs.versions.toml', '**/gradle-wrapper.properties') }}
 
       - name: Build iOS simulator app
+        env:
+          ROCKETX_API_KEY: ${{ secrets.ROCKETX_API_KEY }}
         run: |
           xcodebuild \
             -project iosApp/iosApp.xcodeproj \

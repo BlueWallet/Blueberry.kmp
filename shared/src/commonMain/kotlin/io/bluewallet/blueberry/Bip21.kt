@@ -10,6 +10,7 @@ data class SendFormFields(
     val address: String,
     val amount: String,
     val label: String,
+    val privateSend: Boolean = false,
 )
 
 fun parseBip21(input: String): Bip21Payment? {
@@ -45,6 +46,7 @@ fun applyBip21Payload(
             address = parsed.address,
             amount = parsed.amountBtc ?: current.amount,
             label = parsed.label ?: current.label,
+            privateSend = current.privateSend,
         )
     }
 }

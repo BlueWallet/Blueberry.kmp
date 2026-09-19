@@ -3,6 +3,7 @@ package io.bluewallet.blueberry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class Bip21Test {
     @Test
@@ -57,5 +58,15 @@ class Bip21Test {
         assertEquals("bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", plain.address)
         assertEquals("2", plain.amount)
         assertEquals("x", plain.label)
+    }
+
+    @Test
+    fun applyBip21Payload_keeps_private_send() {
+        val next =
+            applyBip21Payload(
+                "bitcoin:bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu?amount=0.01",
+                SendFormFields(address = "", amount = "", label = "", privateSend = true),
+            )
+        assertTrue(next.privateSend)
     }
 }

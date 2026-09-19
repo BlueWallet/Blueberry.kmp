@@ -57,6 +57,14 @@ fun validateSendDetails(
     return SendDetailsValidation.Ok(SendDetails(address.trim(), amountSats, trimmedLabel), rate!!)
 }
 
+sealed class SendContinueTarget {
+    data object OnchainPreview : SendContinueTarget()
+
+    data object PrivateSend : SendContinueTarget()
+}
+
+fun sendContinueTarget(privateSend: Boolean): SendContinueTarget = if (privateSend) SendContinueTarget.PrivateSend else SendContinueTarget.OnchainPreview
+
 fun parseFeeRateSatPerVb(input: String): Double? {
     val t = input.trim()
     if (t.isEmpty() || !Regex("^\\d+(\\.\\d+)?$").matches(t)) return null
