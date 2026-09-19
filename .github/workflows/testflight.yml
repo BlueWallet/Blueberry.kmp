@@ -92,6 +92,8 @@ jobs:
           rm -f "${RUNNER_TEMP}/profile.mobileprovision"
 
       - name: Archive iOS app
+        env:
+          ROCKETX_API_KEY: ${{ secrets.ROCKETX_API_KEY }}
         run: |
           xcodebuild \
             -project iosApp/iosApp.xcodeproj \

@@ -72,7 +72,7 @@ internal fun PreviewStep(
 }
 
 @Composable
-private fun BroadcastStatus(broadcast: BroadcastSnapshot) {
+internal fun BroadcastStatus(broadcast: BroadcastSnapshot) {
     when {
         broadcastJobInFlight(broadcast.phase) -> {
             Text("Broadcasting via Tor", color = BwColors.Accent, fontFamily = BwFontFamily, fontWeight = BwType.Label)

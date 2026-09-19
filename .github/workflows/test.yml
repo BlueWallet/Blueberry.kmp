@@ -43,6 +43,8 @@ jobs:
         run: sdkmanager "platforms;android-37.0"
 
       - name: ktlintCheck
+        env:
+          ROCKETX_API_KEY: ${{ secrets.ROCKETX_API_KEY }}
         run: ./gradlew ktlintCheck --no-daemon
 
   detekt:
@@ -74,6 +76,8 @@ jobs:
         run: sdkmanager "platforms;android-37.0"
 
       - name: detekt
+        env:
+          ROCKETX_API_KEY: ${{ secrets.ROCKETX_API_KEY }}
         run: ./gradlew detekt --no-daemon
 
   test:
@@ -123,4 +127,6 @@ jobs:
           key: ${{ runner.os }}-konan-${{ hashFiles('**/gradle/libs.versions.toml', '**/gradle-wrapper.properties') }}
 
       - name: Run ${{ matrix.name }} tests
+        env:
+          ROCKETX_API_KEY: ${{ secrets.ROCKETX_API_KEY }}
         run: ./gradlew ${{ matrix.gradle }} --no-daemon

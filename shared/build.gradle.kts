@@ -73,34 +73,37 @@ kotlin {
             implementation(libs.webcam.capture)
             implementation(libs.slf4j.nop)
         }
-        commonMain.dependencies {
-            implementation(project(":storage"))
-            implementation(project(":wallet"))
-            implementation(project(":bus"))
-            implementation(project(":peers"))
-            implementation(project(":headers"))
-            implementation(project(":filters"))
-            implementation(project(":blocks"))
-            implementation(project(":sync"))
-            implementation(project(":parse"))
-            implementation(project(":broadcast"))
-            implementation(libs.compose.runtime)
-            implementation(libs.compose.foundation)
-            implementation(libs.compose.material3)
-            implementation(libs.compose.ui)
-            implementation(libs.compose.uiBackhandler)
-            implementation(libs.compose.components.resources)
-            implementation(libs.compose.uiToolingPreview)
-            implementation(libs.qrose)
-            implementation(libs.androidx.lifecycle.viewmodelCompose)
-            implementation(libs.androidx.lifecycle.runtimeCompose)
-            implementation(libs.bitcoin.headers)
-            implementation(libs.bip324)
-            implementation(libs.bip157)
-            implementation(libs.bip158)
-            implementation(libs.echalote)
-            implementation(libs.qr)
-            implementation(libs.kotlinx.coroutines.core)
+        commonMain {
+            kotlin.srcDir(layout.buildDirectory.dir("generated/buildSecrets/kotlin"))
+            dependencies {
+                implementation(project(":storage"))
+                implementation(project(":wallet"))
+                implementation(project(":bus"))
+                implementation(project(":peers"))
+                implementation(project(":headers"))
+                implementation(project(":filters"))
+                implementation(project(":blocks"))
+                implementation(project(":sync"))
+                implementation(project(":parse"))
+                implementation(project(":broadcast"))
+                implementation(libs.compose.runtime)
+                implementation(libs.compose.foundation)
+                implementation(libs.compose.material3)
+                implementation(libs.compose.ui)
+                implementation(libs.compose.uiBackhandler)
+                implementation(libs.compose.components.resources)
+                implementation(libs.compose.uiToolingPreview)
+                implementation(libs.qrose)
+                implementation(libs.androidx.lifecycle.viewmodelCompose)
+                implementation(libs.androidx.lifecycle.runtimeCompose)
+                implementation(libs.bitcoin.headers)
+                implementation(libs.bip324)
+                implementation(libs.bip157)
+                implementation(libs.bip158)
+                implementation(libs.echalote)
+                implementation(libs.qr)
+                implementation(libs.kotlinx.coroutines.core)
+            }
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -117,6 +120,64 @@ kotlin {
         }
     }
 }
+
+val generateBuildSecrets =
+    tasks.register("generateBuildSecrets") {
+        val outDir = layout.buildDirectory.dir("generated/buildSecrets/kotlin")
+        outputs.dir(outDir)
+        val envKey = providers.environmentVariable("ROCKETX_API_KEY").orElse("")
+        val envFileText =
+            providers.fileContents(rootProject.layout.projectDirectory.file(".env")).asText.orElse("")
+        inputs.property("rocketxEnvKey", envKey)
+        inputs.property("rocketxEnvFile", envFileText)
+        doLast {
+            var key = envKey.get().trim()
+            if (key.isEmpty()) {
+                envFileText.get().lineSequence().forEach { line ->
+                    val trimmed = line.trim()
+                    if (trimmed.startsWith("#") || "=" !in trimmed) return@forEach
+                    val name = trimmed.substringBefore("=").trim().lowercase()
+                    val value =
+                        trimmed
+                            .substringAfter("=")
+                            .trim()
+                            .trim('"')
+                            .trim('\'')
+                    if (name == "rocketx_api_key" || name == "x-api-key" || name == "api_key") {
+                        key = value
+                        return@forEach
+                    }
+                }
+            }
+            val escaped =
+                key
+                    .replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("$", "\\${'$'}")
+                    .replace("\n", "")
+                    .replace("\r", "")
+            val dest = outDir.get().asFile.resolve("io/bluewallet/blueberry/BuildSecrets.kt")
+            dest.parentFile.mkdirs()
+            dest.writeText(
+                """
+                package io.bluewallet.blueberry
+
+                object BuildSecrets {
+                    const val ROCKETX_API_KEY = "$escaped"
+                }
+
+                """.trimIndent() + "\n",
+            )
+        }
+    }
+
+tasks
+    .matching {
+        it.name.startsWith("compile") ||
+            it.name.contains("Ktlint", ignoreCase = true)
+    }.configureEach {
+        dependsOn(generateBuildSecrets)
+    }
 
 dependencies {
     androidRuntimeClasspath(libs.compose.uiTooling)

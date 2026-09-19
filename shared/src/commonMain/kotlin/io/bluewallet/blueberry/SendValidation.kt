@@ -17,11 +17,14 @@ sealed class SendField {
     data object Amount : SendField()
 
     data object Label : SendField()
+
+    data object FeeRate : SendField()
 }
 
 sealed class SendDetailsValidation {
     data class Ok(
         val details: SendDetails,
+        val feeRateSatPerVb: Double,
     ) : SendDetailsValidation()
 
     data class Invalid(
@@ -34,20 +37,33 @@ fun validateSendDetails(
     amount: String,
     label: String,
     selectedSumSats: Long,
+    feeRate: String,
 ): SendDetailsValidation {
-    if (!isAddressValid(address)) return SendDetailsValidation.Invalid(SendField.Address)
     val trimmedLabel = label.trim()
-    if (isSendMaxAmount(amount)) {
-        if (trimmedLabel.isEmpty()) return SendDetailsValidation.Invalid(SendField.Label)
-        return SendDetailsValidation.Ok(SendDetails(address.trim(), SendAmount.Max, trimmedLabel))
-    }
+    val max = isSendMaxAmount(amount)
     val sats = parseBtcToSats(amount)
-    if (sats == null || sats <= 0L || sats > selectedSumSats) {
-        return SendDetailsValidation.Invalid(SendField.Amount)
-    }
-    if (trimmedLabel.isEmpty()) return SendDetailsValidation.Invalid(SendField.Label)
-    return SendDetailsValidation.Ok(SendDetails(address.trim(), SendAmount.Exact(sats), trimmedLabel))
+    val rate = parseFeeRateSatPerVb(feeRate)
+    val field =
+        when {
+            !isAddressValid(address) -> SendField.Address
+            max && trimmedLabel.isEmpty() -> SendField.Label
+            !max && (sats == null || sats <= 0L || sats > selectedSumSats) -> SendField.Amount
+            !max && trimmedLabel.isEmpty() -> SendField.Label
+            rate == null -> SendField.FeeRate
+            else -> null
+        }
+    if (field != null) return SendDetailsValidation.Invalid(field)
+    val amountSats = if (max) SendAmount.Max else SendAmount.Exact(sats!!)
+    return SendDetailsValidation.Ok(SendDetails(address.trim(), amountSats, trimmedLabel), rate!!)
 }
+
+sealed class SendContinueTarget {
+    data object OnchainPreview : SendContinueTarget()
+
+    data object PrivateSend : SendContinueTarget()
+}
+
+fun sendContinueTarget(privateSend: Boolean): SendContinueTarget = if (privateSend) SendContinueTarget.PrivateSend else SendContinueTarget.OnchainPreview
 
 fun parseFeeRateSatPerVb(input: String): Double? {
     val t = input.trim()
