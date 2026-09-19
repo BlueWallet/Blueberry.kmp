@@ -2,6 +2,7 @@ package io.bluewallet.blueberry
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,9 +19,7 @@ import androidx.compose.ui.Modifier
 import io.bluewallet.blueberry.boot.AppearancePreference
 import io.bluewallet.blueberry.boot.appearanceLabel
 import io.bluewallet.blueberry.boot.cycleAppearance
-import io.bluewallet.blueberry.boot.loadAlwaysShowSyncProgress
 import io.bluewallet.blueberry.boot.loadAppearance
-import io.bluewallet.blueberry.boot.saveAlwaysShowSyncProgress
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
@@ -30,6 +29,7 @@ import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.MetricCard
 import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.ScreenHeader
+import io.bluewallet.blueberry.ui.ScreenPushOverlay
 import io.bluewallet.blueberry.ui.TextAction
 import io.bluewallet.blueberry.wallet.WalletSecretKind
 import io.bluewallet.blueberry.wallet.parseWalletSecret
@@ -44,41 +44,40 @@ fun SettingsScreen(
 ) {
     var confirmClear by remember { mutableStateOf(false) }
     var showSecret by remember { mutableStateOf(false) }
-    var alwaysShowSync by remember(db) { mutableStateOf(loadAlwaysShowSyncProgress(db)) }
+    val alwaysShowSync = LocalAlwaysShowSync.current
+    val onAlwaysShowSyncChange = LocalAlwaysShowSyncChange.current
     var appearance by remember(db) { mutableStateOf(loadAppearance(db)) }
     val onAppearanceChange = LocalAppearanceChange.current
-    if (showSecret) {
-        SecretScreen(secret = secret, onBack = { showSecret = false })
-        return
-    }
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(BwColors.Paper)
-                .safeDrawingPadding()
-                .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
-        verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-    ) {
-        ScreenHeader(title = "Settings", onBack = onBack)
-        ThemeCard(
-            appearance = appearance,
-            onCycle = {
-                val next = cycleAppearance(appearance)
-                appearance = next
-                onAppearanceChange(next)
-            },
-        )
-        AlwaysShowSyncCard(
-            checked = alwaysShowSync,
-            onCheckedChange = { on ->
-                alwaysShowSync = on
-                saveAlwaysShowSyncProgress(db, on)
-            },
-        )
-        SecretCard(secret = secret, onShow = { showSecret = true })
-        StorageCard(databaseSize = databaseSize, onClear = { confirmClear = true })
-        ClickMeContent()
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(BwColors.Paper)
+                    .safeDrawingPadding()
+                    .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
+            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+        ) {
+            ScreenHeader(title = "Settings", onBack = onBack)
+            ThemeCard(
+                appearance = appearance,
+                onCycle = {
+                    val next = cycleAppearance(appearance)
+                    appearance = next
+                    onAppearanceChange(next)
+                },
+            )
+            AlwaysShowSyncCard(
+                checked = alwaysShowSync,
+                onCheckedChange = onAlwaysShowSyncChange,
+            )
+            SecretCard(secret = secret, onShow = { showSecret = true })
+            StorageCard(databaseSize = databaseSize, onClear = { confirmClear = true })
+            ClickMeContent()
+        }
+        ScreenPushOverlay(visible = showSecret, onDismiss = { showSecret = false }) {
+            SecretScreen(secret = secret, onBack = { showSecret = false })
+        }
     }
     if (confirmClear) {
         SettingsClearDialog(

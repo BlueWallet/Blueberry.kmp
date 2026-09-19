@@ -7,6 +7,11 @@ import io.bluewallet.blueberry.wallet.parseWalletSecret
 
 enum class OnboardingStep { Choose, Import, Create, Year }
 
+fun onboardingNavigatesForward(
+    from: OnboardingStep,
+    to: OnboardingStep,
+): Boolean = to.ordinal > from.ordinal
+
 data class OnboardingState(
     val step: OnboardingStep,
     val importValue: String = "",
