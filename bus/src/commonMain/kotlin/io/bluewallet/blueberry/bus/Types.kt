@@ -173,6 +173,7 @@ data class WalletTxsPayload(
 data class BroadcastRequestPayload(
     val id: String,
     val txHex: String,
+    val excludePeers: Set<String> = emptySet(),
 )
 
 /** Cancel the broadcast job with this [id], if it is active. */
@@ -193,6 +194,8 @@ data class BroadcastProgressPayload(
     val maxAttempts: Int? = null,
     val peer: String? = null,
     val detail: String? = null,
+    val percent: Int? = null,
+    val stage: String? = null,
 )
 
 /**

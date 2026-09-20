@@ -23,6 +23,7 @@ class SchemaTest {
                     "matched_blocks",
                     "parsed_blocks",
                     "peers",
+                    "private_sends",
                     "transactions",
                     "tx_payment_labels",
                     "utxo_names",
@@ -75,6 +76,18 @@ class SchemaTest {
             assertEquals(listOf("key", "value"), columnNames(driver, "key_value"))
             assertEquals(listOf("outpoint", "name"), columnNames(driver, "utxo_names"))
             assertEquals(listOf("txid", "label"), columnNames(driver, "tx_payment_labels"))
+            assertEquals(
+                listOf(
+                    "txid",
+                    "partner",
+                    "order_id",
+                    "tx_hex",
+                    "destination",
+                    "refund_address",
+                    "utxos",
+                ),
+                columnNames(driver, "private_sends"),
+            )
             assertEquals(
                 listOf("height", "block_hash_internal_hex"),
                 indexColumns(driver, "filters_height_hash"),

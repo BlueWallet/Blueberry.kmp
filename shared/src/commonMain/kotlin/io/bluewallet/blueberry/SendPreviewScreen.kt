@@ -27,6 +27,7 @@ import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.PillButton
+import io.bluewallet.blueberry.ui.ProgressMetricCard
 import io.bluewallet.blueberry.ui.ScannableQr
 import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.PsbtSendResult
@@ -48,7 +49,7 @@ internal fun PreviewStep(
     details: SendDetails?,
     inputSum: Long,
     broadcast: BroadcastSnapshot,
-    onBroadcast: () -> Unit,
+    actions: PreviewActions,
 ) {
     val signed = preview as? SignedSendResult
     val psbt = preview as? PsbtSendResult
@@ -58,7 +59,11 @@ internal fun PreviewStep(
             (broadcastJobInFlight(broadcast.phase) || broadcast.phase == "success" || broadcast.phase == "error")
     when {
         preview == null || details == null -> Text("Missing preview", color = BwColors.InkMuted)
-        broadcasting -> BroadcastStatus(broadcast)
+        broadcasting ->
+            BroadcastStatus(
+                broadcast = broadcast,
+                finish = actions.finish,
+            )
         psbt != null -> UrQr(psbt.psbtHex)
         else ->
             SignedPreviewReview(
@@ -66,36 +71,59 @@ internal fun PreviewStep(
                 inputSum = inputSum,
                 totals = previewTotals(preview),
                 txHex = (preview as SignedSendResult).txHex,
-                onBroadcast = onBroadcast,
+                onBroadcast = actions.onBroadcast,
             )
     }
 }
 
+class BroadcastFinishActions(
+    val onDone: () -> Unit,
+    val onRetry: () -> Unit,
+)
+
+internal class PreviewActions(
+    val onBroadcast: () -> Unit,
+    val finish: BroadcastFinishActions,
+)
+
 @Composable
-internal fun BroadcastStatus(broadcast: BroadcastSnapshot) {
-    when {
-        broadcastJobInFlight(broadcast.phase) -> {
-            Text("Broadcasting via Tor", color = BwColors.Accent, fontFamily = BwFontFamily, fontWeight = BwType.Label)
-            Text(
-                text =
-                    listOfNotNull(
-                        broadcast.phase,
-                        broadcast.attempt?.let { "attempt $it/${broadcast.maxAttempts ?: "?"}" },
-                        broadcast.peer,
-                        broadcast.detail,
-                    ).joinToString(" · "),
-                color = BwColors.InkMuted,
-                fontFamily = BwFontFamily,
-                fontSize = BwType.BodySize,
-            )
-        }
-        broadcast.phase == "success" -> {
-            Text("Broadcast succeeded", color = BwColors.Success, fontFamily = BwFontFamily, fontWeight = BwType.Label)
-            Text(broadcast.peer.orEmpty(), color = BwColors.InkMuted)
-        }
-        else -> {
-            Text("Broadcast failed", color = BwColors.Danger, fontFamily = BwFontFamily, fontWeight = BwType.Label)
-            Text(broadcast.error.orEmpty(), color = BwColors.InkMuted)
+internal fun BroadcastStatus(
+    broadcast: BroadcastSnapshot,
+    finish: BroadcastFinishActions,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
+        when {
+            broadcastJobInFlight(broadcast.phase) -> {
+                ProgressMetricCard(
+                    label = "Broadcasting via Tor...",
+                    value = "${broadcast.percent ?: 0}%",
+                    percent = broadcast.percent ?: 0,
+                    caption = broadcastTorCaption(broadcast.stage ?: "Starting"),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text =
+                        listOfNotNull(
+                            broadcast.phase,
+                            broadcast.attempt?.let { "attempt $it/${broadcast.maxAttempts ?: "?"}" },
+                            broadcast.peer,
+                            broadcast.detail,
+                        ).joinToString(" · "),
+                    color = BwColors.InkMuted,
+                    fontFamily = BwFontFamily,
+                    fontSize = BwType.BodySize,
+                )
+            }
+            broadcast.phase == "success" -> {
+                Text("Broadcast succeeded", color = BwColors.Success, fontFamily = BwFontFamily, fontWeight = BwType.Label)
+                Text(broadcast.peer.orEmpty(), color = BwColors.InkMuted)
+                PillButton(text = "Done", onClick = finish.onDone, modifier = Modifier.fillMaxWidth())
+            }
+            else -> {
+                Text("Broadcast failed", color = BwColors.Danger, fontFamily = BwFontFamily, fontWeight = BwType.Label)
+                Text(broadcast.error.orEmpty(), color = BwColors.InkMuted)
+                PillButton(text = "Retry", onClick = finish.onRetry, modifier = Modifier.fillMaxWidth())
+            }
         }
     }
 }

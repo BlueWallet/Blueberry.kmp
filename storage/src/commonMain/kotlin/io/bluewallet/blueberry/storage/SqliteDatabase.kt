@@ -83,6 +83,33 @@ internal class SqliteDatabase(
                     .map { TxPaymentLabelRow(it.txid, it.label) }
         }
 
+    override val privateSends =
+        object : PrivateSendsRepository {
+            override fun get(txid: String): PrivateSendRow? =
+                storageDb.privateSendsQueries
+                    .get(txid)
+                    .executeAsOneOrNull()
+                    ?.toRow()
+
+            override fun upsert(row: PrivateSendRow) {
+                storageDb.privateSendsQueries.upsert(
+                    txid = row.txid,
+                    partner = row.partner,
+                    order_id = row.orderId,
+                    tx_hex = row.txHex,
+                    destination = row.destination,
+                    refund_address = row.refundAddress,
+                    utxos = encodePrivateSendCoins(row.coins),
+                )
+            }
+
+            override fun list(): List<PrivateSendRow> =
+                storageDb.privateSendsQueries
+                    .list()
+                    .executeAsList()
+                    .map { it.toRow() }
+        }
+
     override val peers =
         object : PeersRepository {
             override fun upsert(peer: PeerWrite) {
@@ -798,6 +825,17 @@ internal class SqliteDatabase(
         }
     }
 }
+
+private fun Private_sends.toRow(): PrivateSendRow =
+    PrivateSendRow(
+        txid = txid,
+        partner = partner,
+        orderId = order_id,
+        txHex = tx_hex,
+        destination = destination,
+        refundAddress = refund_address,
+        coins = decodePrivateSendCoins(utxos),
+    )
 
 private fun rowToFilterHeaderRecord(row: Filter_headers): FilterHeaderRecord =
     FilterHeaderRecord(

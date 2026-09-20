@@ -252,6 +252,30 @@ interface TxPaymentLabelsRepository {
     fun list(): List<TxPaymentLabelRow>
 }
 
+data class PrivateSendCoin(
+    val txid: String,
+    val vout: Int,
+    val valueSats: Long,
+)
+
+data class PrivateSendRow(
+    val txid: String,
+    val partner: String,
+    val orderId: String,
+    val txHex: String,
+    val destination: String,
+    val refundAddress: String,
+    val coins: List<PrivateSendCoin>,
+)
+
+interface PrivateSendsRepository {
+    fun get(txid: String): PrivateSendRow?
+
+    fun upsert(row: PrivateSendRow)
+
+    fun list(): List<PrivateSendRow>
+}
+
 data class MatchedBlock(
     val height: Int,
     val blockHashInternalHex: String,
@@ -347,6 +371,7 @@ interface Database {
     val keyValue: KeyValueRepository
     val utxoNames: UtxoNamesRepository
     val txPaymentLabels: TxPaymentLabelsRepository
+    val privateSends: PrivateSendsRepository
 
     fun transaction(fn: () -> Unit)
 

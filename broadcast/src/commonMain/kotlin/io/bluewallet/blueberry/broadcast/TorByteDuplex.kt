@@ -6,6 +6,7 @@ import io.bluewallet.blueberry.peers.logError
 import io.bluewallet.echalote.Abort
 import io.bluewallet.echalote.Echalote
 import io.bluewallet.echalote.ExitDialerOptions
+import io.bluewallet.echalote.FetchProgressListener
 import kotlinx.coroutines.Job
 
 interface TorByteDuplexDialer {
@@ -13,6 +14,7 @@ interface TorByteDuplexDialer {
         host: String,
         port: Int,
         job: Job,
+        onProgress: FetchProgressListener? = null,
     ): ByteDuplex
 
     suspend fun dispose()
@@ -47,6 +49,7 @@ fun createTorByteDuplexDialer(options: ExitDialerOptions = ExitDialerOptions()):
             host: String,
             port: Int,
             job: Job,
+            onProgress: FetchProgressListener?,
         ): ByteDuplex {
             val startedAt = nowMs()
             log("tor", "dial start $host:$port")
@@ -58,9 +61,9 @@ fun createTorByteDuplexDialer(options: ExitDialerOptions = ExitDialerOptions()):
             try {
                 val stream =
                     if (owned != null) {
-                        owned.dial(host, port, abort)
+                        owned.dial(host, port, abort, onProgress)
                     } else {
-                        Echalote.dial(host, port, abort)
+                        Echalote.dial(host, port, abort, onProgress)
                     }
                 log("tor", "dial ok $host:$port elapsedMs=${nowMs() - startedAt}")
                 return echaloteStreamToByteDuplex(stream.outer) { stream.close() }

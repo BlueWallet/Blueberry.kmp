@@ -30,6 +30,7 @@ internal fun PrivateSendDeposit(
     state: PrivateSendUi.Deposit,
     broadcast: BroadcastSnapshot,
     onBroadcast: () -> Unit,
+    finish: BroadcastFinishActions,
 ) {
     val showBroadcast = broadcast.txHex != null && broadcast.txHex == state.signed.txHex
     val broadcasting =
@@ -37,7 +38,7 @@ internal fun PrivateSendDeposit(
             (broadcastJobInFlight(broadcast.phase) || broadcast.phase == "success" || broadcast.phase == "error")
     if (broadcasting) {
         Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
-            BroadcastStatus(broadcast)
+            BroadcastStatus(broadcast, finish = finish)
         }
         return
     }
