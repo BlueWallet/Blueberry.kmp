@@ -34,6 +34,7 @@ data class WalletTxRow(
     val paymentLabel: String? = null,
     val utxoLabel: String? = null,
     val fee: TxFee? = null,
+    val blockTimeS: Long? = null,
 )
 
 data class WalletUtxoRow(
@@ -101,28 +102,33 @@ private fun parseOutpointKey(key: String): Pair<String, Int> {
     return key.substring(0, i) to key.substring(i + 1).toInt()
 }
 
+private data class HeightTimeLabel(
+    val label: String,
+    val unixSeconds: Long?,
+)
+
 private fun timeLabelForHeight(
     db: Database,
     height: Int,
     nowMs: Long,
-    cache: MutableMap<Int, String>,
-): String {
+    cache: MutableMap<Int, HeightTimeLabel>,
+): HeightTimeLabel {
     val hit = cache[height]
     if (hit != null) return hit
     val stored = db.headers.get(height)
-    val label =
+    val resolved =
         if (stored == null) {
-            padBlockTimeLabel("#$height")
+            HeightTimeLabel(padBlockTimeLabel("#$height"), null)
         } else {
             try {
                 val timestamp = decodeBlockHeader(stored.header).timestamp
-                formatBlockTimeLabel(timestamp, nowMs)
+                HeightTimeLabel(formatBlockTimeLabel(timestamp, nowMs), timestamp)
             } catch (_: Throwable) {
-                padBlockTimeLabel("#$height")
+                HeightTimeLabel(padBlockTimeLabel("#$height"), null)
             }
         }
-    cache[height] = label
-    return label
+    cache[height] = resolved
+    return resolved
 }
 
 private fun addAdvancingSample(
@@ -252,7 +258,7 @@ fun snapshotFromDb(
 ): WalletTxsSnapshot {
     val stored = db.transactions.list()
     val balanceSats = stored.fold(0L) { s, t -> s + t.netDeltaSats }
-    val timeLabels = mutableMapOf<Int, String>()
+    val timeLabels = mutableMapOf<Int, HeightTimeLabel>()
     val labelByTxid = db.txPaymentLabels.list().associate { it.txid to it.label }
     val nameByOutpoint = db.utxoNames.list().associate { it.outpoint to it.name }
     val utxoLabelByTxid = firstUtxoLabelByTxid(nameByOutpoint)
@@ -292,7 +298,7 @@ fun snapshotFromDb(
                         path = watch?.path,
                         amountLabel = formatBtc(u.value),
                         height = height,
-                        ageLabel = timeLabelForHeight(db, height, nowMs, timeLabels),
+                        ageLabel = timeLabelForHeight(db, height, nowMs, timeLabels).label,
                         valueBar = utxoValueBar(u.value, maxValue),
                         name = nameByOutpoint[key],
                         isChange = changeScripts.any { it.contentEquals(u.scriptPubKey) },
@@ -306,11 +312,13 @@ fun snapshotFromDb(
 
     val confirmedTxs =
         stored.map { tx ->
+            val whenLabel = timeLabelForHeight(db, tx.height, nowMs, timeLabels)
             WalletTxRow(
                 txid = tx.txid,
                 shortTxid = shortTxid(tx.txid),
                 height = tx.height,
-                timeLabel = timeLabelForHeight(db, tx.height, nowMs, timeLabels),
+                timeLabel = whenLabel.label,
+                blockTimeS = whenLabel.unixSeconds,
                 netDeltaSats = tx.netDeltaSats,
                 netDeltaLabel = formatNetDelta(tx.netDeltaSats),
                 paymentLabel = labelByTxid[tx.txid],

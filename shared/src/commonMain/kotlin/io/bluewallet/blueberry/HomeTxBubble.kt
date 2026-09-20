@@ -60,7 +60,7 @@ fun HomeTxBubble(
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = tx.timeLabel.trim(),
+                text = rememberBlockTimeLabel(tx.blockTimeS)?.trim() ?: tx.timeLabel.trim(),
                 color = BwColors.Ink,
                 fontFamily = BwFontFamily,
                 fontSize = BwType.BodySize,

@@ -13,6 +13,16 @@ data class WatchScan(
     val fees: Map<String, TxFee>,
 )
 
+fun txVirtualSize(raw: ByteArray): Int? {
+    val vsize =
+        try {
+            (Transaction.read(raw).weight() + 3) / 4
+        } catch (_: Throwable) {
+            return null
+        }
+    return if (vsize <= 0) null else vsize
+}
+
 fun formatSatPerVb(
     feeSats: Long,
     vsize: Int,

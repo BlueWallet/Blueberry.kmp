@@ -115,6 +115,7 @@ class WalletTxsHydrateTest {
         )
         val snap = snapshotFromDb(db, nowMs, nowMs)
         assertEquals("1h ago".padEnd(16), snap.txs[0].timeLabel)
+        assertEquals(ts, snap.txs[0].blockTimeS)
         assertEquals(emptyList(), snap.utxos)
         assertNull(snap.txs[0].paymentLabel)
         db.close()

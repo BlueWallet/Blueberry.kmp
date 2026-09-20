@@ -1,5 +1,11 @@
 package io.bluewallet.blueberry
 
+import fr.acinq.bitcoin.OutPoint
+import fr.acinq.bitcoin.Satoshi
+import fr.acinq.bitcoin.Transaction
+import fr.acinq.bitcoin.TxHash
+import fr.acinq.bitcoin.TxIn
+import fr.acinq.bitcoin.TxOut
 import io.bluewallet.blueberry.parse.TxFee
 import io.bluewallet.blueberry.storage.StoredTx
 import kotlin.test.Test
@@ -19,16 +25,26 @@ class TxDetailFieldsTest {
 
     @Test
     fun dumps_stored_fields_in_order_and_trims_date() {
+        val raw =
+            Transaction.write(
+                Transaction(
+                    2L,
+                    listOf(TxIn(OutPoint(TxHash(ByteArray(32)), 0xffffffffL), 0xffffffffL)),
+                    listOf(TxOut(Satoshi(1000L), byteArrayOf(0x00))),
+                    0L,
+                ),
+            )
         val stored =
             StoredTx(
                 txid = "ab".repeat(32),
                 height = 100,
                 txIndex = 3,
                 blockHashInternalHex = "aabbccdd",
-                tx = byteArrayOf(0x01, 0x02, 0x03, 0x04),
+                tx = raw,
                 netDeltaSats = 1,
             )
         val fields = txDetailFields(row(), stored)
+        val vsize = (Transaction.read(raw).weight() + 3) / 4
         assertEquals(
             listOf(
                 TxDetailField("Amount", "+0.00000001"),
@@ -38,7 +54,8 @@ class TxDetailFieldsTest {
                 TxDetailField("Transaction ID", "ab".repeat(32)),
                 TxDetailField("Block hash", "ddccbbaa"),
                 TxDetailField("Index", "3"),
-                TxDetailField("Size", "4 B"),
+                TxDetailField("Size", "${raw.size} B"),
+                TxDetailField("Virtual size", "$vsize vB"),
             ),
             fields,
         )

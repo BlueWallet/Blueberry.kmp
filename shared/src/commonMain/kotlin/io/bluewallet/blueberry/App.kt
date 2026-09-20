@@ -53,6 +53,8 @@ internal val LocalAppearanceChange =
 
 internal val LocalAlwaysShowSync = staticCompositionLocalOf { false }
 
+internal val LocalHomeVisible = staticCompositionLocalOf { true }
+
 internal val LocalAlwaysShowSyncChange = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
 
 private class OpenedDatabase(
@@ -124,12 +126,15 @@ fun App(databasePath: String) {
                     runtime?.stop()
                 }
             }
+            val homeVisible =
+                !showSettings && !showReceive && !showSend && !showCoins && showTxid == null
             CompositionLocalProvider(
                 LocalAlwaysShowSync provides alwaysShowSync,
                 LocalAlwaysShowSyncChange provides { on ->
                     alwaysShowSync = on
                     saveAlwaysShowSyncProgress(db, on)
                 },
+                LocalHomeVisible provides homeVisible,
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     BackHandler(enabled = true) { /* home / idle: no-op, do not finish */ }

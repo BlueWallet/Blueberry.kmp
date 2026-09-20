@@ -4,6 +4,7 @@ import io.bluewallet.blueberry.headers.internalHexToDisplayHex
 import io.bluewallet.blueberry.parse.TxFee
 import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.parse.formatSatPerVb
+import io.bluewallet.blueberry.parse.txVirtualSize
 import io.bluewallet.blueberry.storage.StoredTx
 
 data class TxDetailField(
@@ -29,6 +30,10 @@ fun txDetailFields(
         fields += TxDetailField("Block hash", internalHexToDisplayHex(stored.blockHashInternalHex))
         fields += TxDetailField("Index", stored.txIndex.toString())
         fields += TxDetailField("Size", "${stored.tx.size} B")
+        val vsize = txVirtualSize(stored.tx)
+        if (vsize != null) {
+            fields += TxDetailField("Virtual size", "$vsize vB")
+        }
     }
     return fields
 }
