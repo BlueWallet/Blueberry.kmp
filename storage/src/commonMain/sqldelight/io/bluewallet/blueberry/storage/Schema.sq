@@ -71,6 +71,16 @@ CREATE TABLE IF NOT EXISTS tx_payment_labels (
   label TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS private_sends (
+  txid TEXT PRIMARY KEY,
+  partner TEXT NOT NULL,
+  order_id TEXT NOT NULL,
+  tx_hex TEXT NOT NULL,
+  destination TEXT NOT NULL,
+  refund_address TEXT NOT NULL,
+  utxos TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS headers_hash_internal_hex
   ON headers(hash_internal_hex);
 CREATE INDEX IF NOT EXISTS filters_height_hash

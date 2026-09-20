@@ -2,6 +2,7 @@ package io.bluewallet.blueberry
 
 import io.bluewallet.blueberry.bus.BroadcastDonePayload
 import io.bluewallet.blueberry.bus.BroadcastProgressPayload
+import io.bluewallet.blueberry.bus.BroadcastRequestPayload
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.MessageBus
 import kotlin.concurrent.atomics.AtomicReference
@@ -16,6 +17,9 @@ data class BroadcastSnapshot(
     val peer: String? = null,
     val detail: String? = null,
     val error: String? = null,
+    val percent: Int? = null,
+    val stage: String? = null,
+    val triedPeers: Set<String> = emptySet(),
 )
 
 interface BroadcastStore {
@@ -24,6 +28,7 @@ interface BroadcastStore {
     fun start(
         id: String,
         txHex: String,
+        triedPeers: Set<String> = emptySet(),
     )
 
     fun applyProgress(payload: BroadcastProgressPayload)
@@ -49,8 +54,9 @@ private class BroadcastStoreImpl : BroadcastStore {
     override fun start(
         id: String,
         txHex: String,
+        triedPeers: Set<String>,
     ) {
-        state.store(BroadcastSnapshot(id = id, txHex = txHex, phase = "starting"))
+        state.store(BroadcastSnapshot(id = id, txHex = txHex, phase = "starting", triedPeers = triedPeers))
         emit()
     }
 
@@ -65,6 +71,9 @@ private class BroadcastStoreImpl : BroadcastStore {
                 maxAttempts = payload.maxAttempts,
                 peer = payload.peer,
                 detail = payload.detail,
+                percent = payload.percent,
+                stage = payload.stage,
+                triedPeers = rememberTriedPeers(cur.triedPeers, payload.peer),
             ),
         )
         emit()
@@ -81,6 +90,7 @@ private class BroadcastStoreImpl : BroadcastStore {
                         phase = "success",
                         peer = payload.peer,
                         error = null,
+                        triedPeers = rememberTriedPeers(cur.triedPeers, payload.peer),
                     )
                 is BroadcastDonePayload.Error ->
                     cur.copy(
@@ -130,6 +140,8 @@ fun bindBroadcastEvents(
 
 fun broadcastJobInFlight(phase: String?): Boolean = phase != null && phase != "success" && phase != "error"
 
+fun broadcastTorCaption(stage: String?): String? = stage?.let { "Tor: $it" }
+
 sealed class BroadcastEscape {
     data object Ignore : BroadcastEscape()
 
@@ -147,6 +159,15 @@ fun inFlightBroadcastEscape(
     return if (cancelArmedForId == id) BroadcastEscape.ForceClose else BroadcastEscape.Cancel
 }
 
+fun rememberTriedPeers(
+    tried: Set<String>,
+    peer: String?,
+): Set<String> {
+    if (peer.isNullOrBlank()) return tried
+    return tried +
+        peer.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+}
+
 fun prepareUiBroadcast(
     store: BroadcastStore,
     txHex: String,
@@ -156,12 +177,19 @@ fun prepareUiBroadcast(
     if (snap.phase == "success") {
         if (snap.txHex == txHex) return null
         store.reset()
-    } else if (snap.phase == "error") {
-        store.reset()
     }
+    val tried = if (snap.phase == "error" && snap.txHex == txHex) snap.triedPeers else emptySet()
     val id = nextUiBroadcastId()
-    store.start(id, txHex)
+    store.start(id, txHex, tried)
     return id
+}
+
+fun enqueueBroadcast(
+    store: BroadcastStore,
+    txHex: String,
+): BroadcastRequestPayload? {
+    val id = prepareUiBroadcast(store, txHex) ?: return null
+    return BroadcastRequestPayload(id, txHex, store.get().triedPeers)
 }
 
 private var nextBroadcastId = 0

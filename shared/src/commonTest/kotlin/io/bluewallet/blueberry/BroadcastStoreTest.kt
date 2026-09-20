@@ -17,6 +17,20 @@ class BroadcastStoreTest {
         )
         assertEquals("attempt", store.get().phase)
         assertEquals(1, store.get().attempt)
+        store.applyProgress(
+            BroadcastProgressPayload(
+                "1",
+                BroadcastPhase.ATTEMPT,
+                attempt = 1,
+                maxAttempts = 20,
+                peer = "1.1.1.1:8333",
+                percent = 55,
+                stage = "Building circuit",
+            ),
+        )
+        assertEquals(55, store.get().percent)
+        assertEquals("Building circuit", store.get().stage)
+        assertEquals("Tor: Building circuit", broadcastTorCaption("Building circuit"))
         store.applyDone(BroadcastDonePayload.Ok("1", "1.1.1.1:8333"))
         assertEquals("success", store.get().phase)
         assertTrue(!broadcastJobInFlight(store.get().phase))
@@ -51,6 +65,24 @@ class BroadcastStoreTest {
         val second = prepareUiBroadcast(store, "bb")
         assertTrue(second != null && second != first)
         assertEquals("bb", store.get().txHex)
+    }
+
+    @Test
+    fun remembers_tried_peers_and_excludes_them_on_retry() {
+        val store = createBroadcastStore()
+        val first = prepareUiBroadcast(store, "aa")!!
+        store.applyProgress(
+            BroadcastProgressPayload(first, BroadcastPhase.ATTEMPT, peer = "1.1.1.1:8333"),
+        )
+        store.applyProgress(
+            BroadcastProgressPayload(first, BroadcastPhase.FAILED_ATTEMPT, peer = "2.2.2.2:8333"),
+        )
+        store.applyDone(BroadcastDonePayload.Error(first, "eof"))
+        assertEquals(setOf("1.1.1.1:8333", "2.2.2.2:8333"), store.get().triedPeers)
+        val retry = enqueueBroadcast(store, "aa")!!
+        assertTrue(retry.id != first)
+        assertEquals(setOf("1.1.1.1:8333", "2.2.2.2:8333"), retry.excludePeers)
+        assertEquals(setOf("1.1.1.1:8333", "2.2.2.2:8333"), store.get().triedPeers)
     }
 
     @Test

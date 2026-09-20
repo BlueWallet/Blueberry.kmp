@@ -37,13 +37,16 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.floor
 
-private const val NODE_NETWORK = 1uL
+/** Bitcoin Core `NODE_P2P_V2` — peer advertised BIP-324. */
+private const val NODE_P2P_V2 = 2048uL
 private const val ALIVE_PEER_PICK_LIMIT = 512
 private const val MAX_ATTEMPTS_DEFAULT = 20
 private const val DIALER_ATTEMPTS_DEFAULT = 3
+internal const val BROADCAST_SUCCESS_PEERS = 3
 
 data class BroadcastModuleOptions(
     val connect: (suspend (host: String, port: Int, job: Job) -> ByteDuplex)? = null,
+    val createDialer: (() -> TorByteDuplexDialer)? = null,
     val disposeConnect: (suspend () -> Unit)? = null,
     val maxAttempts: Int = MAX_ATTEMPTS_DEFAULT,
     val dialerAttempts: Int = DIALER_ATTEMPTS_DEFAULT,
@@ -59,9 +62,11 @@ private fun peerKey(p: Peer): String = "${p.host}:${p.port}"
 private fun pickAlive(
     peers: List<Peer>,
     random: () -> Double,
+    exclude: Set<String> = emptySet(),
 ): Peer? {
-    if (peers.isEmpty()) return null
-    return peers[floor(random() * peers.size).toInt().coerceIn(0, peers.lastIndex)]
+    val pool = peers.filter { peerKey(it) !in exclude }
+    if (pool.isEmpty()) return null
+    return pool[floor(random() * pool.size).toInt().coerceIn(0, pool.lastIndex)]
 }
 
 private fun formatError(err: Throwable): String = err.message?.takeIf { it.isNotBlank() } ?: err.toString()
@@ -75,6 +80,7 @@ fun createBroadcastModule(
     val maxAttempts = options.maxAttempts
     val dialerAttempts = options.dialerAttempts
     val injectedConnect = options.connect
+    val injectedDialer = options.createDialer
     val injectedDispose = options.disposeConnect
 
     val stopped = AtomicBoolean(true)
@@ -84,7 +90,7 @@ fun createBroadcastModule(
     var activeJob: Job? = null
     var scope: CoroutineScope? = null
 
-    fun alivePeers(limit: Int): List<Peer> = ctx.db.peers.listAliveWithServices(NODE_NETWORK, limit)
+    fun alivePeers(limit: Int): List<Peer> = ctx.db.peers.listAliveWithServices(NODE_P2P_V2, limit)
 
     suspend fun waitForAlivePeers(job: Job): Int {
         var loggedWait = false
@@ -145,132 +151,201 @@ fun createBroadcastModule(
         dial: suspend (String, Int, Job) -> ByteDuplex,
         txHex: String,
         job: Job,
-        emitProgress: (BroadcastPhase, String?, String?) -> Unit,
+        emitProgress: (BroadcastPhase, String?, String?, Int?, String?) -> Unit,
+        successes: MutableSet<String> = linkedSetOf(),
+        exclude: Set<String> = emptySet(),
+        failed: MutableSet<String> = linkedSetOf(),
     ): Pair<String?, List<String>> {
         val failures = mutableListOf<String>()
+
+        fun accepted(): String? = if (successes.isNotEmpty()) successes.joinToString(", ") else null
         for (attempt in 1..maxAttempts) {
-            job.ensureActive()
-            val peers = alivePeers(ALIVE_PEER_PICK_LIMIT)
-            val peer = pickAlive(peers, options.random)
-            if (peer == null) {
-                log("broadcast", "attempt $attempt/$maxAttempts no-alive-peer")
+            if (successes.size >= BROADCAST_SUCCESS_PEERS) {
                 break
             }
+            job.ensureActive()
+            val peers = alivePeers(ALIVE_PEER_PICK_LIMIT)
+            val tried = successes + failed + exclude
+            val peer =
+                pickAlive(peers, options.random, tried)
+                    ?: if (successes.isEmpty()) pickAlive(peers, options.random, successes + exclude) else null
+            if (peer == null) {
+                log("broadcast", "attempt $attempt/$maxAttempts no-unused-alive-peer ok=${successes.size}")
+                return accepted() to failures
+            }
             val key = peerKey(peer)
-            log("broadcast", "attempt $attempt/$maxAttempts peer=$key")
-            emitProgress(BroadcastPhase.ATTEMPT, key, null)
+            log("broadcast", "attempt $attempt/$maxAttempts peer=$key ok=${successes.size}/$BROADCAST_SUCCESS_PEERS")
+            emitProgress(BroadcastPhase.ATTEMPT, key, null, null, null)
             try {
                 attemptOne(dial, peer, txHex, job)
-                return key to failures
+                successes += key
             } catch (err: CancellationException) {
                 throw err
             } catch (err: Throwable) {
                 val detail = formatError(err)
                 failures += "$key: $detail"
-                emitProgress(BroadcastPhase.FAILED_ATTEMPT, key, detail)
+                failed += key
+                emitProgress(BroadcastPhase.FAILED_ATTEMPT, key, detail, null, null)
             }
         }
-        return null to failures
+        return accepted() to failures
+    }
+
+    suspend fun runTorAttempts(
+        txHex: String,
+        job: Job,
+        emitProgress: (BroadcastPhase, String?, String?, Int?, String?) -> Unit,
+        successes: MutableSet<String>,
+        excludePeers: Set<String>,
+    ): Pair<String?, List<String>> {
+        val failures = mutableListOf<String>()
+        val peer =
+            withTorDialRetries(
+                injectedDialer ?: { createTorByteDuplexDialer() },
+                { dialer ->
+                    val cycleFailed = linkedSetOf<String>()
+                    val (accepted, fails) =
+                        runPeerAttempts(
+                            { host, port, j ->
+                                dialer.dial(host, port, j) { percent, stage ->
+                                    emitProgress(BroadcastPhase.ATTEMPT, "$host:$port", null, percent, stage)
+                                }
+                            },
+                            txHex,
+                            job,
+                            emitProgress,
+                            successes,
+                            excludePeers,
+                            cycleFailed,
+                        )
+                    failures += fails
+                    val unusedAlive =
+                        alivePeers(ALIVE_PEER_PICK_LIMIT).any { candidate ->
+                            val key = peerKey(candidate)
+                            key !in successes && key !in cycleFailed && key !in excludePeers
+                        }
+                    if (successes.size >= BROADCAST_SUCCESS_PEERS ||
+                        (successes.isNotEmpty() && !unusedAlive)
+                    ) {
+                        accepted ?: successes.joinToString(", ")
+                    } else {
+                        throw IllegalStateException(
+                            fails.takeLast(3).joinToString(" | ").ifEmpty { "no alive peers" },
+                        )
+                    }
+                },
+                TorDialRetryOptions(attempts = dialerAttempts),
+            )
+        return peer to failures
+    }
+
+    fun emitProgress(
+        id: String,
+        attemptBudget: Int,
+        attemptsUsed: IntArray,
+        phase: BroadcastPhase,
+        peer: String? = null,
+        detail: String? = null,
+        percent: Int? = null,
+        stage: String? = null,
+    ) {
+        if (phase == BroadcastPhase.ATTEMPT && percent == null) attemptsUsed[0] += 1
+        ctx.bus.emit(
+            Event.BroadcastProgress,
+            BroadcastProgressPayload(
+                id = id,
+                phase = phase,
+                attempt =
+                    if (phase == BroadcastPhase.ATTEMPT || phase == BroadcastPhase.FAILED_ATTEMPT) {
+                        attemptsUsed[0]
+                    } else {
+                        null
+                    },
+                maxAttempts = attemptBudget,
+                peer = peer,
+                detail = detail,
+                percent = percent,
+                stage = stage,
+            ),
+        )
+    }
+
+    fun emitOutcome(
+        id: String,
+        successPeer: String?,
+        failures: List<String>,
+        attemptsUsed: Int,
+    ) {
+        if (successPeer != null) {
+            log("broadcast", "done ok peer=$successPeer")
+            ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Ok(id, successPeer))
+            return
+        }
+        val summary =
+            if (failures.isNotEmpty()) {
+                failures.takeLast(3).joinToString(" | ")
+            } else {
+                "no alive peers"
+            }
+        val error =
+            if (attemptsUsed > 0) {
+                "broadcast failed after $attemptsUsed attempts: $summary"
+            } else {
+                "broadcast failed: $summary"
+            }
+        log("broadcast", error)
+        ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Error(id, error))
     }
 
     suspend fun runBroadcast(
         id: String,
         txHex: String,
+        excludePeers: Set<String> = emptySet(),
     ) {
         val job = kotlinx.coroutines.currentCoroutineContext()[Job]!!
         val attemptBudget = if (injectedConnect != null) maxAttempts else maxAttempts * dialerAttempts
-        var attemptsUsed = 0
-
-        fun emitProgress(
-            phase: BroadcastPhase,
-            peer: String? = null,
-            detail: String? = null,
-        ) {
-            if (phase == BroadcastPhase.ATTEMPT) attemptsUsed += 1
-            ctx.bus.emit(
-                Event.BroadcastProgress,
-                BroadcastProgressPayload(
-                    id = id,
-                    phase = phase,
-                    attempt =
-                        if (phase == BroadcastPhase.ATTEMPT || phase == BroadcastPhase.FAILED_ATTEMPT) {
-                            attemptsUsed
-                        } else {
-                            null
-                        },
-                    maxAttempts = attemptBudget,
-                    peer = peer,
-                    detail = detail,
-                ),
-            )
-        }
+        val attemptsUsed = intArrayOf(0)
+        val emit: (BroadcastPhase, String?, String?, Int?, String?) -> Unit =
+            { phase, peer, detail, percent, stage ->
+                emitProgress(id, attemptBudget, attemptsUsed, phase, peer, detail, percent, stage)
+            }
         try {
-            val txid = displayTxid(txHex)
-            log("broadcast", "start id=$id txid=$txid")
-            emitProgress(BroadcastPhase.WAITING_PEERS)
+            log("broadcast", "start id=$id txid=${displayTxid(txHex)}")
+            emit(BroadcastPhase.WAITING_PEERS, null, null, null, null)
             waitForAlivePeers(job)
-
-            var successPeer: String? = null
+            val successes = linkedSetOf<String>()
             val failures = mutableListOf<String>()
-
-            if (injectedConnect != null) {
-                val (peer, fails) = runPeerAttempts(injectedConnect, txHex, job, ::emitProgress)
-                successPeer = peer
-                failures += fails
-            } else {
-                try {
-                    successPeer =
-                        withTorDialRetries(
-                            { createTorByteDuplexDialer() },
-                            { dialer ->
-                                val (peer, fails) =
-                                    runPeerAttempts(
-                                        { host, port, j -> dialer.dial(host, port, j) },
-                                        txHex,
-                                        job,
-                                        ::emitProgress,
-                                    )
-                                failures += fails
-                                peer ?: throw IllegalStateException(
-                                    fails.takeLast(3).joinToString(" | ").ifEmpty { "no alive peers" },
-                                )
-                            },
-                            TorDialRetryOptions(attempts = dialerAttempts),
-                        )
-                } catch (err: CancellationException) {
-                    throw err
-                } catch (err: Throwable) {
-                    if (failures.isEmpty()) failures += formatError(err)
+            val successPeer =
+                if (injectedConnect != null) {
+                    val (peer, fails) =
+                        runPeerAttempts(injectedConnect, txHex, job, emit, successes, excludePeers)
+                    failures += fails
+                    peer
+                } else {
+                    try {
+                        val (peer, fails) = runTorAttempts(txHex, job, emit, successes, excludePeers)
+                        failures += fails
+                        peer
+                    } catch (err: CancellationException) {
+                        throw err
+                    } catch (err: Throwable) {
+                        if (successes.isNotEmpty()) {
+                            successes.joinToString(", ")
+                        } else {
+                            if (failures.isEmpty()) failures += formatError(err)
+                            null
+                        }
+                    }
                 }
-            }
-
-            if (successPeer == null) {
-                val summary =
-                    if (failures.isNotEmpty()) {
-                        failures.takeLast(3).joinToString(" | ")
-                    } else {
-                        "no alive peers"
-                    }
-                val error =
-                    if (attemptsUsed > 0) {
-                        "broadcast failed after $attemptsUsed attempts: $summary"
-                    } else {
-                        "broadcast failed: $summary"
-                    }
-                log("broadcast", error)
-                ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Error(id, error))
-                return
-            }
-            log("broadcast", "done ok peer=$successPeer")
-            ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Ok(id, successPeer))
+            emitOutcome(id, successPeer, failures, attemptsUsed[0])
         } catch (err: CancellationException) {
             val message = formatError(err).ifBlank { "cancelled" }
-            emitProgress(BroadcastPhase.ERROR, detail = message)
+            emit(BroadcastPhase.ERROR, null, message, null, null)
             ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Error(id, message))
         } catch (err: Throwable) {
             val message = formatError(err)
             logError("broadcast", "aborted/error", err)
-            emitProgress(BroadcastPhase.ERROR, detail = message)
+            emit(BroadcastPhase.ERROR, null, message, null, null)
             ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Error(id, message))
         } finally {
             if (activeId == id) {
@@ -302,7 +377,10 @@ fun createBroadcastModule(
                         return@on
                     }
                     activeId = payload.id
-                    val job = checkNotNull(scope).launch { runBroadcast(payload.id, payload.txHex) }
+                    val job =
+                        checkNotNull(scope).launch {
+                            runBroadcast(payload.id, payload.txHex, payload.excludePeers)
+                        }
                     activeJob = job
                 }
             unsubCancel =

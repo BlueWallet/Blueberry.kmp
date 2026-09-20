@@ -35,13 +35,18 @@ import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.echalote.FetchProgressListener
 import kotlinx.coroutines.launch
 
+class PrivateSendCallbacks(
+    val onSigned: (SignedSendResult) -> Unit,
+    val onBroadcast: (SignedSendResult) -> Unit,
+    val finish: BroadcastFinishActions,
+)
+
 class PrivateSendHost(
     val db: Database,
     val wallet: Wallet?,
     val refundAddress: String,
     val broadcast: BroadcastSnapshot,
-    val onSigned: (SignedSendResult) -> Unit,
-    val onBroadcast: (SignedSendResult) -> Unit,
+    val callbacks: PrivateSendCallbacks,
 )
 
 @Composable
@@ -67,22 +72,30 @@ fun PrivateSendStep(
         ui = PrivateSendUi.Loading()
         ui = loadPrivateSend(client, session, host, onProgress)
         val ready = ui as? PrivateSendUi.Deposit
-        if (ready != null) host.onSigned(ready.signed)
+        if (ready != null) host.callbacks.onSigned(ready.signed)
+    }
+
+    LaunchedEffect(ui, host.broadcast.phase, host.broadcast.txHex) {
+        val ready = ui as? PrivateSendUi.Deposit ?: return@LaunchedEffect
+        persistPrivateSendIfBroadcast(
+            db = host.db,
+            row = privateSendRecord(session, ready.swap, ready.signed),
+            broadcast = host.broadcast,
+        )
     }
 
     PrivateSendBody(
         ui = ui,
-        broadcast = host.broadcast,
+        host = host,
         modifier = modifier,
         onQuote = { quote ->
             scope.launch {
                 ui = PrivateSendUi.Loading()
                 ui = swapPrivateSend(client, session, quote, host, onProgress)
                 val ready = ui as? PrivateSendUi.Deposit
-                if (ready != null) host.onSigned(ready.signed)
+                if (ready != null) host.callbacks.onSigned(ready.signed)
             }
         },
-        onBroadcast = { signed -> host.onBroadcast(signed) },
     )
 }
 
@@ -226,9 +239,8 @@ private fun signedPrivateSend(
 @Composable
 private fun PrivateSendBody(
     ui: PrivateSendUi,
-    broadcast: BroadcastSnapshot,
+    host: PrivateSendHost,
     onQuote: (RocketxQuote) -> Unit,
-    onBroadcast: (SignedSendResult) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -246,8 +258,9 @@ private fun PrivateSendBody(
             is PrivateSendUi.Deposit ->
                 PrivateSendDeposit(
                     state = state,
-                    broadcast = broadcast,
-                    onBroadcast = { onBroadcast(state.signed) },
+                    broadcast = host.broadcast,
+                    onBroadcast = { host.callbacks.onBroadcast(state.signed) },
+                    finish = host.callbacks.finish,
                 )
             is PrivateSendUi.Quotes ->
                 PrivateSendQuotes(state.quotes, onQuote)

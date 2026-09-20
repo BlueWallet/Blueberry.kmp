@@ -1,7 +1,9 @@
 package io.bluewallet.blueberry
 
+import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.SendAmount
 import io.bluewallet.blueberry.wallet.SendInputUtxo
+import io.bluewallet.blueberry.wallet.SignedSendResult
 import io.bluewallet.blueberry.wallet.WalletSecretKind
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -317,5 +319,56 @@ class RocketxTest {
         val quotes = runBlocking { client.quoteForSend("0.0019") }
         assertTrue(url.contains("amount=0.0019"))
         assertEquals("0.0019", quotes.single().fromAmount)
+    }
+
+    @Test
+    fun persist_private_send_only_after_matching_broadcast() {
+        assertEquals(true, shouldPersistPrivateSend("success", "aa", "aa"))
+        assertEquals(false, shouldPersistPrivateSend("error", "aa", "aa"))
+        assertEquals(false, shouldPersistPrivateSend("success", "bb", "aa"))
+        val db = createSqliteDatabase(":memory:")
+        val session =
+            PrivateSendSession(
+                destination = "bc1qdest",
+                label = "lab",
+                feeRateSatPerVb = 1.0,
+                amountSats = SendAmount.Exact(50_000L),
+                utxos = listOf(SendInputUtxo("bb".repeat(32), 1, 50_000L, ByteArray(0))),
+                refundAddress = "bc1qref",
+            )
+        val swap =
+            RocketxSwap(
+                address = "bc1qdep",
+                fromAmount = "0.0005",
+                toAmount = "0.0004",
+                venue = "P",
+                partnerFee = "1",
+                requestId = "ord-9",
+                estSeconds = "60",
+            )
+        val signed =
+            SignedSendResult(
+                txHex = "010203",
+                txid = "aa".repeat(32),
+                feeSats = 200L,
+                vsize = 140,
+                changeSats = 0L,
+                changeVouts = emptyList(),
+            )
+        val row = privateSendRecord(session, swap, signed)
+        persistPrivateSendIfBroadcast(db, row, BroadcastSnapshot(txHex = "010203", phase = "sending"))
+        assertEquals(null, db.privateSends.get(signed.txid))
+        persistPrivateSendIfBroadcast(db, row, BroadcastSnapshot(txHex = "010203", phase = "success"))
+        val saved = db.privateSends.get(signed.txid)!!
+        assertEquals(PRIVATE_SEND_PARTNER_ROCKETX, saved.partner)
+        assertEquals("ord-9", saved.orderId)
+        assertEquals("010203", saved.txHex)
+        assertEquals("bc1qdest", saved.destination)
+        assertEquals("bc1qref", saved.refundAddress)
+        assertEquals(1, saved.coins.size)
+        assertEquals("bb".repeat(32), saved.coins[0].txid)
+        assertEquals(1, saved.coins[0].vout)
+        assertEquals(50_000L, saved.coins[0].valueSats)
+        db.close()
     }
 }

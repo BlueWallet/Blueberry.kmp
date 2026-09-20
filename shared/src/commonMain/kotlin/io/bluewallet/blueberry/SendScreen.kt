@@ -32,7 +32,6 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.input.KeyboardType
 import io.bluewallet.blueberry.bus.BroadcastCancelPayload
-import io.bluewallet.blueberry.bus.BroadcastRequestPayload
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.parse.PickUtxos
 import io.bluewallet.blueberry.parse.SendBuildParams
@@ -333,13 +332,26 @@ fun SendScreen(
                                 wallet = wallet,
                                 refundAddress = session.refundAddress,
                                 broadcast = broadcast,
-                                onSigned = { privateSigned = it },
-                                onBroadcast = { signed ->
-                                    val id = prepareUiBroadcast(runtime.broadcastStore, signed.txHex)
-                                    if (id != null) {
-                                        runtime.bus.emit(Event.BroadcastRequest, BroadcastRequestPayload(id, signed.txHex))
-                                    }
-                                },
+                                callbacks =
+                                    PrivateSendCallbacks(
+                                        onSigned = { privateSigned = it },
+                                        onBroadcast = { signed ->
+                                            val req = enqueueBroadcast(runtime.broadcastStore, signed.txHex)
+                                            if (req != null) runtime.bus.emit(Event.BroadcastRequest, req)
+                                        },
+                                        finish =
+                                            BroadcastFinishActions(
+                                                onDone = {
+                                                    runtime.broadcastStore.reset()
+                                                    onBack()
+                                                },
+                                                onRetry = {
+                                                    val hex = privateSigned?.txHex ?: return@BroadcastFinishActions
+                                                    val req = enqueueBroadcast(runtime.broadcastStore, hex)
+                                                    if (req != null) runtime.bus.emit(Event.BroadcastRequest, req)
+                                                },
+                                            ),
+                                    ),
                             ),
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
@@ -352,11 +364,28 @@ fun SendScreen(
                         details = details,
                         inputSum = previewInputSum,
                         broadcast = broadcast,
-                        onBroadcast = {
-                            val signed = preview as? SignedSendResult ?: return@PreviewStep
-                            val id = prepareUiBroadcast(runtime.broadcastStore, signed.txHex) ?: return@PreviewStep
-                            runtime.bus.emit(Event.BroadcastRequest, BroadcastRequestPayload(id, signed.txHex))
-                        },
+                        actions =
+                            PreviewActions(
+                                onBroadcast = {
+                                    val signed = preview as? SignedSendResult ?: return@PreviewActions
+                                    val req = enqueueBroadcast(runtime.broadcastStore, signed.txHex) ?: return@PreviewActions
+                                    runtime.bus.emit(Event.BroadcastRequest, req)
+                                },
+                                finish =
+                                    BroadcastFinishActions(
+                                        onDone = {
+                                            runtime.broadcastStore.reset()
+                                            onBack()
+                                        },
+                                        onRetry = {
+                                            val signed = preview as? SignedSendResult ?: return@BroadcastFinishActions
+                                            val req =
+                                                enqueueBroadcast(runtime.broadcastStore, signed.txHex)
+                                                    ?: return@BroadcastFinishActions
+                                            runtime.bus.emit(Event.BroadcastRequest, req)
+                                        },
+                                    ),
+                            ),
                     )
                 }
         }
