@@ -468,7 +468,7 @@ private fun UtxoStep(
                     Column(modifier = Modifier.weight(1f)) {
                         BtcAmountText(sats = u.valueSats, color = BwColors.Ink)
                         Text(
-                            text = listOfNotNull(u.outpointShort, u.ageLabel.trim(), u.name).joinToString("  "),
+                            text = sendUtxoCaption(u.address, u.ageLabel, u.name),
                             color = BwColors.InkMuted,
                             fontFamily = BwFontFamily,
                             fontSize = BwType.CaptionSize,
