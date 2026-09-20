@@ -9,6 +9,7 @@ import io.bluewallet.blueberry.parse.firstUtxoLabelByTxid
 import io.bluewallet.blueberry.parse.formatBlockTimeLabel
 import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.parse.formatNetDelta
+import io.bluewallet.blueberry.parse.inferPendingSendNetDelta
 import io.bluewallet.blueberry.parse.padBlockTimeLabel
 import io.bluewallet.blueberry.parse.scanWatchTxs
 import io.bluewallet.blueberry.parse.scriptHex
@@ -16,6 +17,7 @@ import io.bluewallet.blueberry.parse.shortOutpoint
 import io.bluewallet.blueberry.parse.shortTxid
 import io.bluewallet.blueberry.parse.utxoValueBar
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.storage.PrivateSendCoin
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.headers.decodeBlockHeader
 import kotlin.concurrent.atomics.AtomicReference
@@ -165,6 +167,83 @@ private fun estimateEtaMs(
     return round(remaining / rate).toLong()
 }
 
+private data class PendingSendCandidate(
+    val txid: String,
+    val destination: String,
+    val txHex: String,
+    val coins: List<PrivateSendCoin>,
+    val keepAddresses: List<String>,
+    val createdAt: Long,
+    val confirmedInBlock: Long,
+    val markConfirmed: (Long) -> Unit,
+)
+
+private fun pendingSendRows(
+    db: Database,
+    confirmedByTxid: Map<String, Long>,
+    labelByTxid: Map<String, String>,
+    utxoLabelByTxid: Map<String, String>,
+    keepAddresses: List<String>,
+): List<WalletTxRow> {
+    val candidates =
+        db.sends.list().map { row ->
+            PendingSendCandidate(
+                txid = row.txid,
+                destination = row.destination,
+                txHex = row.txHex,
+                coins = row.coins,
+                keepAddresses = keepAddresses,
+                createdAt = row.createdAt,
+                confirmedInBlock = row.confirmedInBlock,
+                markConfirmed = { height -> db.sends.setConfirmedInBlock(row.txid, height) },
+            )
+        } +
+            db.privateSends.list().map { row ->
+                PendingSendCandidate(
+                    txid = row.txid,
+                    destination = row.destination,
+                    txHex = row.txHex,
+                    coins = row.coins,
+                    keepAddresses = keepAddresses + row.refundAddress,
+                    createdAt = row.createdAt,
+                    confirmedInBlock = row.confirmedInBlock,
+                    markConfirmed = { height -> db.privateSends.setConfirmedInBlock(row.txid, height) },
+                )
+            }
+    val stillPending = mutableListOf<PendingSendCandidate>()
+    for (row in candidates) {
+        val confirmedHeight = confirmedByTxid[row.txid]
+        if (confirmedHeight != null) {
+            if (row.confirmedInBlock == 0L) row.markConfirmed(confirmedHeight)
+        } else if (row.confirmedInBlock == 0L) {
+            stillPending += row
+        }
+    }
+    return stillPending
+        .sortedByDescending { it.createdAt }
+        .map { row ->
+            val delta =
+                runCatching {
+                    inferPendingSendNetDelta(
+                        coins = row.coins,
+                        destination = row.destination,
+                        txHex = row.txHex,
+                        keepAddresses = row.keepAddresses,
+                    )
+                }.getOrElse { -row.coins.sumOf { coin -> coin.valueSats } }
+            WalletTxRow(
+                txid = row.txid,
+                shortTxid = shortTxid(row.txid),
+                height = 0,
+                timeLabel = padBlockTimeLabel("pending"),
+                netDeltaSats = delta,
+                netDeltaLabel = formatNetDelta(delta),
+                paymentLabel = labelByTxid[row.txid],
+                utxoLabel = utxoLabelByTxid[row.txid],
+            )
+        }
+}
+
 fun snapshotFromDb(
     db: Database,
     at: Long,
@@ -225,6 +304,34 @@ fun snapshotFromDb(
                 )
     }
 
+    val confirmedTxs =
+        stored.map { tx ->
+            WalletTxRow(
+                txid = tx.txid,
+                shortTxid = shortTxid(tx.txid),
+                height = tx.height,
+                timeLabel = timeLabelForHeight(db, tx.height, nowMs, timeLabels),
+                netDeltaSats = tx.netDeltaSats,
+                netDeltaLabel = formatNetDelta(tx.netDeltaSats),
+                paymentLabel = labelByTxid[tx.txid],
+                utxoLabel = utxoLabelByTxid[tx.txid],
+                fee = fees[tx.txid],
+            )
+        }
+    val pending =
+        pendingSendRows(
+            db = db,
+            confirmedByTxid = stored.associate { it.txid to it.height.toLong() },
+            labelByTxid = labelByTxid,
+            utxoLabelByTxid = utxoLabelByTxid,
+            keepAddresses =
+                wallet
+                    ?.snapshot()
+                    ?.addresses
+                    ?.map { it.address }
+                    .orEmpty(),
+        )
+
     return WalletTxsSnapshot(
         at = at,
         balanceSats = balanceSats,
@@ -232,20 +339,7 @@ fun snapshotFromDb(
         blocksParsed = db.parsedBlocks.count(),
         blocksTotal = db.blocks.count(),
         etaMs = null,
-        txs =
-            stored.map { tx ->
-                WalletTxRow(
-                    txid = tx.txid,
-                    shortTxid = shortTxid(tx.txid),
-                    height = tx.height,
-                    timeLabel = timeLabelForHeight(db, tx.height, nowMs, timeLabels),
-                    netDeltaSats = tx.netDeltaSats,
-                    netDeltaLabel = formatNetDelta(tx.netDeltaSats),
-                    paymentLabel = labelByTxid[tx.txid],
-                    utxoLabel = utxoLabelByTxid[tx.txid],
-                    fee = fees[tx.txid],
-                )
-            },
+        txs = pending + confirmedTxs,
         utxos = utxos,
         utxosReady = wallet != null,
     )
@@ -394,15 +488,31 @@ fun hydrateWalletBlockCounts(
     store.setBlockCounts(db.parsedBlocks.count(), db.blocks.count())
 }
 
+private fun openSendTxids(db: Database): Set<String> =
+    db.sends
+        .list()
+        .mapNotNull { row -> if (row.confirmedInBlock == 0L) row.txid else null }
+        .toSet() +
+        db.privateSends.list().mapNotNull { row ->
+            if (row.confirmedInBlock == 0L) row.txid else null
+        }
+
 private fun txSetUnchanged(
     db: Database,
     snap: WalletTxsSnapshot,
 ): Boolean {
     if (snap.at == null) return false
+    val confirmed = snap.txs.filter { it.height != 0 }
+    val pendingTxids =
+        snap.txs
+            .filter { it.height == 0 }
+            .map { it.txid }
+            .toSet()
     val fp = db.transactions.fingerprint()
-    return fp.count == snap.txs.size &&
+    return fp.count == confirmed.size &&
         fp.netDeltaSum == snap.balanceSats &&
-        fp.newestTxid == (snap.txs.firstOrNull()?.txid)
+        fp.newestTxid == confirmed.firstOrNull()?.txid &&
+        pendingTxids == openSendTxids(db)
 }
 
 fun hydrateWallet(

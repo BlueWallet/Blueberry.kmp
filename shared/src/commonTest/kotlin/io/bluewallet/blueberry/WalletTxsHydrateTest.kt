@@ -16,11 +16,16 @@ import io.bluewallet.blueberry.bus.createMessageBus
 import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.storage.DownloadedBlock
 import io.bluewallet.blueberry.storage.HeaderWrite
+import io.bluewallet.blueberry.storage.PrivateSendCoin
+import io.bluewallet.blueberry.storage.PrivateSendRow
+import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.AddressScriptType
 import io.bluewallet.blueberry.wallet.createWallet
 import io.bluewallet.blueberry.wallet.deriveWatchWallet
+import io.bluewallet.blueberry.wallet.hexFromBytes
+import io.bluewallet.blueberry.wallet.outputScriptFromAddress
 import io.bluewallet.blueberry.wallet.saveWalletSecret
 import io.bluewallet.headers.BlockHeader
 import io.bluewallet.headers.encodeBlockHeader
@@ -266,6 +271,146 @@ class WalletTxsHydrateTest {
         assertEquals(2L, store.get().at)
         hydrateWallet(db, store, wallet, 3)
         assertEquals(2L, store.get().at)
+        db.close()
+    }
+
+    @Test
+    fun pending_sends_sit_on_top_until_the_confirmed_tx_arrives() {
+        val db = createSqliteDatabase(":memory:")
+        val secret =
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        saveWalletSecret(db, secret)
+        val wallet = createWallet(db)
+        val dest = wallet.snapshot().addresses.first { !it.change && it.index == 1 }
+        val change = wallet.snapshot().addresses.first { it.change && it.index == 0 }
+        val prevHash = ByteArray(32).also { it[0] = 9 }
+        val send =
+            Transaction(
+                2L,
+                listOf(TxIn(OutPoint(TxHash(prevHash), 0L), 0xffffffffL)),
+                listOf(
+                    TxOut(Satoshi(40_000L), dest.scriptPubKey),
+                    TxOut(Satoshi(9_000L), change.scriptPubKey),
+                ),
+                0L,
+            )
+        val txHex = hexFromBytes(Transaction.write(send))
+        val txid = send.txid.toString()
+        db.sends.upsert(
+            SendRow(
+                txid = txid,
+                txHex = txHex,
+                destination = dest.address,
+                coins =
+                    listOf(
+                        PrivateSendCoin("bb".repeat(32), 0, 50_000L),
+                    ),
+            ),
+        )
+        db.transactions.upsert(
+            StoredTx("ab".repeat(32), 100, 0, "11".repeat(32), byteArrayOf(0x00), 1),
+        )
+        val pendingSnap = snapshotFromDb(db, 1, 1)
+        assertEquals(listOf(txid, "ab".repeat(32)), pendingSnap.txs.map { it.txid })
+        assertEquals("pending", pendingSnap.txs[0].timeLabel.trim())
+        assertEquals(-41_000L, pendingSnap.txs[0].netDeltaSats)
+        assertEquals(0, pendingSnap.txs[0].height)
+
+        db.transactions.upsert(
+            StoredTx(txid, 200, 0, "22".repeat(32), Transaction.write(send), -41_000L),
+        )
+        val confirmedSnap = snapshotFromDb(db, 2, 2)
+        assertEquals(listOf(txid, "ab".repeat(32)), confirmedSnap.txs.map { it.txid })
+        assertEquals(200, confirmedSnap.txs[0].height)
+        assertEquals(200L, db.sends.get(txid)!!.confirmedInBlock)
+        db.close()
+    }
+
+    @Test
+    fun hydrate_reconsiders_pending_sends_when_sync_confirms_them() {
+        val bus = createMessageBus()
+        val db = createSqliteDatabase(":memory:")
+        val secret =
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        saveWalletSecret(db, secret)
+        val wallet = createWallet(db)
+        val dest = wallet.snapshot().addresses.first { !it.change && it.index == 1 }
+        val change = wallet.snapshot().addresses.first { it.change && it.index == 0 }
+        val send =
+            Transaction(
+                2L,
+                listOf(TxIn(OutPoint(TxHash(ByteArray(32).also { it[0] = 9 }), 0L), 0xffffffffL)),
+                listOf(
+                    TxOut(Satoshi(40_000L), dest.scriptPubKey),
+                    TxOut(Satoshi(9_000L), change.scriptPubKey),
+                ),
+                0L,
+            )
+        val txid = send.txid.toString()
+        db.sends.upsert(
+            SendRow(
+                txid = txid,
+                txHex = hexFromBytes(Transaction.write(send)),
+                destination = dest.address,
+                coins =
+                    listOf(
+                        PrivateSendCoin("bb".repeat(32), 0, 50_000L),
+                    ),
+            ),
+        )
+        val store = createWalletTxsStore()
+        val off = bindWalletTxsEvents(bus, db, store, wallet)
+        hydrateWallet(db, store, wallet, 1)
+        val pending = store.get().txs.single()
+        assertEquals("pending", pending.timeLabel.trim())
+
+        db.transactions.upsert(
+            StoredTx(txid, 200, 0, "22".repeat(32), Transaction.write(send), 0),
+        )
+        bus.emit(Event.WalletTxs, WalletTxsPayload(at = 20))
+        val confirmed = store.get().txs.single()
+        assertEquals(txid, confirmed.txid)
+        assertEquals(200, confirmed.height)
+        assertEquals(200L, db.sends.get(txid)!!.confirmedInBlock)
+        off()
+        db.close()
+    }
+
+    @Test
+    fun private_send_pending_keeps_wallet_change_not_just_refund() {
+        val db = createSqliteDatabase(":memory:")
+        saveWalletSecret(
+            db,
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        val wallet = createWallet(db)
+        val dest = wallet.snapshot().addresses.first { !it.change && it.index == 1 }
+        val refund = wallet.snapshot().addresses.first { !it.change && it.index == 0 }
+        val change = wallet.snapshot().addresses.first { it.change && it.index == 0 }
+        val depositScript = outputScriptFromAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+        val send =
+            Transaction(
+                2L,
+                listOf(TxIn(OutPoint(TxHash(ByteArray(32).also { it[0] = 7 }), 0L), 0xffffffffL)),
+                listOf(
+                    TxOut(Satoshi(40_000L), depositScript),
+                    TxOut(Satoshi(9_000L), change.scriptPubKey),
+                ),
+                0L,
+            )
+        db.privateSends.upsert(
+            PrivateSendRow(
+                txid = send.txid.toString(),
+                partner = "ROCKETX",
+                orderId = "ord-1",
+                txHex = hexFromBytes(Transaction.write(send)),
+                destination = dest.address,
+                refundAddress = refund.address,
+                coins = listOf(PrivateSendCoin("bb".repeat(32), 0, 50_000L)),
+            ),
+        )
+        val pending = snapshotFromDb(db, 1, 1, wallet).txs.single()
+        assertEquals(-41_000L, pending.netDeltaSats)
         db.close()
     }
 }

@@ -369,6 +369,8 @@ class RocketxTest {
         assertEquals("bb".repeat(32), saved.coins[0].txid)
         assertEquals(1, saved.coins[0].vout)
         assertEquals(50_000L, saved.coins[0].valueSats)
+        assertEquals(0L, saved.confirmedInBlock)
+        assertTrue(saved.createdAt > 0L)
         db.close()
     }
 }

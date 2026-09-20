@@ -129,9 +129,14 @@ fun createBroadcastStore(): BroadcastStore = BroadcastStoreImpl()
 fun bindBroadcastEvents(
     bus: MessageBus,
     store: BroadcastStore,
+    onDone: () -> Unit = {},
 ): () -> Unit {
     val a = bus.on(Event.BroadcastProgress) { store.applyProgress(it) }
-    val b = bus.on(Event.BroadcastDone) { store.applyDone(it) }
+    val b =
+        bus.on(Event.BroadcastDone) {
+            store.applyDone(it)
+            onDone()
+        }
     return {
         a()
         b()
@@ -190,6 +195,16 @@ fun enqueueBroadcast(
 ): BroadcastRequestPayload? {
     val id = prepareUiBroadcast(store, txHex) ?: return null
     return BroadcastRequestPayload(id, txHex, store.get().triedPeers)
+}
+
+fun enqueueArmedBroadcast(
+    store: BroadcastStore,
+    txHex: String,
+    arm: () -> Unit,
+): BroadcastRequestPayload? {
+    val req = enqueueBroadcast(store, txHex) ?: return null
+    arm()
+    return req
 }
 
 private var nextBroadcastId = 0

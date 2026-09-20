@@ -24,6 +24,7 @@ class SchemaTest {
                     "parsed_blocks",
                     "peers",
                     "private_sends",
+                    "sends",
                     "transactions",
                     "tx_payment_labels",
                     "utxo_names",
@@ -85,8 +86,21 @@ class SchemaTest {
                     "destination",
                     "refund_address",
                     "utxos",
+                    "confirmed_in_block",
+                    "created_at",
                 ),
                 columnNames(driver, "private_sends"),
+            )
+            assertEquals(
+                listOf(
+                    "txid",
+                    "tx_hex",
+                    "destination",
+                    "utxos",
+                    "confirmed_in_block",
+                    "created_at",
+                ),
+                columnNames(driver, "sends"),
             )
             assertEquals(
                 listOf("height", "block_hash_internal_hex"),

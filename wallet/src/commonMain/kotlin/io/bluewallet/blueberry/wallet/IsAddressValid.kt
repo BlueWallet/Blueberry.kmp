@@ -58,7 +58,7 @@ fun watchAddressScriptType(address: String): AddressScriptType {
     }
 }
 
-internal fun outputScriptFromAddress(address: String): ByteArray {
+fun outputScriptFromAddress(address: String): ByteArray {
     val value = address.trim()
     val lower = value.lowercase()
     if (lower.startsWith("bc1")) {

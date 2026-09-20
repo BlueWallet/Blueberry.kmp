@@ -1,0 +1,18 @@
+get:
+SELECT txid, tx_hex, destination, utxos, confirmed_in_block, created_at
+FROM sends WHERE txid = ?;
+
+upsert:
+INSERT INTO sends(txid, tx_hex, destination, utxos, confirmed_in_block, created_at)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT(txid) DO UPDATE SET
+  tx_hex = excluded.tx_hex,
+  destination = excluded.destination,
+  utxos = excluded.utxos;
+
+list:
+SELECT txid, tx_hex, destination, utxos, confirmed_in_block, created_at
+FROM sends ORDER BY txid;
+
+setConfirmedInBlock:
+UPDATE sends SET confirmed_in_block = ? WHERE txid = ?;

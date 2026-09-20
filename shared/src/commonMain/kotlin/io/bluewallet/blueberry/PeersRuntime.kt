@@ -25,6 +25,8 @@ import io.bluewallet.blueberry.peers.modules.PeersDiscoveryOptions
 import io.bluewallet.blueberry.peers.modules.createPeersDiscoveryModule
 import io.bluewallet.blueberry.peers.net.createPlatformNet
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.storage.PrivateSendRow
+import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.sync.modules.createSyncIdleModule
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.createWallet
@@ -63,6 +65,31 @@ class PeersRuntime(
 
     @Volatile var wallet: Wallet? = null
         private set
+
+    @Volatile private var pendingSendRow: SendRow? = null
+
+    @Volatile private var pendingPrivateSendRow: PrivateSendRow? = null
+
+    fun armSendPersist(row: SendRow) {
+        pendingSendRow = row
+        pendingPrivateSendRow = null
+    }
+
+    fun armPrivateSendPersist(row: PrivateSendRow) {
+        pendingPrivateSendRow = row
+        pendingSendRow = null
+    }
+
+    fun persistArmedBroadcast() {
+        val snap = broadcastStore.get()
+        val send = pendingSendRow
+        val priv = pendingPrivateSendRow
+        val wroteSend = send != null && persistSendAndRefresh(db, walletTxsStore, wallet, send, snap)
+        val wrotePriv = priv != null && persistPrivateSendAndRefresh(db, walletTxsStore, wallet, priv, snap)
+        pendingSendRow = armedAfterPersist(pendingSendRow, send, wroteSend)
+        pendingPrivateSendRow = armedAfterPersist(pendingPrivateSendRow, priv, wrotePriv)
+    }
+
     private val net = createPlatformNet()
     private val discovery: Module =
         createPeersDiscoveryModule(
@@ -136,7 +163,7 @@ class PeersRuntime(
                 null
             }
         val unbindWallet = bindWalletTxsEvents(bus, db, walletTxsStore, sharedWallet)
-        val unbindBroadcast = bindBroadcastEvents(bus, broadcastStore)
+        val unbindBroadcast = bindBroadcastEvents(bus, broadcastStore) { persistArmedBroadcast() }
         unbind = {
             unbindPeers()
             unbindHeaders()
