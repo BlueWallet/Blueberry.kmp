@@ -74,6 +74,27 @@ private fun nextAgeBoundary(
         -(((-ageS) / bucket) * bucket - 1)
     }
 
+/** Milliseconds until [formatBlockTimeLabel] would change, or null if the label is static. */
+fun msUntilNextBlockTimeLabelChange(
+    unixSeconds: Long,
+    nowMs: Long,
+): Long? {
+    val ageS = maxOf(0L, nowMs / 1000 - unixSeconds)
+    if (ageS > MONTH_S) return null
+    val nextAgeS =
+        when {
+            ageS < MINUTE_S -> MINUTE_S
+            ageS < HOUR_S -> ((ageS / MINUTE_S) + 1) * MINUTE_S
+            ageS < DAY_S -> ((ageS / HOUR_S) + 1) * HOUR_S
+            else -> {
+                val next = ((ageS / DAY_S) + 1) * DAY_S
+                if (next > MONTH_S) MONTH_S + 1 else next
+            }
+        }
+    val nextMs = unixSeconds * 1000 + nextAgeS * 1000
+    return maxOf(1L, nextMs - nowMs)
+}
+
 /** Milliseconds until [formatRelativeAge] would change, or null if the label is static. */
 fun msUntilNextRelativeAgeChange(
     unixSeconds: Long?,

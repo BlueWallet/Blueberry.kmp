@@ -8,6 +8,14 @@ import kotlin.test.assertTrue
 
 class TxFeeTest {
     @Test
+    fun virtual_size_is_weight_ceiled_to_vbytes() {
+        val receive = coinbaseLikeReceive(p2wpkhScript(), 1000)
+        val raw = Transaction.write(receive)
+        assertEquals((receive.weight() + 3) / 4, txVirtualSize(raw))
+        assertNull(txVirtualSize(byteArrayOf(0x01, 0x02)))
+    }
+
+    @Test
     fun receive_has_no_fee() {
         val script = p2wpkhScript()
         val receive = coinbaseLikeReceive(script, 1000)

@@ -101,4 +101,15 @@ class FormatBlockTimeTest {
         assertNull(msUntilNextRelativeAgeChange(NOW_S + MONTH_S + 1, NOW_MS))
         assertNull(msUntilNextRelativeAgeChange(null, NOW_MS))
     }
+
+    @Test
+    fun next_block_time_wake_matches_label_boundaries() {
+        assertEquals(60_000L, msUntilNextBlockTimeLabelChange(NOW_S, NOW_MS))
+        assertEquals(1_000L, msUntilNextBlockTimeLabelChange(NOW_S - 59, NOW_MS))
+        assertEquals(60_000L, msUntilNextBlockTimeLabelChange(NOW_S - 60, NOW_MS))
+        assertEquals(1L, msUntilNextBlockTimeLabelChange(NOW_S - 60, NOW_MS + 59_999))
+        assertEquals(3_600_000L, msUntilNextBlockTimeLabelChange(NOW_S - 3600, NOW_MS))
+        assertEquals(86_400_000L, msUntilNextBlockTimeLabelChange(NOW_S - 24 * 3600, NOW_MS))
+        assertNull(msUntilNextBlockTimeLabelChange(NOW_S - MONTH_S - 1, NOW_MS))
+    }
 }

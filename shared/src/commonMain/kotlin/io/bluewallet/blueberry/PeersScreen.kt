@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -133,7 +132,16 @@ fun PeersScreen(
             matching = matching,
             blocks = blocks,
         )
-    val listState = rememberLazyListState()
+    val homeVisible = LocalHomeVisible.current
+    var listEpoch by remember { mutableStateOf(0) }
+    var wasHomeVisible by remember { mutableStateOf(homeVisible) }
+    LaunchedEffect(homeVisible) {
+        if (homeVisible && !wasHomeVisible) {
+            listEpoch++
+        }
+        wasHomeVisible = homeVisible
+    }
+    val listState = remember(listEpoch) { LazyListState() }
     val parseBusy = walletTxs.blocksTotal > walletTxs.blocksParsed
     val dockIdle = isSyncDockIdle(unified, parseBusy)
     val alwaysShowSync = LocalAlwaysShowSync.current
