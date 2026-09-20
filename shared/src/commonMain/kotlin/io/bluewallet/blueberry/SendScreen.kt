@@ -30,6 +30,8 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.KeyboardType
 import io.bluewallet.blueberry.bus.BroadcastCancelPayload
 import io.bluewallet.blueberry.bus.Event
@@ -224,6 +226,10 @@ fun SendScreen(
                                 }
                                 is DetailsEvent.PrivateSend -> privateSend = event.checked
                                 DetailsEvent.Scan -> scanning = true
+                                DetailsEvent.Max -> {
+                                    amount = "MAX"
+                                    if (invalidField == SendField.Amount) invalidField = null
+                                }
                                 DetailsEvent.Continue -> {
                                     when (val result = validateSendDetails(address, amount, label, selectedSum, feeRate)) {
                                         is SendDetailsValidation.Ok -> {
@@ -503,6 +509,8 @@ private sealed class DetailsEvent {
 
     data object Scan : DetailsEvent()
 
+    data object Max : DetailsEvent()
+
     data object Continue : DetailsEvent()
 }
 
@@ -534,26 +542,9 @@ private fun DetailsStep(
         isError = form.invalid == SendField.Address,
         label = { Text("Address") },
         placeholder = { Text("bc1…") },
-        trailingIcon = {
-            Text(
-                text = "Scan",
-                color = BwColors.Link,
-                fontFamily = BwFontFamily,
-                fontSize = BwType.CaptionSize,
-                modifier = Modifier.clickable { onEvent(DetailsEvent.Scan) },
-            )
-        },
+        trailingIcon = { FieldTrailingAction("Scan") { onEvent(DetailsEvent.Scan) } },
     )
-    OutlinedTextField(
-        value = form.amount,
-        onValueChange = { onEvent(DetailsEvent.Amount(it)) },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        isError = form.invalid == SendField.Amount,
-        label = { Text("Amount") },
-        placeholder = { Text("0.00000000 or MAX") },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-    )
+    AmountField(form = form, onEvent = onEvent)
     OutlinedTextField(
         value = form.label,
         onValueChange = { onEvent(DetailsEvent.Label(it)) },
@@ -578,6 +569,46 @@ private fun DetailsStep(
     }
     PrivateSendRow(checked = form.privateSend, onChecked = { onEvent(DetailsEvent.PrivateSend(it)) })
     PillButton(text = "Continue", onClick = { onEvent(DetailsEvent.Continue) }, modifier = Modifier.fillMaxWidth())
+}
+
+@Composable
+private fun FieldTrailingAction(
+    text: String,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = text,
+        color = BwColors.Link,
+        fontFamily = BwFontFamily,
+        fontSize = BwType.CaptionSize,
+        modifier = Modifier.clickable(onClick = onClick),
+    )
+}
+
+@Composable
+private fun AmountField(
+    form: DetailsForm,
+    onEvent: (DetailsEvent) -> Unit,
+) {
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    OutlinedTextField(
+        value = form.amount,
+        onValueChange = { onEvent(DetailsEvent.Amount(it)) },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        isError = form.invalid == SendField.Amount,
+        label = { Text("Amount") },
+        placeholder = { Text("0.00000000 or MAX") },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        trailingIcon = {
+            FieldTrailingAction("MAX") {
+                onEvent(DetailsEvent.Max)
+                focusManager.clearFocus()
+                keyboard?.hide()
+            }
+        },
+    )
 }
 
 @Composable
