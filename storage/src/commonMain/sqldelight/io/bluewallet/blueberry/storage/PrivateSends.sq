@@ -1,10 +1,10 @@
 get:
-SELECT txid, partner, order_id, tx_hex, destination, refund_address, utxos
+SELECT txid, partner, order_id, tx_hex, destination, refund_address, utxos, confirmed_in_block, created_at
 FROM private_sends WHERE txid = ?;
 
 upsert:
-INSERT INTO private_sends(txid, partner, order_id, tx_hex, destination, refund_address, utxos)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO private_sends(txid, partner, order_id, tx_hex, destination, refund_address, utxos, confirmed_in_block, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(txid) DO UPDATE SET
   partner = excluded.partner,
   order_id = excluded.order_id,
@@ -14,5 +14,8 @@ ON CONFLICT(txid) DO UPDATE SET
   utxos = excluded.utxos;
 
 list:
-SELECT txid, partner, order_id, tx_hex, destination, refund_address, utxos
+SELECT txid, partner, order_id, tx_hex, destination, refund_address, utxos, confirmed_in_block, created_at
 FROM private_sends ORDER BY txid;
+
+setConfirmedInBlock:
+UPDATE private_sends SET confirmed_in_block = ? WHERE txid = ?;

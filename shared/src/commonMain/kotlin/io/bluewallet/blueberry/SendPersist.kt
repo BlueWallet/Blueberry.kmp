@@ -3,54 +3,59 @@ package io.bluewallet.blueberry
 import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
-import io.bluewallet.blueberry.storage.PrivateSendRow
+import io.bluewallet.blueberry.storage.SendRow
+import io.bluewallet.blueberry.wallet.SendInputUtxo
 import io.bluewallet.blueberry.wallet.SignedSendResult
 import io.bluewallet.blueberry.wallet.Wallet
 
-const val PRIVATE_SEND_PARTNER_ROCKETX = "ROCKETX"
-
-fun shouldPersistPrivateSend(
+fun shouldPersistSend(
     phase: String?,
     broadcastTxHex: String?,
     signedTxHex: String,
 ): Boolean = phase == "success" && broadcastTxHex == signedTxHex
 
-fun privateSendRecord(
-    session: PrivateSendSession,
-    swap: RocketxSwap,
+fun sendRecord(
+    destination: String,
+    utxos: List<SendInputUtxo>,
     signed: SignedSendResult,
-): PrivateSendRow =
-    PrivateSendRow(
+): SendRow =
+    SendRow(
         txid = signed.txid,
-        partner = PRIVATE_SEND_PARTNER_ROCKETX,
-        orderId = swap.requestId,
         txHex = signed.txHex,
-        destination = session.destination,
-        refundAddress = session.refundAddress,
+        destination = destination,
         coins =
-            session.utxos.map { utxo ->
+            utxos.map { utxo ->
                 PrivateSendCoin(txid = utxo.txid, vout = utxo.vout, valueSats = utxo.valueSats)
             },
     )
 
-fun persistPrivateSendIfBroadcast(
+fun persistSendIfBroadcast(
     db: Database,
-    row: PrivateSendRow,
+    row: SendRow,
     broadcast: BroadcastSnapshot,
 ): Boolean {
-    if (!shouldPersistPrivateSend(broadcast.phase, broadcast.txHex, row.txHex)) return false
-    db.privateSends.upsert(row)
+    if (!shouldPersistSend(broadcast.phase, broadcast.txHex, row.txHex)) return false
+    db.sends.upsert(row)
     return true
 }
 
-fun persistPrivateSendAndRefresh(
+fun <T : Any> armedAfterPersist(
+    current: T?,
+    persisted: T?,
+    wrote: Boolean,
+): T? {
+    if (!wrote) return current
+    return if (current === persisted) null else current
+}
+
+fun persistSendAndRefresh(
     db: Database,
     store: WalletTxsStore,
     wallet: Wallet?,
-    row: PrivateSendRow,
+    row: SendRow,
     broadcast: BroadcastSnapshot,
 ): Boolean {
-    if (!persistPrivateSendIfBroadcast(db, row, broadcast)) return false
+    if (!persistSendIfBroadcast(db, row, broadcast)) return false
     hydrateWallet(db, store, wallet, nowMillis())
     return true
 }

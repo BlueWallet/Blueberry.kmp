@@ -24,6 +24,7 @@ import io.bluewallet.blueberry.parse.SendBuildParams
 import io.bluewallet.blueberry.parse.buildActiveSendTx
 import io.bluewallet.blueberry.parse.savePaymentLabel
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.storage.PrivateSendRow
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
@@ -37,7 +38,7 @@ import kotlinx.coroutines.launch
 
 class PrivateSendCallbacks(
     val onSigned: (SignedSendResult) -> Unit,
-    val onBroadcast: (SignedSendResult) -> Unit,
+    val onBroadcast: (SignedSendResult, PrivateSendRow) -> Unit,
     val finish: BroadcastFinishActions,
 )
 
@@ -75,16 +76,8 @@ fun PrivateSendStep(
         if (ready != null) host.callbacks.onSigned(ready.signed)
     }
 
-    LaunchedEffect(ui, host.broadcast.phase, host.broadcast.txHex) {
-        val ready = ui as? PrivateSendUi.Deposit ?: return@LaunchedEffect
-        persistPrivateSendIfBroadcast(
-            db = host.db,
-            row = privateSendRecord(session, ready.swap, ready.signed),
-            broadcast = host.broadcast,
-        )
-    }
-
     PrivateSendBody(
+        session = session,
         ui = ui,
         host = host,
         modifier = modifier,
@@ -238,6 +231,7 @@ private fun signedPrivateSend(
 
 @Composable
 private fun PrivateSendBody(
+    session: PrivateSendSession,
     ui: PrivateSendUi,
     host: PrivateSendHost,
     onQuote: (RocketxQuote) -> Unit,
@@ -259,7 +253,12 @@ private fun PrivateSendBody(
                 PrivateSendDeposit(
                     state = state,
                     broadcast = host.broadcast,
-                    onBroadcast = { host.callbacks.onBroadcast(state.signed) },
+                    onBroadcast = {
+                        host.callbacks.onBroadcast(
+                            state.signed,
+                            privateSendRecord(session, state.swap, state.signed),
+                        )
+                    },
                     finish = host.callbacks.finish,
                 )
             is PrivateSendUi.Quotes ->

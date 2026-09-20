@@ -100,6 +100,8 @@ internal class SqliteDatabase(
                     destination = row.destination,
                     refund_address = row.refundAddress,
                     utxos = encodePrivateSendCoins(row.coins),
+                    confirmed_in_block = row.confirmedInBlock,
+                    created_at = row.createdAt.takeIf { it != 0L } ?: currentTimeMillis(),
                 )
             }
 
@@ -108,6 +110,46 @@ internal class SqliteDatabase(
                     .list()
                     .executeAsList()
                     .map { it.toRow() }
+
+            override fun setConfirmedInBlock(
+                txid: String,
+                height: Long,
+            ) {
+                storageDb.privateSendsQueries.setConfirmedInBlock(confirmed_in_block = height, txid = txid)
+            }
+        }
+
+    override val sends =
+        object : SendsRepository {
+            override fun get(txid: String): SendRow? =
+                storageDb.sendsQueries
+                    .get(txid)
+                    .executeAsOneOrNull()
+                    ?.toRow()
+
+            override fun upsert(row: SendRow) {
+                storageDb.sendsQueries.upsert(
+                    txid = row.txid,
+                    tx_hex = row.txHex,
+                    destination = row.destination,
+                    utxos = encodePrivateSendCoins(row.coins),
+                    confirmed_in_block = row.confirmedInBlock,
+                    created_at = row.createdAt.takeIf { it != 0L } ?: currentTimeMillis(),
+                )
+            }
+
+            override fun list(): List<SendRow> =
+                storageDb.sendsQueries
+                    .list()
+                    .executeAsList()
+                    .map { it.toRow() }
+
+            override fun setConfirmedInBlock(
+                txid: String,
+                height: Long,
+            ) {
+                storageDb.sendsQueries.setConfirmedInBlock(confirmed_in_block = height, txid = txid)
+            }
         }
 
     override val peers =
@@ -826,6 +868,16 @@ internal class SqliteDatabase(
     }
 }
 
+private fun Sends.toRow(): SendRow =
+    SendRow(
+        txid = txid,
+        txHex = tx_hex,
+        destination = destination,
+        coins = decodePrivateSendCoins(utxos),
+        confirmedInBlock = confirmed_in_block,
+        createdAt = created_at,
+    )
+
 private fun Private_sends.toRow(): PrivateSendRow =
     PrivateSendRow(
         txid = txid,
@@ -835,6 +887,8 @@ private fun Private_sends.toRow(): PrivateSendRow =
         destination = destination,
         refundAddress = refund_address,
         coins = decodePrivateSendCoins(utxos),
+        confirmedInBlock = confirmed_in_block,
+        createdAt = created_at,
     )
 
 private fun rowToFilterHeaderRecord(row: Filter_headers): FilterHeaderRecord =

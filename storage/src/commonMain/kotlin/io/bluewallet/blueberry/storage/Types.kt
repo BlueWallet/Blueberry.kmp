@@ -266,6 +266,8 @@ data class PrivateSendRow(
     val destination: String,
     val refundAddress: String,
     val coins: List<PrivateSendCoin>,
+    val confirmedInBlock: Long = 0,
+    val createdAt: Long = 0,
 )
 
 interface PrivateSendsRepository {
@@ -273,7 +275,34 @@ interface PrivateSendsRepository {
 
     fun upsert(row: PrivateSendRow)
 
+    fun setConfirmedInBlock(
+        txid: String,
+        height: Long,
+    )
+
     fun list(): List<PrivateSendRow>
+}
+
+data class SendRow(
+    val txid: String,
+    val txHex: String,
+    val destination: String,
+    val coins: List<PrivateSendCoin>,
+    val confirmedInBlock: Long = 0,
+    val createdAt: Long = 0,
+)
+
+interface SendsRepository {
+    fun get(txid: String): SendRow?
+
+    fun upsert(row: SendRow)
+
+    fun setConfirmedInBlock(
+        txid: String,
+        height: Long,
+    )
+
+    fun list(): List<SendRow>
 }
 
 data class MatchedBlock(
@@ -372,6 +401,7 @@ interface Database {
     val utxoNames: UtxoNamesRepository
     val txPaymentLabels: TxPaymentLabelsRepository
     val privateSends: PrivateSendsRepository
+    val sends: SendsRepository
 
     fun transaction(fn: () -> Unit)
 

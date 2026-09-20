@@ -54,6 +54,26 @@ class BroadcastStoreTest {
     }
 
     @Test
+    fun enqueue_armed_broadcast_does_not_arm_when_a_job_is_in_flight() {
+        val store = createBroadcastStore()
+        store.start("1", "aa")
+        var armed = "aa"
+        val req =
+            enqueueArmedBroadcast(store, "bb") {
+                armed = "bb"
+            }
+        assertEquals(null, req)
+        assertEquals("aa", armed)
+        store.applyDone(BroadcastDonePayload.Ok("1", "1.1.1.1:8333"))
+        val started =
+            enqueueArmedBroadcast(store, "bb") {
+                armed = "bb"
+            }
+        assertTrue(started != null)
+        assertEquals("bb", armed)
+    }
+
+    @Test
     fun prepareUiBroadcast_ignores_in_flight_and_same_success_hex() {
         val store = createBroadcastStore()
         val first = prepareUiBroadcast(store, "aa")

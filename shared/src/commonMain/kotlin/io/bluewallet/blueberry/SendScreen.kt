@@ -71,6 +71,7 @@ fun SendScreen(
     var details by remember { mutableStateOf<SendDetails?>(null) }
     var preview by remember { mutableStateOf<BuildSendResult?>(null) }
     var previewInputSum by remember { mutableStateOf(0L) }
+    var previewUtxos by remember { mutableStateOf<List<SendInputUtxo>>(emptyList()) }
     var snap by remember { mutableStateOf(runtime.walletTxsStore.get()) }
     var broadcast by remember { mutableStateOf(runtime.broadcastStore.get()) }
     var address by remember { mutableStateOf("") }
@@ -304,6 +305,10 @@ fun SendScreen(
                                                     }
                                                 savePaymentLabel(db, txid, d.paymentLabel, changeVouts)
                                                 preview = built
+                                                previewUtxos =
+                                                    selected.map {
+                                                        SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey)
+                                                    }
                                                 previewInputSum = selected.sumOf { it.valueSats }
                                                 feeError = null
                                                 cancelArmedForId = null
@@ -335,9 +340,12 @@ fun SendScreen(
                                 callbacks =
                                     PrivateSendCallbacks(
                                         onSigned = { privateSigned = it },
-                                        onBroadcast = { signed ->
-                                            val req = enqueueBroadcast(runtime.broadcastStore, signed.txHex)
-                                            if (req != null) runtime.bus.emit(Event.BroadcastRequest, req)
+                                        onBroadcast = { signed, row ->
+                                            val req =
+                                                enqueueArmedBroadcast(runtime.broadcastStore, signed.txHex) {
+                                                    runtime.armPrivateSendPersist(row)
+                                                } ?: return@PrivateSendCallbacks
+                                            runtime.bus.emit(Event.BroadcastRequest, req)
                                         },
                                         finish =
                                             BroadcastFinishActions(
@@ -368,7 +376,11 @@ fun SendScreen(
                             PreviewActions(
                                 onBroadcast = {
                                     val signed = preview as? SignedSendResult ?: return@PreviewActions
-                                    val req = enqueueBroadcast(runtime.broadcastStore, signed.txHex) ?: return@PreviewActions
+                                    val dest = details?.toAddress ?: return@PreviewActions
+                                    val req =
+                                        enqueueArmedBroadcast(runtime.broadcastStore, signed.txHex) {
+                                            runtime.armSendPersist(sendRecord(dest, previewUtxos, signed))
+                                        } ?: return@PreviewActions
                                     runtime.bus.emit(Event.BroadcastRequest, req)
                                 },
                                 finish =
@@ -379,9 +391,11 @@ fun SendScreen(
                                         },
                                         onRetry = {
                                             val signed = preview as? SignedSendResult ?: return@BroadcastFinishActions
+                                            val dest = details?.toAddress ?: return@BroadcastFinishActions
                                             val req =
-                                                enqueueBroadcast(runtime.broadcastStore, signed.txHex)
-                                                    ?: return@BroadcastFinishActions
+                                                enqueueArmedBroadcast(runtime.broadcastStore, signed.txHex) {
+                                                    runtime.armSendPersist(sendRecord(dest, previewUtxos, signed))
+                                                } ?: return@BroadcastFinishActions
                                             runtime.bus.emit(Event.BroadcastRequest, req)
                                         },
                                     ),

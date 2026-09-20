@@ -3,6 +3,7 @@ package io.bluewallet.blueberry.storage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class PrivateSendsTest {
     @Test
@@ -25,8 +26,17 @@ class PrivateSendsTest {
                     ),
             )
         db.privateSends.upsert(row)
-        assertEquals(row, db.privateSends.get(txid))
-        assertEquals(listOf(row), db.privateSends.list())
+        val saved = db.privateSends.get(txid)!!
+        assertEquals(row.txid, saved.txid)
+        assertEquals(row.partner, saved.partner)
+        assertEquals(row.orderId, saved.orderId)
+        assertEquals(row.txHex, saved.txHex)
+        assertEquals(row.destination, saved.destination)
+        assertEquals(row.refundAddress, saved.refundAddress)
+        assertEquals(row.coins, saved.coins)
+        assertEquals(0L, saved.confirmedInBlock)
+        assertTrue(saved.createdAt > 0L)
+        assertEquals(listOf(saved), db.privateSends.list())
         db.close()
     }
 
@@ -39,5 +49,25 @@ class PrivateSendsTest {
             )
         assertEquals(coins, decodePrivateSendCoins(encodePrivateSendCoins(coins)))
         assertEquals(emptyList(), decodePrivateSendCoins("[]"))
+    }
+
+    @Test
+    fun set_confirmed_in_block_keeps_other_fields() {
+        val db = createSqliteDatabase(":memory:")
+        val txid = "aa".repeat(32)
+        db.privateSends.upsert(
+            PrivateSendRow(
+                txid = txid,
+                partner = "ROCKETX",
+                orderId = "ord-1",
+                txHex = "010203",
+                destination = "bc1qdest",
+                refundAddress = "bc1qref",
+                coins = emptyList(),
+            ),
+        )
+        db.privateSends.setConfirmedInBlock(txid, 800_000)
+        assertEquals(800_000L, db.privateSends.get(txid)!!.confirmedInBlock)
+        db.close()
     }
 }
