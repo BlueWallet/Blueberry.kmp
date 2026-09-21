@@ -15,16 +15,22 @@ data class CoinsRowModel(
     val path: String?,
 )
 
-fun coinsRowCaption(
-    address: String?,
-    ageLabel: String,
+data class UtxoRowTitle(
+    val text: String,
+    val emphasized: Boolean,
+)
+
+fun utxoRowTitle(
     name: String?,
-): String? {
-    val addr = address?.trim()?.takeIf { it.isNotEmpty() }?.let { shortTxid(it) }
-    val age = ageLabel.trim().takeIf { it.isNotEmpty() }
+    address: String?,
+): UtxoRowTitle? {
     val memo = name?.trim()?.takeIf { it.isNotEmpty() }
-    return listOfNotNull(addr, age, memo).joinToString(" · ").takeIf { it.isNotEmpty() }
+    if (memo != null) return UtxoRowTitle(memo, emphasized = true)
+    val addr = address?.trim()?.takeIf { it.isNotEmpty() }?.let { shortTxid(it) }
+    return addr?.let { UtxoRowTitle(it, emphasized = false) }
 }
+
+fun utxoRowAge(ageLabel: String): String? = ageLabel.trim().takeIf { it.isNotEmpty() }
 
 fun coinsRows(utxos: List<WalletUtxoRow>): List<CoinsRowModel> {
     val maxValue = utxos.maxOfOrNull { it.valueSats } ?: 0L
