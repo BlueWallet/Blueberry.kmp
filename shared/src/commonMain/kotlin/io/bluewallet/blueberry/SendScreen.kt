@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import io.bluewallet.blueberry.bus.BroadcastCancelPayload
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.parse.PickUtxos
@@ -452,30 +453,12 @@ private fun UtxoStep(
         LazyColumn(modifier = modifier.fillMaxWidth()) {
             items(utxos, key = { it.key }) { u ->
                 val checked = u.key in selectedKeys
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { onToggle(u.key) }
-                            .padding(vertical = BwSpace.Gap),
-                    horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    BwCheckbox(
-                        checked = checked,
-                        onCheckedChange = { onToggle(u.key) },
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        BtcAmountText(sats = u.valueSats, color = BwColors.Ink)
-                        Text(
-                            text = sendUtxoCaption(u.address, u.ageLabel, u.name),
-                            color = BwColors.InkMuted,
-                            fontFamily = BwFontFamily,
-                            fontSize = BwType.CaptionSize,
-                        )
-                        HorizontalProgressBar(percent = utxoValuePercent(u.valueSats, maxValue))
-                    }
-                }
+                UtxoStepRow(
+                    utxo = u,
+                    checked = checked,
+                    maxValue = maxValue,
+                    onToggle = onToggle,
+                )
             }
         }
     }
@@ -484,6 +467,62 @@ private fun UtxoStep(
         onClick = onContinue,
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+@Composable
+private fun UtxoStepRow(
+    utxo: WalletUtxoRow,
+    checked: Boolean,
+    maxValue: Long,
+    onToggle: (String) -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable { onToggle(utxo.key) }
+                .padding(vertical = BwSpace.Gap),
+        horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BwCheckbox(
+            checked = checked,
+            onCheckedChange = { onToggle(utxo.key) },
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            val title = utxoRowTitle(utxo.name, utxo.address)
+            if (title != null) {
+                Text(
+                    text = title.text,
+                    color = if (title.emphasized) BwColors.Ink else BwColors.InkMuted,
+                    fontFamily = BwFontFamily,
+                    fontSize = BwType.BodySize,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BtcAmountText(
+                    sats = utxo.valueSats,
+                    color = BwColors.InkMuted,
+                    trailingColor = BwColors.InkMuted,
+                    fontSize = BwType.CaptionSize,
+                )
+                val age = utxoRowAge(utxo.ageLabel)
+                if (age != null) {
+                    Text(
+                        text = " · $age",
+                        color = BwColors.InkMuted,
+                        fontFamily = BwFontFamily,
+                        fontSize = BwType.CaptionSize,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            HorizontalProgressBar(percent = utxoValuePercent(utxo.valueSats, maxValue))
+        }
+    }
 }
 
 private sealed class DetailsEvent {

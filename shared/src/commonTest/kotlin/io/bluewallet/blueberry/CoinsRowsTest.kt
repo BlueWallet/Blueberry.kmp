@@ -85,19 +85,37 @@ class CoinsRowsTest {
     }
 
     @Test
-    fun caption_is_address_dot_age_dot_name() {
-        assertEquals(null, coinsRowCaption(null, "", null))
-        assertEquals(null, coinsRowCaption("  ", "   ", null))
-        assertEquals("3 years ago", coinsRowCaption(null, "3 years ago".padEnd(16), null))
-        assertEquals("bc1qabc", coinsRowCaption("bc1qabc", "", null))
-        assertEquals("bc1qabc · 3 years ago", coinsRowCaption("bc1qabc", "3 years ago".padEnd(16), null))
+    fun title_prefers_trimmed_name_and_emphasizes_it() {
+        assertEquals(UtxoRowTitle("coffee", emphasized = true), utxoRowTitle("coffee", "bc1qabc"))
+        assertEquals(UtxoRowTitle("coffee", emphasized = true), utxoRowTitle("  coffee  ", "bc1qabc"))
+    }
+
+    @Test
+    fun title_falls_back_to_short_address_dimmed() {
+        assertEquals(UtxoRowTitle("bc1qabc", emphasized = false), utxoRowTitle(null, "bc1qabc"))
+        assertEquals(UtxoRowTitle("bc1qabc", emphasized = false), utxoRowTitle("  ", "bc1qabc"))
         assertEquals(
-            "bc1qhezl…gwryfcr9 · 3 years ago",
-            coinsRowCaption("bc1qhezl2peu0uv6qxjh0lmznp7vq8htm8gwryfcr9", "3 years ago".padEnd(16), null),
+            UtxoRowTitle("bc1qhezl…gwryfcr9", emphasized = false),
+            utxoRowTitle(null, "bc1qhezl2peu0uv6qxjh0lmznp7vq8htm8gwryfcr9"),
         )
-        assertEquals("coffee", coinsRowCaption(null, "", "coffee"))
-        assertEquals("3 years ago · coffee", coinsRowCaption(null, "3 years ago".padEnd(16), "coffee"))
-        assertEquals("bc1qabc · coffee", coinsRowCaption("bc1qabc", "", "coffee"))
-        assertEquals("bc1qabc · 3 years ago · coffee", coinsRowCaption("bc1qabc", "3 years ago".padEnd(16), "coffee"))
+        assertEquals(
+            UtxoRowTitle("19GUye5w…RHs5UHLE", emphasized = false),
+            utxoRowTitle("", "19GUye5w7vYqR7W58BUdprd8RqRHs5UHLE"),
+        )
+    }
+
+    @Test
+    fun title_is_null_when_name_and_address_blank() {
+        assertEquals(null, utxoRowTitle(null, null))
+        assertEquals(null, utxoRowTitle("  ", "  "))
+        assertEquals(null, utxoRowTitle("", null))
+    }
+
+    @Test
+    fun age_trims_padded_label_and_skips_blank() {
+        assertEquals("3 years ago", utxoRowAge("3 years ago".padEnd(16)))
+        assertEquals("9d ago", utxoRowAge("9d ago"))
+        assertEquals(null, utxoRowAge(""))
+        assertEquals(null, utxoRowAge("   "))
     }
 }

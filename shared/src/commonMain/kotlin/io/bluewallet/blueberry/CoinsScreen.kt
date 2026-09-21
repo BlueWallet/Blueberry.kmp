@@ -116,17 +116,35 @@ fun CoinsScreen(
                                         .background(Color(row.circleArgb)),
                             )
                             Column(modifier = Modifier.weight(1f)) {
-                                BtcAmountText(sats = row.valueSats, color = BwColors.Ink)
-                                val caption = coinsRowCaption(row.address, row.ageLabel, row.name)
-                                if (caption != null) {
+                                val title = utxoRowTitle(row.name, row.address)
+                                if (title != null) {
                                     Text(
-                                        text = caption,
-                                        color = BwColors.InkMuted,
+                                        text = title.text,
+                                        color = if (title.emphasized) BwColors.Ink else BwColors.InkMuted,
                                         fontFamily = BwFontFamily,
-                                        fontSize = BwType.CaptionSize,
+                                        fontSize = BwType.BodySize,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    BtcAmountText(
+                                        sats = row.valueSats,
+                                        color = BwColors.InkMuted,
+                                        trailingColor = BwColors.InkMuted,
+                                        fontSize = BwType.CaptionSize,
+                                    )
+                                    val age = utxoRowAge(row.ageLabel)
+                                    if (age != null) {
+                                        Text(
+                                            text = " · $age",
+                                            color = BwColors.InkMuted,
+                                            fontFamily = BwFontFamily,
+                                            fontSize = BwType.CaptionSize,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
                                 }
                                 HorizontalProgressBar(percent = row.barPercent)
                             }
