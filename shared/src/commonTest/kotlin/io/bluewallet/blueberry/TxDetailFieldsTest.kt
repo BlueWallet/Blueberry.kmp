@@ -1,5 +1,6 @@
 package io.bluewallet.blueberry
 
+import fr.acinq.bitcoin.Bech32
 import fr.acinq.bitcoin.OutPoint
 import fr.acinq.bitcoin.Satoshi
 import fr.acinq.bitcoin.Transaction
@@ -8,6 +9,7 @@ import fr.acinq.bitcoin.TxIn
 import fr.acinq.bitcoin.TxOut
 import io.bluewallet.blueberry.parse.TxFee
 import io.bluewallet.blueberry.storage.StoredTx
+import io.bluewallet.blueberry.wallet.outputScriptFromAddress
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -95,5 +97,89 @@ class TxDetailFieldsTest {
         assertEquals(TxDetailField("Fee", "0.00000100 BTC"), fields[1])
         assertEquals(TxDetailField("Fee rate", "0.9 sat/vB"), fields[2])
         assertEquals(TxDetailField("Note", "coffee"), fields[3])
+    }
+
+    @Test
+    fun destinations_drop_change_and_private_destination_follows() {
+        val dest = Bech32.encodeWitnessAddress("bc", 0, ByteArray(20) { 1 })
+        val other = Bech32.encodeWitnessAddress("bc", 0, ByteArray(20) { 2 })
+        val change = Bech32.encodeWitnessAddress("bc", 0, ByteArray(20) { 3 })
+        val tx =
+            Transaction(
+                2L,
+                listOf(TxIn(OutPoint(TxHash(ByteArray(32)), 0L), 0xffffffffL)),
+                listOf(
+                    TxOut(Satoshi(1L), outputScriptFromAddress(dest)),
+                    TxOut(Satoshi(2L), outputScriptFromAddress(change)),
+                    TxOut(Satoshi(3L), outputScriptFromAddress(other)),
+                ),
+                0L,
+            )
+        val fields =
+            txDetailFields(
+                row().copy(netDeltaSats = -1, netDeltaLabel = "-0.00000001"),
+                stored = null,
+                sources =
+                    TxDetailSources(
+                        txBytes = Transaction.write(tx),
+                        changeScripts = listOf(outputScriptFromAddress(change)),
+                        privateDestination = "bc1qprivate",
+                        privateProvider = privateSendProvider(),
+                        privateOrderId = "P-1352e544",
+                    ),
+            )
+        assertEquals(
+            listOf(
+                TxDetailField("Amount", "-0.00000001"),
+                TxDetailField("Destination", "$dest, $other"),
+                TxDetailField("Private destination", "bc1qprivate"),
+                TxDetailField("Provider", "rocketx.exchange"),
+                TxDetailField("Order ID", "P-1352e544"),
+            ),
+            fields.take(5),
+        )
+    }
+
+    @Test
+    fun receive_shows_from_inputs_instead_of_destination() {
+        val first = Bech32.encodeWitnessAddress("bc", 0, ByteArray(20) { 4 })
+        val second = Bech32.encodeWitnessAddress("bc", 0, ByteArray(20) { 5 })
+        val parent =
+            Transaction(
+                2L,
+                listOf(TxIn(OutPoint(TxHash(ByteArray(32)), 0L), 0xffffffffL)),
+                listOf(
+                    TxOut(Satoshi(1L), outputScriptFromAddress(first)),
+                    TxOut(Satoshi(2L), outputScriptFromAddress(second)),
+                ),
+                0L,
+            )
+        val received =
+            Transaction(
+                2L,
+                listOf(
+                    TxIn(OutPoint(parent.txid, 1L), 0xffffffffL),
+                    TxIn(OutPoint(parent.txid, 0L), 0xffffffffL),
+                ),
+                listOf(TxOut(Satoshi(3L), outputScriptFromAddress(first))),
+                0L,
+            )
+        val fields =
+            txDetailFields(
+                row(),
+                stored = null,
+                sources =
+                    TxDetailSources(
+                        txBytes = Transaction.write(received),
+                        parentTx = { id -> if (id == parent.txid.toString()) Transaction.write(parent) else null },
+                    ),
+            )
+        assertEquals(
+            listOf(
+                TxDetailField("Amount", "+0.00000001"),
+                TxDetailField("From", "$second, $first"),
+            ),
+            fields.take(2),
+        )
     }
 }

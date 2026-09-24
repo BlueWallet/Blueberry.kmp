@@ -33,6 +33,7 @@ import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.ui.TextAction
+import io.bluewallet.blueberry.wallet.hexToBytes
 import kotlinx.coroutines.launch
 
 @Composable
@@ -45,7 +46,7 @@ fun TxDetailsScreen(
     var snap by remember { mutableStateOf(runtime.walletTxsStore.get()) }
     var editing by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
-    var copiedTxid by remember { mutableStateOf(false) }
+    var copiedLabel by remember { mutableStateOf<String?>(null) }
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     DisposableEffect(runtime.walletTxsStore) {
@@ -73,12 +74,12 @@ fun TxDetailsScreen(
         } else {
             Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 TxDetailsBody(
+                    sources = txDetailSources(db, runtime.wallet, txid),
                     row = row,
-                    stored = db.transactions.get(txid),
-                    copiedTxid = copiedTxid,
-                    onCopyTxid = {
-                        clipboard.setText(AnnotatedString(it))
-                        copiedTxid = true
+                    copiedLabel = copiedLabel,
+                    onCopy = { label, value ->
+                        clipboard.setText(AnnotatedString(value))
+                        copiedLabel = label
                     },
                     onEditNote = {
                         draft = row.paymentLabel.orEmpty()
@@ -102,14 +103,48 @@ fun TxDetailsScreen(
 }
 
 @Composable
+private fun txDetailSources(
+    db: Database,
+    wallet: io.bluewallet.blueberry.wallet.Wallet?,
+    txid: String,
+): Pair<StoredTx?, TxDetailSources> {
+    val stored = db.transactions.get(txid)
+    val privateSend = db.privateSends.get(txid)
+    val txBytes =
+        stored?.tx
+            ?: privateSend?.txHex?.let(::hexToBytes)
+            ?: db.sends
+                .get(txid)
+                ?.txHex
+                ?.let(::hexToBytes)
+    val changeScripts =
+        wallet
+            ?.snapshot()
+            ?.addresses
+            ?.filter { it.change }
+            ?.map { it.scriptPubKey }
+            .orEmpty()
+    return stored to
+        TxDetailSources(
+            txBytes = txBytes,
+            changeScripts = changeScripts,
+            parentTx = { id -> db.transactions.get(id)?.tx },
+            privateDestination = privateSend?.destination,
+            privateProvider = privateSend?.let { privateSendProvider() },
+            privateOrderId = privateSend?.orderId,
+        )
+}
+
+@Composable
 private fun TxDetailsBody(
+    sources: Pair<StoredTx?, TxDetailSources>,
     row: WalletTxRow,
-    stored: StoredTx?,
-    copiedTxid: Boolean,
-    onCopyTxid: (String) -> Unit,
+    copiedLabel: String?,
+    onCopy: (String, String) -> Unit,
     onEditNote: () -> Unit,
 ) {
-    val fields = txDetailFields(row, stored, row.fee)
+    val (stored, detailSources) = sources
+    val fields = txDetailFields(row, stored, row.fee, detailSources)
     Column(
         modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
@@ -118,8 +153,8 @@ private fun TxDetailsBody(
             TxDetailFieldRow(
                 row = row,
                 field = field,
-                copiedTxid = copiedTxid,
-                onCopyTxid = onCopyTxid,
+                copiedLabel = copiedLabel,
+                onCopy = onCopy,
                 onEditNote = onEditNote,
             )
         }
@@ -130,12 +165,12 @@ private fun TxDetailsBody(
 private fun TxDetailFieldRow(
     row: WalletTxRow,
     field: TxDetailField,
-    copiedTxid: Boolean,
-    onCopyTxid: (String) -> Unit,
+    copiedLabel: String?,
+    onCopy: (String, String) -> Unit,
     onEditNote: () -> Unit,
 ) {
     val isNote = field.label == "Note"
-    val isTxid = field.label == "Transaction ID"
+    val isCopyable = field.label == "Transaction ID" || field.label == "Order ID"
     val incoming = row.netDeltaSats >= 0
     Column(
         modifier =
@@ -144,7 +179,7 @@ private fun TxDetailFieldRow(
                 .then(
                     when {
                         isNote -> Modifier.clickable(onClick = onEditNote)
-                        isTxid -> Modifier.clickable { onCopyTxid(field.value) }
+                        isCopyable -> Modifier.clickable { onCopy(field.label, field.value) }
                         else -> Modifier
                     },
                 ).padding(vertical = BwSpace.Gap),
@@ -179,7 +214,7 @@ private fun TxDetailFieldRow(
                     fontWeight = BwType.Body,
                 )
         }
-        if (isTxid && copiedTxid) {
+        if (isCopyable && copiedLabel == field.label) {
             Text(
                 text = "Copied",
                 color = BwColors.Success,

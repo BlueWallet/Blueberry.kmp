@@ -31,6 +31,7 @@ import io.bluewallet.headers.BlockHeader
 import io.bluewallet.headers.encodeBlockHeader
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -412,6 +413,31 @@ class WalletTxsHydrateTest {
         )
         val pending = snapshotFromDb(db, 1, 1, wallet).txs.single()
         assertEquals(-41_000L, pending.netDeltaSats)
+        assertTrue(pending.privateSend)
+        db.close()
+    }
+
+    @Test
+    fun confirmed_tx_with_private_send_record_is_flagged() {
+        val db = createSqliteDatabase(":memory:")
+        val privateTxid = "aa".repeat(32)
+        val plainTxid = "bb".repeat(32)
+        db.transactions.upsert(StoredTx(privateTxid, 100, 0, "11".repeat(32), byteArrayOf(1), -1_000L))
+        db.transactions.upsert(StoredTx(plainTxid, 100, 1, "11".repeat(32), byteArrayOf(2), 2_000L))
+        db.privateSends.upsert(
+            PrivateSendRow(
+                txid = privateTxid,
+                partner = "ROCKETX",
+                orderId = "ord-1",
+                txHex = "00",
+                destination = "bc1qdest",
+                refundAddress = "bc1qrefund",
+                coins = emptyList(),
+            ),
+        )
+        val byId = snapshotFromDb(db, 1, 1).txs.associateBy { it.txid }
+        assertTrue(byId.getValue(privateTxid).privateSend)
+        assertFalse(byId.getValue(plainTxid).privateSend)
         db.close()
     }
 }

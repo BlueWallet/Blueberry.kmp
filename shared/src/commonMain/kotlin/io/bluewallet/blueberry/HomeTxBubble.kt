@@ -76,6 +76,33 @@ fun HomeTxBubble(
                 maxLines = 1,
             )
         }
+        PrivateSendAmount(tx = tx, incoming = incoming)
+    }
+}
+
+@Composable
+private fun PrivateSendAmount(
+    tx: WalletTxRow,
+    incoming: Boolean,
+) {
+    Column(
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (tx.privateSend) {
+            Text(
+                text = "private send",
+                color = BwColors.Accent,
+                fontFamily = BwFontFamily,
+                fontSize = BwType.CaptionSize,
+                fontWeight = BwType.Caption,
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(BwColors.Accent.copy(alpha = 0.16f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+            )
+        }
         BtcAmountText(
             sats = abs(tx.netDeltaSats),
             color = if (incoming) BwColors.Accent else BwColors.Danger.copy(alpha = 0.7f),
