@@ -203,6 +203,11 @@ class RocketxTest {
     }
 
     @Test
+    fun private_send_preview_names_the_provider() {
+        assertEquals("Provider" to "rocketx.exchange", privateSendProvider())
+    }
+
+    @Test
     fun private_send_pay_is_exact_from_amount() {
         assertEquals(SendAmount.Exact(110_000L), privateSendPayAmount("0.0011"))
         assertEquals(null, privateSendPayAmount(""))

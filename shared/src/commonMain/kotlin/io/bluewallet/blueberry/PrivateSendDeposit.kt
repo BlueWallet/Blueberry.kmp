@@ -25,6 +25,8 @@ import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.PillButton
 
+fun privateSendProvider(): Pair<String, String> = "Provider" to "rocketx.exchange"
+
 @Composable
 internal fun PrivateSendDeposit(
     state: PrivateSendUi.Deposit,
@@ -79,6 +81,8 @@ private fun PrivateSendFacts(
         modifier = modifier.verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
+        val provider = privateSendProvider()
+        PrivateSendDetail(provider.first, provider.second)
         val amount = rocketxGetSats(state.swap.toAmount)
         if (amount != null) {
             PrivateSendDetail("Amount", sats = amount)
