@@ -96,9 +96,9 @@ private const val SIGNING_SECRET_REQUIRED = "signing requires a mnemonic or WIF 
 private const val LEGACY_PREV_TX_REQUIRED =
     "legacy p2pkh input requires nonWitnessUtxo (previous transaction)"
 
-// libsecp256k1 always returns low-S signatures; we additionally grind for low-R so the DER-encoded
-// signature is always exactly 70 bytes (71 with the sighash byte appended). This keeps the pre-sign
-// fee/vsize estimate exactly equal to the real signed transaction's vsize, which the fee math needs.
+// libsecp256k1 returns low-S signatures. A low R can still be one byte short when its top byte is
+// zero, which would make the signed input smaller than the fee estimate. Grind until the DER
+// signature is exactly 70 bytes and R's top bit is clear (71 with the sighash byte).
 private const val LOW_R_SIG_LEN = 71
 private const val COMPRESSED_PUBKEY_LEN = 33
 private const val SCHNORR_SIG_LEN = 64
@@ -137,6 +137,39 @@ private fun placeholderWitness(scriptType: AddressScriptType): ScriptWitness =
 
 private fun outPointFor(utxo: SendInputUtxo): OutPoint = OutPoint(TxHash(hexToBytes(utxo.txid).reversedArray()), utxo.vout.toLong())
 
+/** Script type implied by a standard scriptPubKey. Unknown scripts are sized as legacy inputs. */
+fun scriptTypeOfScriptPubKey(script: ByteArray): AddressScriptType =
+    when {
+        script.size == 22 && script[0] == 0x00.toByte() && script[1] == 0x14.toByte() -> AddressScriptType.P2WPKH
+        script.size == 34 && script[0] == 0x51.toByte() && script[1] == 0x20.toByte() -> AddressScriptType.P2TR
+        script.size == 25 && script[0] == 0x76.toByte() && script[1] == 0xa9.toByte() -> AddressScriptType.P2PKH
+        script.size == 23 && script[0] == 0xa9.toByte() && script[1] == 0x14.toByte() -> AddressScriptType.P2SH_P2WPKH
+        else -> AddressScriptType.P2PKH
+    }
+
+/**
+ * Miner fee for spending [utxos] into [outputScripts] at [feeRateSatPerVb].
+ * Input weight comes from each coin's script type, the same placeholders [buildSignedSendTx] signs.
+ */
+fun estimateSendFeeSats(
+    utxos: List<SendInputUtxo>,
+    feeRateSatPerVb: Double,
+    outputScripts: List<ByteArray>,
+): Long {
+    if (utxos.isEmpty() || outputScripts.isEmpty() || feeRateSatPerVb <= 0.0) return 0L
+    val inputs = utxos.map { estimateTxIn(it, scriptTypeOfScriptPubKey(it.scriptPubKey)) }
+    val outputs = outputScripts.map { TxOut(Satoshi(0L), it) }
+    val vsize = ceilDiv4(Transaction(2L, inputs, outputs, 0L).weight())
+    return ceil(feeRateSatPerVb * vsize).toLong().coerceAtLeast(1L)
+}
+
+/** Miner fee for a max send of [utxos] to [depositScript]. */
+fun estimateSendMaxFeeSats(
+    utxos: List<SendInputUtxo>,
+    feeRateSatPerVb: Double,
+    depositScript: ByteArray,
+): Long = estimateSendFeeSats(utxos, feeRateSatPerVb, listOf(depositScript))
+
 private fun estimateTxIn(
     utxo: SendInputUtxo,
     scriptType: AddressScriptType,
@@ -174,19 +207,23 @@ private fun derLowR(
     privateKey: PrivateKey,
 ): ByteArray {
     val keyBytes = privateKey.value.toByteArray()
-    var compact = Secp256k1.sign(hash, keyBytes)
-    var counter = 0
-    while ((compact[0].toInt() and 0x80) != 0) {
-        require(counter < 1_000_000) { "low-R grinding failed to converge" }
-        val extraEntropy = ByteArray(32)
-        extraEntropy[0] = (counter and 0xff).toByte()
-        extraEntropy[1] = ((counter ushr 8) and 0xff).toByte()
-        extraEntropy[2] = ((counter ushr 16) and 0xff).toByte()
-        extraEntropy[3] = ((counter ushr 24) and 0xff).toByte()
-        compact = Secp256k1.sign(hash, keyBytes, extraEntropy)
-        counter++
+    for (counter in 0 until 1_000_000) {
+        val compact =
+            if (counter == 0) {
+                Secp256k1.sign(hash, keyBytes)
+            } else {
+                val extraEntropy = ByteArray(32)
+                extraEntropy[0] = (counter and 0xff).toByte()
+                extraEntropy[1] = ((counter ushr 8) and 0xff).toByte()
+                extraEntropy[2] = ((counter ushr 16) and 0xff).toByte()
+                extraEntropy[3] = ((counter ushr 24) and 0xff).toByte()
+                Secp256k1.sign(hash, keyBytes, extraEntropy)
+            }
+        val der = Secp256k1.compact2der(compact)
+        val lowR = (compact[0].toInt() and 0x80) == 0
+        if (der.size == LOW_R_SIG_LEN - 1 && lowR) return der + SigHash.SIGHASH_ALL.toByte()
     }
-    return Secp256k1.compact2der(compact) + SigHash.SIGHASH_ALL.toByte()
+    error("signature grinding failed to converge")
 }
 
 private fun signWitnessV0LowR(
@@ -315,10 +352,9 @@ internal fun changeOutputVouts(
 }
 
 /**
- * Shared draft transaction builder for signed sends and unsigned PSBTs. All caller UTXOs are spent
- * (an uneconomical one aborts the whole send); selection uses ceil(rate) sat/vB, then any excess is
- * moved into the change output so the reported fee becomes exactly ceil(rate * vsize). When the
- * destination equals the change address, the payment output is left untouched by that adjustment.
+ * Shared draft transaction builder for signed sends and unsigned PSBTs. Every caller UTXO is spent.
+ * The fee is ceil(rate × vsize) of those inputs and the outputs that are kept. Change is created
+ * only when what remains after that fee is above dust.
  */
 private fun buildDraftSendTx(params: BuildSendTxParams): DraftSendTx {
     if (params.utxos.isEmpty()) throw IllegalArgumentException("no UTXOs selected")
@@ -355,14 +391,7 @@ private fun buildDraftSendTx(params: BuildSendTxParams): DraftSendTx {
         }
     }
 
-    val feePerByteInt = ceil(params.feeRateSatPerVb).toLong()
     val estimateInputs = params.utxos.mapIndexed { index, utxo -> estimateTxIn(utxo, scriptTypes[index]) }
-    estimateInputs.forEachIndexed { index, txIn ->
-        val inputVsize = ceilDiv4(txIn.weight())
-        if (params.utxos[index].valueSats <= feePerByteInt * inputVsize) {
-            throw IllegalArgumentException("some selected UTXOs are uneconomical at this fee rate")
-        }
-    }
 
     val toScript = outputScriptFromAddress(params.toAddress)
     val changeScript = if (sendMax) toScript else outputScriptFromAddress(params.changeAddress)
@@ -372,7 +401,7 @@ private fun buildDraftSendTx(params: BuildSendTxParams): DraftSendTx {
 
     val weightWithoutChange = Transaction(2L, estimateInputs, preChangeOutputs, 0L).weight()
     val vsizeWithoutChange = ceilDiv4(weightWithoutChange)
-    val feeWithoutChange = feePerByteInt * vsizeWithoutChange
+    val feeWithoutChange = ceil(params.feeRateSatPerVb * vsizeWithoutChange).toLong()
 
     val weightWithChange =
         Transaction(
@@ -382,58 +411,22 @@ private fun buildDraftSendTx(params: BuildSendTxParams): DraftSendTx {
             0L,
         ).weight()
     val vsizeWithChange = ceilDiv4(weightWithChange)
-    val feeWithChange = feePerByteInt * vsizeWithChange
+    val feeWithChange = ceil(params.feeRateSatPerVb * vsizeWithChange).toLong()
 
     val outputSumBeforeChange = if (sendMax) 0L else amount
     val changeCandidate = inputSum - outputSumBeforeChange - feeWithChange
     val needChange = changeCandidate > DUST_SATS
 
     val selectedVsize: Int
-    val selectedFeeInt: Long
-    val draftOutputs: List<TxOut>
+    val finalOutputs: List<TxOut>
     if (needChange) {
         selectedVsize = vsizeWithChange
-        selectedFeeInt = feeWithChange
-        draftOutputs = preChangeOutputs + listOf(TxOut(Satoshi(changeCandidate), changeScript))
+        finalOutputs = preChangeOutputs + listOf(TxOut(Satoshi(changeCandidate), changeScript))
+    } else if (sendMax || inputSum < amount + feeWithoutChange) {
+        throw IllegalArgumentException("insufficient funds for amount and fee")
     } else {
         selectedVsize = vsizeWithoutChange
-        selectedFeeInt = feeWithoutChange
-        draftOutputs = preChangeOutputs
-    }
-
-    if (sendMax && draftOutputs.size != 1) {
-        throw IllegalArgumentException("insufficient funds for amount and fee")
-    }
-
-    // Integer sat/vB selection, then move the excess into change so the fee becomes
-    // ceil(rate * vsize). When dest === change, skip the payment output so it stays exact.
-    val targetFee = ceil(params.feeRateSatPerVb * selectedVsize).toLong()
-    val excess = selectedFeeInt - targetFee
-    val skipPaymentAmount = if (!sendMax && toScript.contentEquals(changeScript)) amount else null
-
-    var appliedExcess = false
-    val finalOutputs =
-        if (excess > 0) {
-            draftOutputs.map { out ->
-                if (!appliedExcess &&
-                    out.publicKeyScript.toByteArray().contentEquals(changeScript) &&
-                    (skipPaymentAmount == null || out.amount.toLong() != skipPaymentAmount)
-                ) {
-                    appliedExcess = true
-                    out.copy(amount = Satoshi(out.amount.toLong() + excess))
-                } else {
-                    out
-                }
-            }
-        } else {
-            draftOutputs
-        }
-
-    if (!sendMax) {
-        val checkFee = if (appliedExcess) targetFee else selectedFeeInt
-        if (inputSum < amount + checkFee) {
-            throw IllegalArgumentException("insufficient funds for amount and fee")
-        }
+        finalOutputs = preChangeOutputs
     }
 
     val unsignedInputs = params.utxos.map { TxIn(outPointFor(it), SEQUENCE_FINAL) }

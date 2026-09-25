@@ -229,21 +229,26 @@ private fun pendingSendRows(
             stillPending += row
         }
     }
-    return stillPending
-        .sortedByDescending { it.createdAt }
-        .map { row ->
-            val delta =
-                runCatching {
-                    inferPendingSendNetDelta(
-                        coins = row.coins,
-                        destination = row.destination,
-                        txHex = row.txHex,
-                        keepAddresses = row.keepAddresses,
-                    )
-                }.getOrElse { -row.coins.sumOf { coin -> coin.valueSats } }
-            pendingWalletTxRow(row, delta, labelByTxid, utxoLabelByTxid)
-        }
+    return pendingWalletRows(stillPending, labelByTxid, utxoLabelByTxid)
 }
+
+private fun pendingWalletRows(
+    pending: List<PendingSendCandidate>,
+    labelByTxid: Map<String, String>,
+    utxoLabelByTxid: Map<String, String>,
+): List<WalletTxRow> =
+    pending.sortedByDescending { it.createdAt }.map { row ->
+        val delta =
+            runCatching {
+                inferPendingSendNetDelta(
+                    coins = row.coins,
+                    destination = row.destination,
+                    txHex = row.txHex,
+                    keepAddresses = row.keepAddresses,
+                )
+            }.getOrElse { -row.coins.sumOf { coin -> coin.valueSats } }
+        pendingWalletTxRow(row, delta, labelByTxid, utxoLabelByTxid)
+    }
 
 private fun pendingWalletTxRow(
     row: PendingSendCandidate,
@@ -358,7 +363,6 @@ fun snapshotFromDb(
                     ?.map { it.address }
                     .orEmpty(),
         )
-
     return WalletTxsSnapshot(
         at = at,
         balanceSats = balanceSats,

@@ -1,8 +1,11 @@
 package io.bluewallet.blueberry.peers.net
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import java.net.ServerSocket
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -90,6 +93,33 @@ class PlatformNetJvmTest {
         assertTrue(error.get()?.contains("timed out") == true, error.get())
         assertTrue(elapsedMs.get() in 1..2_000, "elapsed=${elapsedMs.get()}ms")
     }
+
+    @Test
+    fun write_proceeds_while_a_read_is_blocked() =
+        runBlocking {
+            val server = ServerSocket(0)
+            val port = server.localPort
+            val serverJob =
+                launch(Dispatchers.IO) {
+                    server.use { ss ->
+                        ss.accept().use { sock ->
+                            val incoming = sock.getInputStream().read()
+                            sock.getOutputStream().write(incoming)
+                            sock.getOutputStream().flush()
+                        }
+                    }
+                }
+            val duplex = createPlatformNet().connect("127.0.0.1", port)
+            val readJob = async { duplex.read(1) }
+            delay(100)
+            withTimeout(1_000) {
+                duplex.write(byteArrayOf(9))
+            }
+            val got = withTimeout(1_000) { readJob.await() }
+            duplex.close()
+            serverJob.join()
+            assertContentEquals(byteArrayOf(9), got)
+        }
 
     @Test
     fun dns_resolve4_localhost_is_loopback() =

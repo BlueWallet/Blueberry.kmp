@@ -5,6 +5,8 @@ import io.bluewallet.blueberry.wallet.SendAmount
 import io.bluewallet.blueberry.wallet.SendInputUtxo
 import io.bluewallet.blueberry.wallet.SignedSendResult
 import io.bluewallet.blueberry.wallet.WalletSecretKind
+import io.bluewallet.blueberry.wallet.estimateSendFeeSats
+import io.bluewallet.blueberry.wallet.outputScriptFromAddress
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -218,9 +220,16 @@ class RocketxTest {
         assertEquals(SendAmount.Max, privateSendBuildAmount(SendAmount.Max, "0.0019"))
         assertEquals(SendAmount.Exact(110_000L), privateSendBuildAmount(SendAmount.Exact(10_000L), "0.0011"))
         assertEquals(null, privateSendBuildAmount(SendAmount.Exact(10_000L), ""))
-        assertEquals("private send max left change", privateSendMaxSignError(changeSats = 1L, paidSats = 190_000L, fromBtc = "0.0019"))
-        assertEquals("deposit below swap amount", privateSendMaxSignError(changeSats = 0L, paidSats = 180_000L, fromBtc = "0.0019"))
+        assertEquals(
+            "private send max left change",
+            privateSendMaxSignError(changeSats = 1L, paidSats = 190_000L, fromBtc = "0.0019"),
+        )
+        assertEquals(
+            "deposit below swap amount",
+            privateSendMaxSignError(changeSats = 0L, paidSats = 180_000L, fromBtc = "0.0019"),
+        )
         assertNull(privateSendMaxSignError(changeSats = 0L, paidSats = 190_000L, fromBtc = "0.0019"))
+        assertNull(privateSendMaxSignError(changeSats = 0L, paidSats = 200_000L, fromBtc = "0.0019"))
     }
 
     @Test
@@ -269,6 +278,20 @@ class RocketxTest {
         assertEquals(true, privateSendCanPay("0.001", selectedSumSats = 120_000L, feeSats = 10_000L))
         assertEquals(false, privateSendCanPay("0.0012", selectedSumSats = 120_000L, feeSats = 10_000L))
         assertEquals(false, privateSendCanPay("", selectedSumSats = 120_000L, feeSats = 1L))
+    }
+
+    @Test
+    fun exact_fee_is_larger_than_a_sweep_for_the_same_coins() {
+        val script = outputScriptFromAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+        val utxo = SendInputUtxo("11".repeat(32), 0, 100_000L, script)
+        val sweep = estimatePrivateSendMaxFee(listOf(utxo), 5.0)
+        val withChange =
+            estimateSendFeeSats(
+                listOf(utxo),
+                5.0,
+                listOf(PRIVATE_SEND_DEPOSIT_SCRIPT, script),
+            )
+        assertTrue(withChange > sweep)
     }
 
     @Test

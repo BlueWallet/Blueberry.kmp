@@ -25,9 +25,10 @@ fun inferPendingSendNetDelta(
         tx.txOut.filter { out ->
             val script = out.publicKeyScript.toByteArray()
             when {
+                keepScripts.any { script.contentEquals(it) } -> true
                 destScript != null && script.contentEquals(destScript) -> false
                 destInTx -> true
-                else -> keepScripts.any { script.contentEquals(it) }
+                else -> false
             }
         }
     return ours.sumOf { it.amount.toLong() } - inputs

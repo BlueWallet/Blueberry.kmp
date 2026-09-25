@@ -33,6 +33,8 @@ import io.bluewallet.blueberry.ui.ProgressMetricCard
 import io.bluewallet.blueberry.wallet.SendAmount
 import io.bluewallet.blueberry.wallet.SignedSendResult
 import io.bluewallet.blueberry.wallet.Wallet
+import io.bluewallet.blueberry.wallet.estimateSendFeeSats
+import io.bluewallet.blueberry.wallet.outputScriptFromAddress
 import io.bluewallet.echalote.FetchProgressListener
 import kotlinx.coroutines.launch
 
@@ -182,11 +184,15 @@ internal fun finishPrivateSend(
 }
 
 private fun privateSendMinerFee(session: PrivateSendSession): Long =
-    estimatePrivateSendMinerFee(
-        inputCount = session.utxos.size,
-        feeRateSatPerVb = session.feeRateSatPerVb,
-        change = session.amountSats !is SendAmount.Max,
-    )
+    when (session.amountSats) {
+        SendAmount.Max -> estimatePrivateSendMaxFee(session.utxos, session.feeRateSatPerVb)
+        is SendAmount.Exact ->
+            estimateSendFeeSats(
+                session.utxos,
+                session.feeRateSatPerVb,
+                listOf(PRIVATE_SEND_DEPOSIT_SCRIPT, outputScriptFromAddress(session.refundAddress)),
+            )
+    }
 
 private fun signedPrivateSend(
     session: PrivateSendSession,

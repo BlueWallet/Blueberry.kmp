@@ -234,7 +234,8 @@ private suspend fun connectSocket(
 private class PosixByteDuplex(
     initialFd: Int,
 ) : ByteDuplex {
-    private val mutex = Mutex()
+    private val readMutex = Mutex()
+    private val writeMutex = Mutex()
     private val fd = AtomicInt(initialFd)
 
     private suspend fun <T> abortableIo(
@@ -253,7 +254,7 @@ private class PosixByteDuplex(
     }
 
     override suspend fun read(n: Int): ByteArray =
-        mutex.withLock {
+        readMutex.withLock {
             val current = fd.load()
             if (current < 0) return@withLock ByteArray(0)
             abortableIo(current) {
@@ -271,7 +272,7 @@ private class PosixByteDuplex(
         }
 
     override suspend fun write(bytes: ByteArray) =
-        mutex.withLock {
+        writeMutex.withLock {
             val current = fd.load()
             check(current >= 0) { "socket closed" }
             abortableIo(current) {
@@ -296,8 +297,10 @@ private class PosixByteDuplex(
         if (current < 0) return
         shutdown(current, SHUT_RDWR)
         withContext(NonCancellable) {
-            mutex.withLock {
-                platform.posix.close(current)
+            readMutex.withLock {
+                writeMutex.withLock {
+                    platform.posix.close(current)
+                }
             }
         }
     }
