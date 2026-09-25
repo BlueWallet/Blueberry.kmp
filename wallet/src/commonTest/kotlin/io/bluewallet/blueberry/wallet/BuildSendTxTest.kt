@@ -81,6 +81,29 @@ class BuildSendTxTest {
     }
 
     @Test
+    fun max_send_fee_matches_signed_sweep_for_the_deposit_script() {
+        val wallet = abandonWallet()
+        val utxo = utxoAt(wallet)
+        val deposit = outputScriptOf(BLUE_EXTERNAL_1)
+        val feeRate = 3.5
+        val estimated = estimateSendMaxFeeSats(listOf(utxo), feeRate, deposit)
+        val result =
+            buildSignedSendTx(
+                baseParams(wallet = wallet, utxos = listOf(utxo), amount = SendAmount.Max, feeRate = feeRate),
+            )
+        assertEquals(0L, result.changeSats)
+        assertEquals(estimated, result.feeSats)
+        assertEquals(
+            utxo.valueSats - estimated,
+            parseSigned(result.txHex)
+                .txOut
+                .single()
+                .amount
+                .toLong(),
+        )
+    }
+
+    @Test
     fun fractional_fee_rate_uses_ceil_rate_times_vsize() {
         val wallet = abandonWallet()
         for (feeRate in listOf(0.5, 1.5)) {
@@ -149,29 +172,36 @@ class BuildSendTxTest {
     }
 
     @Test
-    fun send_max_rejects_uneconomical_utxo() {
+    fun send_max_spends_a_utxo_that_does_not_cover_its_own_fee() {
         val wallet = abandonWallet()
         val big = utxoAt(wallet, 0)
         val tiny = utxoAt(wallet, 1).copy(txid = "22".repeat(32), valueSats = 30L)
-        val error =
-            assertFailsWith<IllegalArgumentException> {
-                buildSignedSendTx(baseParams(wallet = wallet, utxos = listOf(big, tiny), amount = SendAmount.Max, feeRate = 1.0))
-            }
-        assertTrue(error.message.orEmpty().contains("uneconomical"))
+        val result =
+            buildSignedSendTx(baseParams(wallet = wallet, utxos = listOf(big, tiny), amount = SendAmount.Max, feeRate = 1.0))
+        val tx = parseSigned(result.txHex)
+        assertEquals(2, tx.txIn.size)
+        assertEquals(1, tx.txOut.size)
+        assertEquals(0L, result.changeSats)
+        assertEquals(big.valueSats + tiny.valueSats - result.feeSats, tx.txOut[0].amount.toLong())
+        assertEquals(result.vsize.toLong(), result.feeSats)
     }
 
     @Test
-    fun non_max_also_rejects_uneconomical_utxos() {
+    fun exact_send_spends_a_utxo_that_does_not_cover_its_own_fee() {
         val wallet = abandonWallet()
         val big = utxoAt(wallet, 0)
         val tiny = utxoAt(wallet, 1).copy(txid = "22".repeat(32), valueSats = 30L)
-        val error =
-            assertFailsWith<IllegalArgumentException> {
-                buildSignedSendTx(
-                    baseParams(wallet = wallet, utxos = listOf(big, tiny), amount = SendAmount.Exact(50_000L), feeRate = 1.0),
-                )
-            }
-        assertTrue(error.message.orEmpty().contains("uneconomical"))
+        val amount = 50_000L
+        val result =
+            buildSignedSendTx(
+                baseParams(wallet = wallet, utxos = listOf(big, tiny), amount = SendAmount.Exact(amount), feeRate = 1.0),
+            )
+        val tx = parseSigned(result.txHex)
+        assertEquals(2, tx.txIn.size)
+        assertEquals(2, tx.txOut.size)
+        assertEquals(amount, tx.txOut[0].amount.toLong())
+        assertEquals(big.valueSats + tiny.valueSats - amount - result.feeSats, result.changeSats)
+        assertEquals(result.vsize.toLong(), result.feeSats)
     }
 
     @Test

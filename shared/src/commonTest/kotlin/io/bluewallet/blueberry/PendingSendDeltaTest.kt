@@ -48,6 +48,38 @@ class PendingSendDeltaTest {
     }
 
     @Test
+    fun send_to_own_address_is_only_the_fee() {
+        val db = createSqliteDatabase(":memory:")
+        saveWalletSecret(
+            db,
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        val wallet = createWallet(db)
+        val dest = wallet.snapshot().addresses.first { !it.change && it.index == 1 }
+        val change = wallet.snapshot().addresses.first { it.change && it.index == 0 }
+        val tx =
+            Transaction(
+                2L,
+                listOf(TxIn(OutPoint(TxHash(ByteArray(32).also { it[0] = 1 }), 0L), 0xffffffffL)),
+                listOf(
+                    TxOut(Satoshi(40_000L), dest.scriptPubKey),
+                    TxOut(Satoshi(9_000L), change.scriptPubKey),
+                ),
+                0L,
+            )
+        assertEquals(
+            -1_000L,
+            inferPendingSendNetDelta(
+                coins = listOf(PrivateSendCoin("aa".repeat(32), 0, 50_000L)),
+                destination = dest.address,
+                txHex = hexFromBytes(Transaction.write(tx)),
+                keepAddresses = listOf(dest.address, change.address),
+            ),
+        )
+        db.close()
+    }
+
+    @Test
     fun private_send_without_dest_output_keeps_refund_as_change() {
         val db = createSqliteDatabase(":memory:")
         saveWalletSecret(

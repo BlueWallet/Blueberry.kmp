@@ -440,4 +440,37 @@ class WalletTxsHydrateTest {
         assertFalse(byId.getValue(plainTxid).privateSend)
         db.close()
     }
+
+    @Test
+    fun self_send_pending_row_counts_only_the_fee() {
+        val db = createSqliteDatabase(":memory:")
+        val secret =
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        saveWalletSecret(db, secret)
+        val wallet = createWallet(db)
+        val dest = wallet.snapshot().addresses.first { !it.change && it.index == 1 }
+        val change = wallet.snapshot().addresses.first { it.change && it.index == 0 }
+        val send =
+            Transaction(
+                2L,
+                listOf(TxIn(OutPoint(TxHash(ByteArray(32).also { it[0] = 3 }), 0L), 0xffffffffL)),
+                listOf(
+                    TxOut(Satoshi(40_000L), dest.scriptPubKey),
+                    TxOut(Satoshi(9_000L), change.scriptPubKey),
+                ),
+                0L,
+            )
+        db.sends.upsert(
+            SendRow(
+                txid = send.txid.toString(),
+                txHex = hexFromBytes(Transaction.write(send)),
+                destination = dest.address,
+                coins = listOf(PrivateSendCoin("ee".repeat(32), 0, 50_000L)),
+            ),
+        )
+        val snap = snapshotFromDb(db, 1, 1, wallet)
+        assertEquals(-1_000L, snap.txs.single().netDeltaSats)
+        assertEquals(0L, snap.balanceSats)
+        db.close()
+    }
 }

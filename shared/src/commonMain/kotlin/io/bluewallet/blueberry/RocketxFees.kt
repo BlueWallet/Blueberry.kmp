@@ -1,8 +1,10 @@
 package io.bluewallet.blueberry
 
 import io.bluewallet.blueberry.wallet.SendAmount
+import io.bluewallet.blueberry.wallet.SendInputUtxo
 import io.bluewallet.blueberry.wallet.WalletSecretKind
-import kotlin.math.ceil
+import io.bluewallet.blueberry.wallet.estimateSendMaxFeeSats
+import io.bluewallet.blueberry.wallet.outputScriptFromAddress
 
 fun rocketxGetSats(toAmount: String): Long? = parseRocketxBtcToSats(toAmount)
 
@@ -12,15 +14,14 @@ fun privateSendNeedBtc(amount: SendAmount): String? =
         SendAmount.Max -> null
     }
 
-fun estimatePrivateSendMinerFee(
-    inputCount: Int,
+/** Native-segwit deposit. RocketX returns a bc1q address; vsize depends on the script size, not the address text. */
+internal val PRIVATE_SEND_DEPOSIT_SCRIPT: ByteArray =
+    outputScriptFromAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+
+fun estimatePrivateSendMaxFee(
+    utxos: List<SendInputUtxo>,
     feeRateSatPerVb: Double,
-    change: Boolean = true,
-): Long {
-    val outputs = if (change) 68 else 34
-    val vsize = 11 + inputCount * 148 + outputs
-    return ceil(feeRateSatPerVb * vsize).toLong().coerceAtLeast(1L)
-}
+): Long = estimateSendMaxFeeSats(utxos, feeRateSatPerVb, PRIVATE_SEND_DEPOSIT_SCRIPT)
 
 fun privateSendBuildAmount(
     amount: SendAmount,

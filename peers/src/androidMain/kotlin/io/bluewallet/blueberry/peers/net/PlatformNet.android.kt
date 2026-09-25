@@ -71,7 +71,8 @@ private suspend fun connectSocket(
 private class SocketByteDuplex(
     private val socket: Socket,
 ) : ByteDuplex {
-    private val mutex = Mutex()
+    private val readMutex = Mutex()
+    private val writeMutex = Mutex()
 
     private suspend fun <T> abortableIo(block: () -> T): T {
         val job = ioScope.async { block() }
@@ -85,7 +86,7 @@ private class SocketByteDuplex(
     }
 
     override suspend fun read(n: Int): ByteArray =
-        mutex.withLock {
+        readMutex.withLock {
             abortableIo {
                 if (socket.isClosed) {
                     ByteArray(0)
@@ -98,7 +99,7 @@ private class SocketByteDuplex(
         }
 
     override suspend fun write(bytes: ByteArray) =
-        mutex.withLock {
+        writeMutex.withLock {
             abortableIo {
                 socket.getOutputStream().write(bytes)
                 socket.getOutputStream().flush()
