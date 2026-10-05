@@ -204,6 +204,7 @@ fun CoinsScreen(
                     if (save) {
                         val wallet = runtime.wallet ?: return@CoinsUtxoSheet
                         setUtxoName(db, wallet, runtime.walletTxsStore, row.key, draft)
+                        uploadLabels(scope, db)
                     }
                     editingKey = null
                 },

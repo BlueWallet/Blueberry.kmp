@@ -13,10 +13,12 @@ fun setTxNote(
     note: String,
 ) {
     val trimmed = note.trim()
-    if (trimmed.isEmpty()) {
-        db.txPaymentLabels.delete(txid)
-    } else {
-        db.txPaymentLabels.upsert(TxPaymentLabelRow(txid, trimmed))
+    editLabels(db) {
+        if (trimmed.isEmpty()) {
+            db.txPaymentLabels.delete(txid)
+        } else {
+            db.txPaymentLabels.upsert(TxPaymentLabelRow(txid, trimmed))
+        }
     }
     val at = nowMillis()
     walletTxsStore.apply(snapshotFromDb(db, at, at, wallet))

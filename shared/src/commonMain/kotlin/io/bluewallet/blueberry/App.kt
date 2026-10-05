@@ -120,7 +120,14 @@ fun App(databasePath: String) {
                 }
             val scope = rememberCoroutineScope()
             DisposableEffect(runtime) {
-                val job = scope.launch(Dispatchers.Default) { runtime?.start() }
+                val job =
+                    scope.launch(Dispatchers.Default) {
+                        val peers = runtime
+                        if (peers != null) {
+                            runCatching { restoreWalletLabelsOnColdStart(db) }
+                            peers.start()
+                        }
+                    }
                 onDispose {
                     job.cancel()
                     runtime?.stop()
