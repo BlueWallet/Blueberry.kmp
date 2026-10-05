@@ -6,13 +6,7 @@ plugins {
 }
 
 kotlin {
-    listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
-        target.compilations.getByName("main") {
-            cinterops.create("commonCryptoSpi") {
-                definitionFile.set(layout.projectDirectory.file("src/iosMain/cinterop/commonCryptoSpi.def"))
-            }
-        }
-    }
+    listOf(iosArm64(), iosSimulatorArm64())
     jvm()
     android {
         namespace = "io.bluewallet.blueberry.labels"

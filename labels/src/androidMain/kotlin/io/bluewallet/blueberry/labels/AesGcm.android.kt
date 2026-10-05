@@ -1,9 +1,7 @@
 package io.bluewallet.blueberry.labels
 
 import java.security.SecureRandom
-import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
-import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
@@ -15,31 +13,13 @@ internal actual fun secureRandomBytes(size: Int): ByteArray {
     return out
 }
 
-internal actual fun aesGcmEncrypt(
+internal actual fun aesBlockEncrypt(
     key: ByteArray,
-    iv: ByteArray,
-    plaintext: ByteArray,
-): Pair<ByteArray, ByteArray> {
-    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-    cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, iv))
-    val combined = cipher.doFinal(plaintext)
-    val tagAt = combined.size - 16
-    return combined.copyOfRange(0, tagAt) to combined.copyOfRange(tagAt, combined.size)
-}
-
-internal actual fun aesGcmDecrypt(
-    key: ByteArray,
-    iv: ByteArray,
-    ciphertext: ByteArray,
-    tag: ByteArray,
+    block: ByteArray,
 ): ByteArray {
-    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-    cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, iv))
-    return try {
-        cipher.doFinal(ciphertext + tag)
-    } catch (_: AEADBadTagException) {
-        throw IllegalArgumentException("metadata authentication failed")
-    }
+    val cipher = Cipher.getInstance("AES/ECB/NoPadding")
+    cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"))
+    return cipher.doFinal(block)
 }
 
 internal actual fun aesCbcEncrypt(
