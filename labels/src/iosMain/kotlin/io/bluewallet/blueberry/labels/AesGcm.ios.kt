@@ -64,7 +64,7 @@ internal actual fun aesGcmEncrypt(
                 }
             }
         }
-    check(status == kCCSuccess) { "AES-GCM encrypt failed: $status" }
+    check(status == 0u) { "AES-GCM encrypt failed: $status" }
     return ciphertext to tag
 }
 
@@ -101,7 +101,7 @@ internal actual fun aesGcmDecrypt(
                 }
             }
         }
-    require(status == kCCSuccess) { "metadata authentication failed" }
+    require(status == 0u) { "metadata authentication failed" }
     return plaintext
 }
 
