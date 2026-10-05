@@ -1,5 +1,7 @@
 package io.bluewallet.blueberry.labels
 
+import commonCryptoSpi.CCCryptorGCMOneshotDecrypt
+import commonCryptoSpi.CCCryptorGCMOneshotEncrypt
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ULongVar
 import kotlinx.cinterop.addressOf
@@ -10,8 +12,6 @@ import kotlinx.cinterop.ptr
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
 import platform.CoreCrypto.CCCrypt
-import platform.CoreCrypto.CCCryptorGCMOneshotDecrypt
-import platform.CoreCrypto.CCCryptorGCMOneshotEncrypt
 import platform.CoreCrypto.kCCAlgorithmAES
 import platform.CoreCrypto.kCCEncrypt
 import platform.CoreCrypto.kCCSuccess
