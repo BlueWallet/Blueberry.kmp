@@ -86,6 +86,7 @@ kotlin {
                 implementation(project(":sync"))
                 implementation(project(":parse"))
                 implementation(project(":broadcast"))
+                implementation(project(":labels"))
                 implementation(libs.compose.runtime)
                 implementation(libs.compose.foundation)
                 implementation(libs.compose.material3)
@@ -103,6 +104,7 @@ kotlin {
                 implementation(libs.echalote)
                 implementation(libs.qr)
                 implementation(libs.kotlinx.coroutines.core)
+                implementation(libs.bitcoin.kmp)
             }
         }
         commonTest.dependencies {

@@ -36,7 +36,9 @@ import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.estimateSendFeeSats
 import io.bluewallet.blueberry.wallet.outputScriptFromAddress
 import io.bluewallet.echalote.FetchProgressListener
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlin.coroutines.coroutineContext
 
 class PrivateSendCallbacks(
     val onSigned: (SignedSendResult) -> Unit,
@@ -168,7 +170,7 @@ internal fun privateSendSwapError(
     }
 }
 
-internal fun finishPrivateSend(
+internal suspend fun finishPrivateSend(
     session: PrivateSendSession,
     swap: RocketxSwap,
     host: PrivateSendHost,
@@ -194,7 +196,7 @@ private fun privateSendMinerFee(session: PrivateSendSession): Long =
             )
     }
 
-private fun signedPrivateSend(
+private suspend fun signedPrivateSend(
     session: PrivateSendSession,
     swap: RocketxSwap,
     host: PrivateSendHost,
@@ -225,7 +227,12 @@ private fun signedPrivateSend(
             else -> null
         }
     if (signed == null || fail != null) return PrivateSendUi.Error(fail ?: "wallet cannot sign")
-    savePaymentLabel(host.db, signed.txid, session.label, signed.changeVouts)
+    editLabels(host.db) {
+        savePaymentLabel(host.db, signed.txid, session.label, signed.changeVouts)
+    }
+    CoroutineScope(coroutineContext).launch {
+        runCatching { publishWalletLabels(host.db) }
+    }
     return PrivateSendUi.Deposit(
         swap = swap,
         signed = signed,

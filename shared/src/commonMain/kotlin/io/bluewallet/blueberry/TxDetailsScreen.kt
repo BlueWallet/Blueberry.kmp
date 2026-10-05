@@ -89,17 +89,34 @@ fun TxDetailsScreen(
             }
         }
     }
-    if (editing) {
-        TxNoteDialog(
-            draft = draft,
-            onDraft = { draft = it },
-            onSave = {
-                setTxNote(db, runtime.wallet, runtime.walletTxsStore, txid, draft)
-                editing = false
-            },
-            onCancel = { editing = false },
-        )
-    }
+    TxNoteEditor(
+        editing = editing,
+        draft = draft,
+        onDraft = { draft = it },
+        onSave = {
+            setTxNote(db, runtime.wallet, runtime.walletTxsStore, txid, draft)
+            uploadLabels(scope, db)
+            editing = false
+        },
+        onCancel = { editing = false },
+    )
+}
+
+@Composable
+private fun TxNoteEditor(
+    editing: Boolean,
+    draft: String,
+    onDraft: (String) -> Unit,
+    onSave: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    if (!editing) return
+    TxNoteDialog(
+        draft = draft,
+        onDraft = onDraft,
+        onSave = onSave,
+        onCancel = onCancel,
+    )
 }
 
 @Composable

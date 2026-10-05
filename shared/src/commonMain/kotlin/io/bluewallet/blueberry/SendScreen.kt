@@ -310,7 +310,10 @@ fun SendScreen(
                                                         is SignedSendResult -> built.changeVouts
                                                         is PsbtSendResult -> built.changeVouts
                                                     }
-                                                savePaymentLabel(db, txid, d.paymentLabel, changeVouts)
+                                                editLabels(db) {
+                                                    savePaymentLabel(db, txid, d.paymentLabel, changeVouts)
+                                                }
+                                                uploadLabels(scope, db)
                                                 preview = built
                                                 previewUtxos =
                                                     selected.map {

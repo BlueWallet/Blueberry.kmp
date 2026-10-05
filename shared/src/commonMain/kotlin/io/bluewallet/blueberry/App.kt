@@ -31,6 +31,7 @@ import io.bluewallet.blueberry.boot.saveAlwaysShowSyncProgress
 import io.bluewallet.blueberry.boot.saveAppearance
 import io.bluewallet.blueberry.boot.saveHomeDetailedSync
 import io.bluewallet.blueberry.boot.sqliteDatabaseBytes
+import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.onboarding.DatabaseOpenErrorScreen
 import io.bluewallet.blueberry.onboarding.InvalidSecretScreen
 import io.bluewallet.blueberry.onboarding.OnboardingApp
@@ -120,7 +121,20 @@ fun App(databasePath: String) {
                 }
             val scope = rememberCoroutineScope()
             DisposableEffect(runtime) {
-                val job = scope.launch(Dispatchers.Default) { runtime?.start() }
+                val job =
+                    scope.launch(Dispatchers.Default) {
+                        val peers = runtime
+                        if (peers != null) {
+                            startPeersThenRestoreLabels(
+                                startPeers = { peers.start() },
+                                restoreLabels = { restoreWalletLabelsOnColdStart(db) },
+                                onRestored = {
+                                    val at = nowMillis()
+                                    peers.walletTxsStore.apply(snapshotFromDb(db, at, at, peers.wallet))
+                                },
+                            )
+                        }
+                    }
                 onDispose {
                     job.cancel()
                     runtime?.stop()

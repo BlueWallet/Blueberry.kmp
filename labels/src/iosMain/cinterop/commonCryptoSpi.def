@@ -1,0 +1,25 @@
+package = commonCryptoSpi
+---
+#include <stdint.h>
+#include <stddef.h>
+
+typedef uint32_t CCCryptorStatus;
+typedef uint32_t CCAlgorithm;
+
+CCCryptorStatus CCCryptorGCMOneshotEncrypt(
+    CCAlgorithm alg,
+    const void *key, size_t keyLength,
+    const void *iv, size_t ivLength,
+    const void *aData, size_t aDataLength,
+    const void *dataIn, size_t dataInLength,
+    void *dataOut,
+    void *tagOut, size_t tagLength);
+
+CCCryptorStatus CCCryptorGCMOneshotDecrypt(
+    CCAlgorithm alg,
+    const void *key, size_t keyLength,
+    const void *iv, size_t ivLength,
+    const void *aData, size_t aDataLength,
+    const void *dataIn, size_t dataInLength,
+    void *dataOut,
+    const void *tag, size_t tagLength);
