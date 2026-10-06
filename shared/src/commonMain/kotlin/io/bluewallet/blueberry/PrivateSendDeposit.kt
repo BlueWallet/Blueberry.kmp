@@ -3,6 +3,7 @@ package io.bluewallet.blueberry
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
@@ -13,12 +14,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import io.bluewallet.blueberry.parse.formatSatPerVb
 import io.bluewallet.blueberry.ui.BtcAmountText
+import io.bluewallet.blueberry.ui.BwCheckbox
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
@@ -26,6 +35,41 @@ import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.PillButton
 
 fun privateSendProvider(): Pair<String, String> = "Provider" to "rocketx.exchange"
+
+sealed class TermsSpan {
+    data class Plain(
+        val text: String,
+    ) : TermsSpan()
+
+    data class Link(
+        val text: String,
+        val url: String,
+    ) : TermsSpan()
+}
+
+fun privateSendTermsSpans(): List<TermsSpan> =
+    listOf(
+        TermsSpan.Plain("I agree to the "),
+        TermsSpan.Link(
+            "Terms of Use",
+            "https://cdn.rocketx.exchange/pd135zq/docs/rocketx-exchange-terms.pdf",
+        ),
+        TermsSpan.Plain(" and "),
+        TermsSpan.Link(
+            "Privacy Policy",
+            "https://cdn.rocketx.exchange/pd135zq/docs/privacy-policy.pdf",
+        ),
+    )
+
+fun privateSendTermsSentence(): String =
+    privateSendTermsSpans().joinToString(separator = "") { span ->
+        when (span) {
+            is TermsSpan.Plain -> span.text
+            is TermsSpan.Link -> span.text
+        }
+    }
+
+fun privateBroadcastEnabled(agreedToTerms: Boolean): Boolean = agreedToTerms
 
 @Composable
 internal fun PrivateSendDeposit(
@@ -46,8 +90,12 @@ internal fun PrivateSendDeposit(
     }
     val clipboard = LocalClipboardManager.current
     var copiedOrder by remember(state.swap.requestId) { mutableStateOf(false) }
+    var agreed by remember(state.swap.requestId) { mutableStateOf(false) }
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         PrivateSendFacts(
@@ -57,7 +105,7 @@ internal fun PrivateSendDeposit(
                 clipboard.setText(AnnotatedString(state.swap.requestId))
                 copiedOrder = true
             },
-            modifier = Modifier.weight(1f).fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
         )
         Text(
             text =
@@ -66,7 +114,74 @@ internal fun PrivateSendDeposit(
             fontFamily = BwFontFamily,
             fontSize = BwType.CaptionSize,
         )
-        PillButton(text = "Private Broadcast", onClick = onBroadcast, modifier = Modifier.fillMaxWidth())
+        PrivateSendTermsRow(checked = agreed, onCheckedChange = { agreed = it })
+        PillButton(
+            text = "Private Broadcast",
+            onClick = onBroadcast,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = privateBroadcastEnabled(agreed),
+        )
+    }
+}
+
+@Composable
+private fun PrivateSendTermsRow(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BwCheckbox(checked = checked, onCheckedChange = onCheckedChange)
+        Text(
+            text = termsAgreement(checked, onCheckedChange),
+            modifier = Modifier.weight(1f),
+            color = BwColors.Ink,
+            fontFamily = BwFontFamily,
+            fontSize = BwType.BodySize,
+        )
+    }
+}
+
+@Composable
+private fun termsAgreement(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+): AnnotatedString {
+    val ink = BwColors.Ink
+    val link = BwColors.Link
+    return buildAnnotatedString {
+        privateSendTermsSpans().forEach { span ->
+            when (span) {
+                is TermsSpan.Plain ->
+                    withLink(
+                        LinkAnnotation.Clickable(
+                            tag = "agree",
+                            styles =
+                                TextLinkStyles(
+                                    SpanStyle(color = ink, textDecoration = TextDecoration.None),
+                                ),
+                            linkInteractionListener = { onCheckedChange(!checked) },
+                        ),
+                    ) {
+                        append(span.text)
+                    }
+                is TermsSpan.Link ->
+                    withLink(
+                        LinkAnnotation.Url(
+                            url = span.url,
+                            styles =
+                                TextLinkStyles(
+                                    SpanStyle(color = link, textDecoration = TextDecoration.Underline),
+                                ),
+                        ),
+                    ) {
+                        append(span.text)
+                    }
+            }
+        }
     }
 }
 
@@ -78,7 +193,7 @@ private fun PrivateSendFacts(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.verticalScroll(rememberScrollState()),
+        modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         val provider = privateSendProvider()

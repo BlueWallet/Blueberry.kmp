@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -198,6 +201,7 @@ fun SendScreen(
                     )
                 } else {
                     DetailsStep(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                         form =
                             DetailsForm(
                                 selectedSum = selectedSum,
@@ -571,46 +575,55 @@ private data class DetailsForm(
 private fun DetailsStep(
     form: DetailsForm,
     onEvent: (DetailsEvent) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
-        Text("Selected", color = BwColors.InkMuted, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
-        BtcAmountText(sats = form.selectedSum, color = BwColors.Ink)
+    Column(
+        modifier =
+            modifier
+                .imePadding()
+                .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
+            Text("Selected", color = BwColors.InkMuted, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
+            BtcAmountText(sats = form.selectedSum, color = BwColors.Ink)
+        }
+        OutlinedTextField(
+            value = form.address,
+            onValueChange = { onEvent(DetailsEvent.Address(it)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            isError = form.invalid == SendField.Address,
+            label = { Text("Address") },
+            placeholder = { Text("bc1…") },
+            trailingIcon = { FieldTrailingAction("Scan") { onEvent(DetailsEvent.Scan) } },
+        )
+        AmountField(form = form, onEvent = onEvent)
+        OutlinedTextField(
+            value = form.label,
+            onValueChange = { onEvent(DetailsEvent.Label(it)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            isError = form.invalid == SendField.Label,
+            label = { Text("Payment label") },
+            placeholder = { Text("groceries") },
+        )
+        OutlinedTextField(
+            value = form.feeRate,
+            onValueChange = { onEvent(DetailsEvent.FeeRate(it)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            isError = form.invalid == SendField.FeeRate || form.feeError != null,
+            label = { Text("Fee rate (sat/vB)") },
+            placeholder = { Text("1") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        )
+        if (form.feeError != null) {
+            Text(form.feeError, color = BwColors.Danger, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
+        }
+        PrivateSendRow(checked = form.privateSend, onChecked = { onEvent(DetailsEvent.PrivateSend(it)) })
+        PillButton(text = "Continue", onClick = { onEvent(DetailsEvent.Continue) }, modifier = Modifier.fillMaxWidth())
     }
-    OutlinedTextField(
-        value = form.address,
-        onValueChange = { onEvent(DetailsEvent.Address(it)) },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        isError = form.invalid == SendField.Address,
-        label = { Text("Address") },
-        placeholder = { Text("bc1…") },
-        trailingIcon = { FieldTrailingAction("Scan") { onEvent(DetailsEvent.Scan) } },
-    )
-    AmountField(form = form, onEvent = onEvent)
-    OutlinedTextField(
-        value = form.label,
-        onValueChange = { onEvent(DetailsEvent.Label(it)) },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        isError = form.invalid == SendField.Label,
-        label = { Text("Payment label") },
-        placeholder = { Text("groceries") },
-    )
-    OutlinedTextField(
-        value = form.feeRate,
-        onValueChange = { onEvent(DetailsEvent.FeeRate(it)) },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        isError = form.invalid == SendField.FeeRate || form.feeError != null,
-        label = { Text("Fee rate (sat/vB)") },
-        placeholder = { Text("1") },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-    )
-    if (form.feeError != null) {
-        Text(form.feeError, color = BwColors.Danger, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
-    }
-    PrivateSendRow(checked = form.privateSend, onChecked = { onEvent(DetailsEvent.PrivateSend(it)) })
-    PillButton(text = "Continue", onClick = { onEvent(DetailsEvent.Continue) }, modifier = Modifier.fillMaxWidth())
 }
 
 @Composable

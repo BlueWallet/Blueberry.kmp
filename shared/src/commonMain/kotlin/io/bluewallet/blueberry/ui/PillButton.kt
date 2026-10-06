@@ -16,15 +16,19 @@ fun PillButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     Button(
         onClick = onClick,
         modifier = modifier.height(32.dp),
+        enabled = enabled,
         shape = RoundedCornerShape(50),
         colors =
             ButtonDefaults.buttonColors(
                 containerColor = BwColors.Accent,
                 contentColor = BwColors.OnAccent,
+                disabledContainerColor = BwColors.BarTrack,
+                disabledContentColor = BwColors.InkSecondary,
             ),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),

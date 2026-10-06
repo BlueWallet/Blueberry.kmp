@@ -210,6 +210,32 @@ class RocketxTest {
     }
 
     @Test
+    fun private_send_terms_name_the_rocketx_pdfs() {
+        assertEquals(
+            listOf(
+                TermsSpan.Plain("I agree to the "),
+                TermsSpan.Link(
+                    "Terms of Use",
+                    "https://cdn.rocketx.exchange/pd135zq/docs/rocketx-exchange-terms.pdf",
+                ),
+                TermsSpan.Plain(" and "),
+                TermsSpan.Link(
+                    "Privacy Policy",
+                    "https://cdn.rocketx.exchange/pd135zq/docs/privacy-policy.pdf",
+                ),
+            ),
+            privateSendTermsSpans(),
+        )
+        assertEquals("I agree to the Terms of Use and Privacy Policy", privateSendTermsSentence())
+    }
+
+    @Test
+    fun private_broadcast_stays_off_until_terms_are_accepted() {
+        assertEquals(false, privateBroadcastEnabled(false))
+        assertEquals(true, privateBroadcastEnabled(true))
+    }
+
+    @Test
     fun private_send_pay_is_exact_from_amount() {
         assertEquals(SendAmount.Exact(110_000L), privateSendPayAmount("0.0011"))
         assertEquals(null, privateSendPayAmount(""))
