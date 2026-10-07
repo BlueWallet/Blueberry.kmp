@@ -84,23 +84,14 @@ jobs:
           retention-days: 14
           archive: false
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
       # Internal testers are managed in Play Console. This job does not add them
       # and does not promote the release to production.
       - name: Upload to Play internal testing
-        env:
-          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-        run: |
-          python3 -m venv "${RUNNER_TEMP}/play-venv"
-          "${RUNNER_TEMP}/play-venv/bin/pip" install --disable-pip-version-check 'google-auth==2.40.3'
-          printf '%s\n' "$PLAY_SERVICE_ACCOUNT_JSON" > "${RUNNER_TEMP}/play-service-account.json"
-          chmod 600 "${RUNNER_TEMP}/play-service-account.json"
-          AAB="$(echo androidApp/build/outputs/bundle/release/*.aab)"
-          "${RUNNER_TEMP}/play-venv/bin/python" .github/scripts/upload_play_internal.py \
-            --aab "$AAB" \
-            --service-account "${RUNNER_TEMP}/play-service-account.json" \
-            --version-name "${VERSION_NAME}"
-          rm -f "${RUNNER_TEMP}/play-service-account.json"
+        uses: r0adkll/upload-google-play@eb49699984a39f23558439581660aa6f088acfd6 # v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: io.bluewallet.blueberry
+          releaseFiles: androidApp/build/outputs/bundle/release/*.aab
+          tracks: internal
+          status: completed
+          releaseName: ${{ env.VERSION_NAME }}
