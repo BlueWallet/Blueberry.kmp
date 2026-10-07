@@ -20,6 +20,14 @@ Use the full Superpowers workflow on every coding task in this repo (brainstormi
 - Launch: `adb shell am start -n io.bluewallet.blueberry/.MainActivity`
 - Application ID: `io.bluewallet.blueberry`
 
+## Play internal
+
+- `.github/workflows/play-internal.yml` builds a release AAB and uploads it to the Play **internal** track. Triggers: `push` to `master`, `workflow_dispatch`. Not on pull requests. Concurrency `play-android`, do not cancel in-progress.
+- `versionName` is `YYYY.MM.DD`. `versionCode` is `YYYYMMDDHH` (Play max `2100000000`). Two uploads in the same UTC hour collide.
+- CI signs the unsigned bundle with the Blueberry upload key (`jarsigner`, alias `blueberry-upload`). Secrets: `ANDROID_UPLOAD_KEYSTORE` (base64 keystore), `ANDROID_UPLOAD_KEYSTORE_PASSWORD`, `PLAY_SERVICE_ACCOUNT_JSON`. Do not commit the keystore. Do not reuse the BlueWallet release keystore. Key paths live in `AGENTS.local.md`.
+- The workflow does not add testers and does not promote to production. In Play Console, **Promote release** moves that same bundle and version code to production.
+- Leave automatic protection off. It rewrites the app Play delivers and blocks code transparency. Play App Signing stays on.
+
 ## Platform limits
 
 - iOS simulator builds and `iosSimulatorArm64Test` require macOS. Do not attempt them on Linux.
