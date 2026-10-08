@@ -93,7 +93,7 @@ private fun seedPeer(
             port = 8333,
             services = NODE_NETWORK,
             alive = true,
-            usedForBlocks = false,
+            blocksServed = 0,
             lastProbedAt = null,
         ),
     )
@@ -161,7 +161,7 @@ class BlocksDownloadTest {
             assertEquals(0, stored.height)
             assertEquals(internalHex, stored.blockHashInternalHex)
             assertContentEquals(encodeBlock(block), stored.block)
-            assertTrue(db.peers.list()[0].usedForBlocks)
+            assertEquals(1, db.peers.list()[0].blocksServed)
             assertTrue(events.any { it == 1 to 1 })
             assertTrue(
                 logs.any {
@@ -216,7 +216,7 @@ class BlocksDownloadTest {
 
             assertEquals(2, opened.size)
             assertEquals(2, opened.toSet().size)
-            assertTrue(db.peers.list().all { it.usedForBlocks })
+            assertTrue(db.peers.list().all { it.blocksServed == 1 })
 
             mod.stop()
             db.close()
@@ -289,7 +289,7 @@ class BlocksDownloadTest {
             delay(80)
             assertEquals(listOf("1.1.1.1"), opened)
             assertEquals(1, db.blocks.count())
-            assertTrue(db.peers.list()[0].usedForBlocks)
+            assertEquals(1, db.peers.list()[0].blocksServed)
 
             mod.stop()
             db.close()
@@ -580,7 +580,7 @@ class BlocksDownloadTest {
             }
 
             assertEquals(0, db.blocks.count())
-            assertFalse(db.peers.list()[0].usedForBlocks)
+            assertEquals(0, db.peers.list()[0].blocksServed)
 
             mod.stop()
             db.close()

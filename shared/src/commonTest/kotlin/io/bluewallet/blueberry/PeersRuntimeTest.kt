@@ -94,7 +94,7 @@ class PeersRuntimeTest {
         val bus = createMessageBus()
         val db = createSqliteDatabase(":memory:")
         db.peers.upsert(
-            PeerWrite("1.1.1.1", 8333, 0uL, false, false, null),
+            PeerWrite("1.1.1.1", 8333, 0uL, false, 0, null),
         )
         val store = createPeerSocketsStore()
         val off = bindPeerSocketEvents(bus, db, store)
@@ -102,7 +102,7 @@ class PeersRuntimeTest {
         assertEquals(1, store.get().known)
         bus.emit(Event.PeersSockets, PeersSocketsPayload(1, PeerSocketKind.PROBE, 2))
         assertEquals(2, store.get().probe)
-        db.peers.upsert(PeerWrite("9.9.9.9", 8333, 0uL, false, false, null))
+        db.peers.upsert(PeerWrite("9.9.9.9", 8333, 0uL, false, 0, null))
         bus.emit(Event.PeersUpdated, PeersUpdatedPayload(2))
         assertEquals(2, store.get().known)
         off()

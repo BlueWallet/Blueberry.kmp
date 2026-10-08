@@ -33,8 +33,8 @@ private fun peer(
     services: ULong = 0uL,
     alive: Boolean = false,
     lastProbedAt: Long? = null,
-    usedForBlocks: Boolean = false,
-) = PeerWrite(host, 8333, services, alive, usedForBlocks, lastProbedAt)
+    blocksServed: Int = 0,
+) = PeerWrite(host, 8333, services, alive, blocksServed, lastProbedAt)
 
 private fun hangingSeeds(): suspend () -> List<PeerCandidate> =
     {
@@ -1163,7 +1163,7 @@ class PeersDiscoveryTest {
         }
 
     @Test
-    fun prefers_network_peers_and_crawls_them_when_blocks_need_download() =
+    fun single_slot_crawls_unprobed_peer_while_blocks_need_download() =
         runBlocking {
             val bus = createMessageBus()
             val db = createSqliteDatabase(":memory:")
@@ -1174,6 +1174,7 @@ class PeersDiscoveryTest {
             val probed = mutableListOf<String>()
             val crawled = mutableListOf<String>()
             val lock = Any()
+            val gate = CompletableDeferred<Unit>()
             val mod =
                 createPeersDiscoveryModule(
                     ModuleContext(bus, db),
@@ -1185,6 +1186,7 @@ class PeersDiscoveryTest {
                                 probed.add(host)
                                 if (options.wantAddr) crawled.add(host)
                             }
+                            gate.await()
                             ProbeResult.Err("skip")
                         },
                         concurrency = 1,
@@ -1195,9 +1197,177 @@ class PeersDiscoveryTest {
 
             mod.start()
             waitFor { synchronized(lock) { probed.isNotEmpty() } }
-            assertEquals("4.4.4.4", synchronized(lock) { probed[0] })
-            waitFor { synchronized(lock) { crawled.contains("1.1.1.1") } }
-            assertFalse(synchronized(lock) { crawled.contains("4.4.4.4") })
+            assertEquals("1.1.1.1", synchronized(lock) { probed[0] })
+            assertEquals(listOf("1.1.1.1"), synchronized(lock) { crawled.toList() })
+            gate.complete(Unit)
+            mod.stop()
+            db.close()
+        }
+
+    @Test
+    fun single_slot_crawls_oldest_alive_peer_ahead_of_dead_retries() =
+        runBlocking {
+            val bus = createMessageBus()
+            val db = createSqliteDatabase(":memory:")
+            db.peers.upsert(peer("8.8.8.8", alive = true, lastProbedAt = 50_000))
+            db.peers.upsert(peer("7.7.7.7", alive = true, lastProbedAt = 80_000))
+            for (i in 1..40) {
+                db.peers.upsert(peer("9.9.0.$i", services = 1uL, lastProbedAt = 1))
+            }
+            db.matchedBlocks.insert(MatchedBlock(10, "aa".repeat(32)))
+
+            val probed = mutableListOf<String>()
+            val crawled = mutableListOf<String>()
+            val lock = Any()
+            val gate = CompletableDeferred<Unit>()
+            val mod =
+                createPeersDiscoveryModule(
+                    ModuleContext(bus, db),
+                    PeersDiscoveryOptions(
+                        net = stubPlatformNet(),
+                        resolveSeeds = { emptyList() },
+                        now = { 100_000 },
+                        probe = { host, _, options ->
+                            synchronized(lock) {
+                                probed.add(host)
+                                if (options.wantAddr) crawled.add(host)
+                            }
+                            gate.await()
+                            ProbeResult.Err("skip")
+                        },
+                        concurrency = 1,
+                        idleDelayMs = 20,
+                        minAliveCompactFilters = 0,
+                    ),
+                )
+
+            mod.start()
+            waitFor { synchronized(lock) { probed.isNotEmpty() } }
+            assertEquals("8.8.8.8", synchronized(lock) { probed[0] })
+            assertEquals(listOf("8.8.8.8"), synchronized(lock) { crawled.toList() })
+            gate.complete(Unit)
+            mod.stop()
+            db.close()
+        }
+
+    @Test
+    fun single_slot_dials_unprobed_archival_peer_while_compact_filters_are_thin() =
+        runBlocking {
+            val bus = createMessageBus()
+            val db = createSqliteDatabase(":memory:")
+            db.peers.upsert(peer("1.1.1.1", services = 64uL, lastProbedAt = 1))
+            db.peers.upsert(peer("4.4.4.4", services = 1uL, lastProbedAt = 1))
+            db.peers.upsert(peer("8.8.8.8", services = 1uL))
+            db.matchedBlocks.insert(MatchedBlock(10, "aa".repeat(32)))
+
+            val probed = mutableListOf<String>()
+            val lock = Any()
+            val gate = CompletableDeferred<Unit>()
+            val mod =
+                createPeersDiscoveryModule(
+                    ModuleContext(bus, db),
+                    PeersDiscoveryOptions(
+                        net = stubPlatformNet(),
+                        resolveSeeds = { emptyList() },
+                        now = { 100_000 },
+                        probe = { host, _, _ ->
+                            synchronized(lock) { probed.add(host) }
+                            gate.await()
+                            ProbeResult.Err("skip")
+                        },
+                        concurrency = 1,
+                        idleDelayMs = 20,
+                        minAliveCompactFilters = 16,
+                        minAliveBlockPeers = 1,
+                    ),
+                )
+
+            mod.start()
+            waitFor { synchronized(lock) { probed.isNotEmpty() } }
+            assertEquals("8.8.8.8", synchronized(lock) { probed[0] })
+            gate.complete(Unit)
+            mod.stop()
+            db.close()
+        }
+
+    @Test
+    fun wider_batch_keeps_a_dead_archival_retry_beside_unprobed_archival_peers() =
+        runBlocking {
+            val bus = createMessageBus()
+            val db = createSqliteDatabase(":memory:")
+            db.peers.upsert(peer("4.4.4.4", services = 1uL, lastProbedAt = 1))
+            db.peers.upsert(peer("8.8.8.8", services = 1uL))
+            db.matchedBlocks.insert(MatchedBlock(10, "aa".repeat(32)))
+
+            val probed = mutableListOf<String>()
+            val lock = Any()
+            val gate = CompletableDeferred<Unit>()
+            val mod =
+                createPeersDiscoveryModule(
+                    ModuleContext(bus, db),
+                    PeersDiscoveryOptions(
+                        net = stubPlatformNet(),
+                        resolveSeeds = { emptyList() },
+                        now = { 100_000 },
+                        probe = { host, _, _ ->
+                            synchronized(lock) { probed.add(host) }
+                            if (synchronized(lock) { probed.size >= 2 }) gate.complete(Unit)
+                            gate.await()
+                            ProbeResult.Err("skip")
+                        },
+                        concurrency = 2,
+                        idleDelayMs = 20,
+                        minAliveCompactFilters = 0,
+                        minAliveBlockPeers = 1,
+                    ),
+                )
+
+            mod.start()
+            waitFor { synchronized(lock) { probed.size >= 2 } }
+            assertEquals(
+                setOf("8.8.8.8", "4.4.4.4"),
+                synchronized(lock) { probed.take(2).toSet() },
+            )
+            mod.stop()
+            db.close()
+        }
+
+    @Test
+    fun asks_a_dead_peer_for_addresses_when_nothing_crawlable_remains() =
+        runBlocking {
+            val bus = createMessageBus()
+            val db = createSqliteDatabase(":memory:")
+            db.peers.upsert(peer("4.4.4.4", services = 1uL, lastProbedAt = 1))
+            db.matchedBlocks.insert(MatchedBlock(10, "aa".repeat(32)))
+
+            val crawled = mutableListOf<String>()
+            val lock = Any()
+            val gate = CompletableDeferred<Unit>()
+            val mod =
+                createPeersDiscoveryModule(
+                    ModuleContext(bus, db),
+                    PeersDiscoveryOptions(
+                        net = stubPlatformNet(),
+                        resolveSeeds = { emptyList() },
+                        now = { 100_000 },
+                        probe = { host, _, options ->
+                            synchronized(lock) {
+                                if (options.wantAddr) crawled.add(host)
+                            }
+                            gate.await()
+                            ProbeResult.Err("skip")
+                        },
+                        concurrency = 1,
+                        idleDelayMs = 20,
+                        minAliveCompactFilters = 0,
+                        minAliveBlockPeers = 1,
+                    ),
+                )
+
+            mod.start()
+            waitFor { synchronized(lock) { crawled.isNotEmpty() } }
+            assertEquals(listOf("4.4.4.4"), synchronized(lock) { crawled.toList() })
+            gate.complete(Unit)
             mod.stop()
             db.close()
         }
@@ -1214,7 +1384,7 @@ class PeersDiscoveryTest {
                         services = 1uL,
                         alive = true,
                         lastProbedAt = 1,
-                        usedForBlocks = true,
+                        blocksServed = 1,
                     ),
                 )
             }
@@ -1406,7 +1576,7 @@ class PeersDiscoveryTest {
                 db.peers.upsert(peer("10.0.0.$i"))
             }
             db.peers.upsert(
-                peer("7.7.7.7", services = 1uL, lastProbedAt = 1, usedForBlocks = true),
+                peer("7.7.7.7", services = 1uL, lastProbedAt = 1, blocksServed = 1),
             )
             db.peers.upsert(peer("9.9.9.9", services = 1uL, lastProbedAt = 50))
             db.matchedBlocks.insert(MatchedBlock(10, "aa".repeat(32)))

@@ -7,7 +7,7 @@ data class Peer(
     val port: Int,
     val services: ULong,
     val alive: Boolean,
-    val usedForBlocks: Boolean,
+    val blocksServed: Int,
     val lastProbedAt: Long?,
     val createdAt: Long,
     val updatedAt: Long,
@@ -18,14 +18,14 @@ data class PeerWrite(
     val port: Int,
     val services: ULong,
     val alive: Boolean,
-    val usedForBlocks: Boolean,
+    val blocksServed: Int,
     val lastProbedAt: Long?,
     val createdAt: Long? = null,
     val updatedAt: Long? = null,
 )
 
 data class AliveServiceOptions(
-    val unusedForBlocks: Boolean = false,
+    val maxBlocksServed: Int? = null,
 )
 
 interface PeersRepository {
@@ -51,6 +51,7 @@ interface PeersRepository {
     fun listUnprobedWithServicesUnused(
         serviceBits: ULong,
         limit: Int,
+        maxBlocksServed: Int,
     ): List<Peer>
 
     fun listProbeQueue(limit: Int): List<Peer>
@@ -58,6 +59,7 @@ interface PeersRepository {
     fun listOldestDeadWithServices(
         serviceBits: ULong,
         limit: Int,
+        maxBlocksServed: Int,
     ): List<Peer>
 
     fun markProbed(

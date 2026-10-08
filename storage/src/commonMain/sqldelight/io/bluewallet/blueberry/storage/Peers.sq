@@ -33,7 +33,7 @@ LIMIT ?;
 listAliveWithServicesUnused:
 SELECT * FROM peers
 WHERE alive = 1
-  AND used_for_blocks = 0
+  AND used_for_blocks < ?
   AND (services & ?) != 0
 ORDER BY host, port
 LIMIT ?;
@@ -51,7 +51,7 @@ listUnprobedWithServicesUnused:
 SELECT * FROM peers
 WHERE last_probed_at IS NULL
   AND alive = 0
-  AND used_for_blocks = 0
+  AND used_for_blocks < ?
   AND (services & ?) != 0
 ORDER BY CASE WHEN instr(host, ':') > 0 THEN 1 ELSE 0 END,
   host, port
@@ -70,7 +70,7 @@ listOldestDeadWithServices:
 SELECT * FROM peers
 WHERE last_probed_at >= 0
   AND alive = 0
-  AND used_for_blocks = 0
+  AND used_for_blocks < ?
   AND (services & ?) != 0
 ORDER BY last_probed_at ASC,
   CASE WHEN instr(host, ':') > 0 THEN 1 ELSE 0 END,
@@ -84,4 +84,4 @@ markAlive:
 UPDATE peers SET alive = ?, updated_at = ? WHERE host = ? AND port = ?;
 
 markUsedForBlocks:
-UPDATE peers SET used_for_blocks = 1, updated_at = ? WHERE host = ? AND port = ?;
+UPDATE peers SET used_for_blocks = used_for_blocks + 1, updated_at = ? WHERE host = ? AND port = ?;

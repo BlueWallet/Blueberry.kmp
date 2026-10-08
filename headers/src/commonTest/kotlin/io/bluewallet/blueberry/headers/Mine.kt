@@ -92,7 +92,7 @@ fun upsertPeer(
             port = 8333,
             services = 0uL,
             alive = true,
-            usedForBlocks = false,
+            blocksServed = 0,
             lastProbedAt = null,
         ),
     )

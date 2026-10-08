@@ -142,7 +142,7 @@ fun createPeersDiscoveryModule(
             .listAliveWithServices(
                 NODE_NETWORK,
                 minAliveBlockPeers,
-                AliveServiceOptions(unusedForBlocks = true),
+                AliveServiceOptions(maxBlocksServed = Config.maxBlocksPerPeer),
             ).size
 
     fun needsBlockPeers(): Boolean = pendingBlockDownloads() && unusedAliveNetworkCount() < minAliveBlockPeers
@@ -150,8 +150,11 @@ fun createPeersDiscoveryModule(
     fun needsMoreBlockAddrs(): Boolean =
         needsBlockPeers() &&
             ctx.db.peers
-                .listUnprobedWithServicesUnused(NODE_NETWORK, minAliveBlockPeers)
-                .size <
+                .listUnprobedWithServicesUnused(
+                    NODE_NETWORK,
+                    minAliveBlockPeers,
+                    Config.maxBlocksPerPeer,
+                ).size <
             minAliveBlockPeers
 
     fun reseedEveryMs(): Long = if (needsBlockPeers()) Config.peerDnsReseedWhenBlocksMs else reseedIntervalMs
@@ -187,7 +190,7 @@ fun createPeersDiscoveryModule(
                 port = candidate.port,
                 services = candidate.services,
                 alive = false,
-                usedForBlocks = false,
+                blocksServed = 0,
                 lastProbedAt = null,
             ),
         )
@@ -288,34 +291,82 @@ fun createPeersDiscoveryModule(
                 picked.add(peer)
             }
         }
-        if (aliveCompactFilterCount() < minAliveCompactFilters) {
-            val cfMax = if (limit < 2) limit else ceil(limit / 2.0).toInt()
-            take(
+
+        fun halfOrAll(): Int = if (limit < 2) limit else ceil(limit / 2.0).toInt()
+
+        fun compactFilterCandidates(): List<Peer> =
+            ctx.db.peers
+                .listWithServices(
+                    NODE_COMPACT_FILTERS.toULong(),
+                    minAliveCompactFilters + concurrency + 32,
+                ).filter { !it.alive && due(it) }
+
+        fun crawlablePeers(): List<Peer> {
+            val window = limit + concurrency + 32
+            val unprobedNetwork =
+                ctx.db.peers.listUnprobedWithServicesUnused(
+                    NODE_NETWORK,
+                    window,
+                    Config.maxBlocksPerPeer,
+                )
+            val neverProbed =
                 ctx.db.peers
-                    .listWithServices(
-                        NODE_COMPACT_FILTERS.toULong(),
-                        minAliveCompactFilters + concurrency + 32,
-                    ).filter { !it.alive && due(it) },
-                cfMax,
+                    .listProbeQueue(window)
+                    .filter { it.lastProbedAt == null }
+            val aliveOldest =
+                ctx.db.peers
+                    .listAlive()
+                    .filter { due(it) }
+                    .sortedWith(compareBy({ it.lastProbedAt ?: Long.MIN_VALUE }, { it.host }, { it.port }))
+            return unprobedNetwork + neverProbed + aliveOldest
+        }
+
+        val hunting = needsMoreBlockAddrs()
+        if (needsBlockPeers()) {
+            val freshNetwork =
+                ctx.db.peers.listUnprobedWithServicesUnused(
+                    NODE_NETWORK,
+                    halfOrAll() + concurrency + 32,
+                    Config.maxBlocksPerPeer,
+                )
+            if (freshNetwork.isNotEmpty()) {
+                take(freshNetwork, (picked.size + halfOrAll()).coerceAtMost(limit))
+            }
+        }
+        if (hunting && picked.size < limit) {
+            take(crawlablePeers(), (picked.size + halfOrAll()).coerceAtMost(limit))
+        }
+        if (!hunting && aliveCompactFilterCount() < minAliveCompactFilters && picked.size < limit) {
+            take(
+                compactFilterCandidates(),
+                (picked.size + halfOrAll()).coerceAtMost(limit),
             )
         }
         if (needsBlockPeers() && picked.size < limit) {
-            val retryMax = if (limit < 2) limit else ceil(limit / 2.0).toInt()
+            val retryMax = halfOrAll()
             take(
                 ctx.db.peers
                     .listOldestDeadWithServices(
                         NODE_NETWORK,
                         retryMax + concurrency + 32,
+                        Config.maxBlocksPerPeer,
                     ).filter { due(it) },
                 (picked.size + retryMax).coerceAtMost(limit),
             )
         }
+        if (hunting && aliveCompactFilterCount() < minAliveCompactFilters && picked.size < limit) {
+            take(
+                compactFilterCandidates(),
+                (picked.size + halfOrAll()).coerceAtMost(limit),
+            )
+        }
         if (needsBlockPeers() && picked.size < limit) {
-            val nnMax = if (limit < 2) limit else ceil(limit / 2.0).toInt()
+            val nnMax = halfOrAll()
             take(
                 ctx.db.peers.listUnprobedWithServicesUnused(
                     NODE_NETWORK,
                     nnMax + concurrency + 32,
+                    Config.maxBlocksPerPeer,
                 ),
                 (picked.size + nnMax).coerceAtMost(limit),
             )
@@ -350,9 +401,11 @@ fun createPeersDiscoveryModule(
                 inflight.add(key)
                 spawned++
                 val crawlable = next.lastProbedAt == null || next.alive
+                // A fully probed, all-dead book has nobody left to ask. While blocks
+                // still need addresses, a retry that completes a handshake must getaddr.
                 val wantAddr =
                     !state.paused &&
-                        crawlable &&
+                        (crawlable || huntAddrs) &&
                         crawlsInFlight < addrBudget &&
                         (lastCrawlAt == null || now() - lastCrawlAt!! >= addrEveryMs)
                 if (wantAddr) crawlsInFlight++
@@ -377,7 +430,7 @@ fun createPeersDiscoveryModule(
                                         port = next.port,
                                         services = result.services,
                                         alive = true,
-                                        usedForBlocks = false,
+                                        blocksServed = 0,
                                         lastProbedAt = probedAt,
                                     ),
                                 )

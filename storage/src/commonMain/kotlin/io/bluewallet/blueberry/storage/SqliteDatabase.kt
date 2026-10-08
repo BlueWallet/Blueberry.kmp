@@ -161,7 +161,7 @@ internal class SqliteDatabase(
                     port = peer.port.toLong(),
                     services = toSqliteServices(peer.services),
                     alive = if (peer.alive) 1L else 0L,
-                    used_for_blocks = if (peer.usedForBlocks) 1L else 0L,
+                    used_for_blocks = peer.blocksServed.toLong(),
                     last_probed_at = peer.lastProbedAt,
                     created_at = peer.createdAt ?: now,
                     updated_at = peer.updatedAt ?: now,
@@ -193,9 +193,14 @@ internal class SqliteDatabase(
             ): List<Peer> {
                 if (limit <= 0) return emptyList()
                 val mask = toSqliteServices(serviceBits)
+                val maxBlocksServed = options?.maxBlocksServed
                 val rows =
-                    if (options?.unusedForBlocks == true) {
-                        storageDb.peersQueries.listAliveWithServicesUnused(mask, limit.toLong())
+                    if (maxBlocksServed != null) {
+                        storageDb.peersQueries.listAliveWithServicesUnused(
+                            maxBlocksServed.toLong(),
+                            mask,
+                            limit.toLong(),
+                        )
                     } else {
                         storageDb.peersQueries.listAliveWithServices(mask, limit.toLong())
                     }
@@ -216,11 +221,15 @@ internal class SqliteDatabase(
             override fun listUnprobedWithServicesUnused(
                 serviceBits: ULong,
                 limit: Int,
+                maxBlocksServed: Int,
             ): List<Peer> {
                 if (limit <= 0) return emptyList()
                 return storageDb.peersQueries
-                    .listUnprobedWithServicesUnused(toSqliteServices(serviceBits), limit.toLong())
-                    .executeAsList()
+                    .listUnprobedWithServicesUnused(
+                        maxBlocksServed.toLong(),
+                        toSqliteServices(serviceBits),
+                        limit.toLong(),
+                    ).executeAsList()
                     .map(::rowToPeer)
             }
 
@@ -235,16 +244,21 @@ internal class SqliteDatabase(
             override fun listOldestDeadWithServices(
                 serviceBits: ULong,
                 limit: Int,
+                maxBlocksServed: Int,
             ): List<Peer> {
                 if (limit <= 0) return emptyList()
                 return storageDb.peersQueries
-                    .listOldestDeadWithServices(toSqliteServices(serviceBits), limit.toLong()) { host, port, services, alive, usedForBlocks, lastProbedAt, createdAt, updatedAt ->
+                    .listOldestDeadWithServices(
+                        maxBlocksServed.toLong(),
+                        toSqliteServices(serviceBits),
+                        limit.toLong(),
+                    ) { host, port, services, alive, blocksServed, lastProbedAt, createdAt, updatedAt ->
                         Peer(
                             host = host,
                             port = port.toInt(),
                             services = fromSqliteServices(services),
                             alive = alive == 1L,
-                            usedForBlocks = usedForBlocks == 1L,
+                            blocksServed = blocksServed.toInt(),
                             lastProbedAt = lastProbedAt,
                             createdAt = createdAt,
                             updatedAt = updatedAt,
@@ -928,7 +942,7 @@ private fun rowToPeer(row: Peers): Peer =
         port = row.port.toInt(),
         services = fromSqliteServices(row.services),
         alive = row.alive == 1L,
-        usedForBlocks = row.used_for_blocks == 1L,
+        blocksServed = row.used_for_blocks.toInt(),
         lastProbedAt = row.last_probed_at,
         createdAt = row.created_at,
         updatedAt = row.updated_at,
