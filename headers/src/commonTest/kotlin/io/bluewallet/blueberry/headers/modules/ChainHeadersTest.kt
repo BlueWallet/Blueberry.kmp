@@ -77,7 +77,7 @@ class ChainHeadersTest {
             assertEquals(1, db.headers.count())
             delay(80)
             assertEquals(0, calls)
-            db.peers.upsert(PeerWrite("1.1.1.1", 8333, 0uL, true, false, null))
+            db.peers.upsert(PeerWrite("1.1.1.1", 8333, 0uL, true, 0, null))
             bus.emit(Event.PeersUpdated, PeersUpdatedPayload(1))
             waitFor {
                 db.headers.tip()?.height == CHECKPOINT_HEIGHT + 1 &&
@@ -126,7 +126,7 @@ class ChainHeadersTest {
                         },
                     ),
                 )
-            db.peers.upsert(PeerWrite("1.1.1.1", 8333, 0uL, true, false, null))
+            db.peers.upsert(PeerWrite("1.1.1.1", 8333, 0uL, true, 0, null))
             mod.start()
             waitFor {
                 db.headers.tip()?.height == CHECKPOINT_HEIGHT + 1 && !failNext

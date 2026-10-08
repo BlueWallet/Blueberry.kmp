@@ -171,8 +171,11 @@ fun createBlocksDownloadModule(
             pruneCooldownsLocked()
             val candidates =
                 ctx.db.peers
-                    .listAliveWithServices(NODE_NETWORK, 512, AliveServiceOptions(unusedForBlocks = true))
-                    .filter { p ->
+                    .listAliveWithServices(
+                        NODE_NETWORK,
+                        512,
+                        AliveServiceOptions(maxBlocksServed = Config.maxBlocksPerPeer),
+                    ).filter { p ->
                         val key = peerKey(PeerRef(p.host, p.port))
                         !leasedPeers.contains(key) && !peerCoolUntil.containsKey(key)
                     }

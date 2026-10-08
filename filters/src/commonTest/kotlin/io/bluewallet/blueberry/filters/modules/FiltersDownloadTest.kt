@@ -135,7 +135,7 @@ private fun seedPeer(
     host: String = "1.1.1.1",
     alive: Boolean = true,
 ) {
-    db.peers.upsert(PeerWrite(host, 8333, CF, alive, false, null))
+    db.peers.upsert(PeerWrite(host, 8333, CF, alive, 0, null))
 }
 
 private open class ScriptedSession(

@@ -9,14 +9,14 @@ private fun basePeer(
     port: Int = 8333,
     services: ULong = 0uL,
     alive: Boolean = false,
-    usedForBlocks: Boolean = false,
+    blocksServed: Int = 0,
     lastProbedAt: Long? = null,
 ) = PeerWrite(
     host = host,
     port = port,
     services = services,
     alive = alive,
-    usedForBlocks = usedForBlocks,
+    blocksServed = blocksServed,
     lastProbedAt = lastProbedAt,
 )
 
@@ -51,7 +51,7 @@ class PeersTest {
         assertEquals(8333, peer.port)
         assertEquals(2049uL, peer.services)
         assertEquals(false, peer.alive)
-        assertEquals(false, peer.usedForBlocks)
+        assertEquals(0, peer.blocksServed)
         assertEquals(null, peer.lastProbedAt)
         db.close()
     }
@@ -66,7 +66,7 @@ class PeersTest {
             basePeer(
                 services = 9uL,
                 alive = false,
-                usedForBlocks = true,
+                blocksServed = 4,
                 lastProbedAt = null,
             ),
         )
@@ -75,7 +75,7 @@ class PeersTest {
         assertEquals(1uL, peer.services)
         assertEquals(true, peer.alive)
         assertEquals(42L, peer.lastProbedAt)
-        assertEquals(false, peer.usedForBlocks)
+        assertEquals(0, peer.blocksServed)
         db.close()
     }
 
@@ -131,24 +131,31 @@ class PeersTest {
         assertEquals(1000L, probed.lastProbedAt)
         assertEquals(true, probed.alive)
         db.peers.markUsedForBlocks("1.1.1.1", 8333)
+        db.peers.markUsedForBlocks("1.1.1.1", 8333)
         assertEquals(
-            true,
+            2,
             db.peers
                 .list()
                 .single { it.host == "1.1.1.1" }
-                .usedForBlocks,
+                .blocksServed,
         )
         db.close()
     }
 
     @Test
-    fun listAliveWithServices_filters_by_bits_and_unusedForBlocks() {
+    fun listAliveWithServices_filters_by_bits_and_blocks_served_below_max() {
         val db = createSqliteDatabase(":memory:")
         val net = 1uL
-        db.peers.upsert(basePeer(host = "1.1.1.1", services = net, alive = true, usedForBlocks = false))
-        db.peers.upsert(basePeer(host = "2.2.2.2", services = net, alive = true, usedForBlocks = true))
-        db.peers.upsert(basePeer(host = "3.3.3.3", services = 0uL, alive = true, usedForBlocks = false))
-        db.peers.upsert(basePeer(host = "4.4.4.4", services = net, alive = false, usedForBlocks = false))
+        db.peers.upsert(basePeer(host = "1.1.1.1", services = net, alive = true, blocksServed = 0))
+        db.peers.upsert(basePeer(host = "2.2.2.2", services = net, alive = true, blocksServed = 1))
+        db.peers.upsert(basePeer(host = "3.3.3.3", services = 0uL, alive = true, blocksServed = 0))
+        db.peers.upsert(
+            basePeer(host = "4.4.4.4", services = net, alive = false, blocksServed = 0, lastProbedAt = 10),
+        )
+        db.peers.upsert(basePeer(host = "5.5.5.5", services = net, alive = false, blocksServed = 1))
+        db.peers.upsert(
+            basePeer(host = "7.7.7.7", services = net, alive = false, blocksServed = 1, lastProbedAt = 5),
+        )
 
         assertEquals(
             listOf("1.1.1.1", "2.2.2.2"),
@@ -157,8 +164,30 @@ class PeersTest {
         assertEquals(
             listOf("1.1.1.1"),
             db.peers
-                .listAliveWithServices(net, 10, AliveServiceOptions(unusedForBlocks = true))
+                .listAliveWithServices(net, 10, AliveServiceOptions(maxBlocksServed = 1))
                 .map { it.host },
+        )
+        assertEquals(
+            listOf("1.1.1.1", "2.2.2.2"),
+            db.peers
+                .listAliveWithServices(net, 10, AliveServiceOptions(maxBlocksServed = 2))
+                .map { it.host },
+        )
+        assertEquals(
+            listOf("5.5.5.5"),
+            db.peers.listUnprobedWithServicesUnused(net, 10, maxBlocksServed = 2).map { it.host },
+        )
+        assertEquals(
+            emptyList(),
+            db.peers.listUnprobedWithServicesUnused(net, 10, maxBlocksServed = 1).map { it.host },
+        )
+        assertEquals(
+            listOf("4.4.4.4"),
+            db.peers.listOldestDeadWithServices(net, 10, maxBlocksServed = 1).map { it.host },
+        )
+        assertEquals(
+            listOf("7.7.7.7", "4.4.4.4"),
+            db.peers.listOldestDeadWithServices(net, 10, maxBlocksServed = 2).map { it.host },
         )
         db.close()
     }

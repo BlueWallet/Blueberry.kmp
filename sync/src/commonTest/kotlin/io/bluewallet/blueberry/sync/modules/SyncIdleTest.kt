@@ -61,7 +61,7 @@ private fun seedCaughtUpDb(
             port = 8333,
             services = CF,
             alive = true,
-            usedForBlocks = false,
+            blocksServed = 0,
             lastProbedAt = null,
         ),
     )
@@ -124,7 +124,7 @@ class SyncIdleTest {
             val bus = createMessageBus()
             val db = createSqliteDatabase(":memory:")
             db.peers.upsert(
-                PeerWrite("1.1.1.1", 8333, CF, true, false, null),
+                PeerWrite("1.1.1.1", 8333, CF, true, 0, null),
             )
             db.headers.ensureCheckpoint(checkpointDbRecord())
             val cp = db.headers.tip()!!
@@ -466,7 +466,7 @@ class SyncIdleTest {
         runBlocking {
             val bus = createMessageBus()
             val db = createSqliteDatabase(":memory:")
-            db.peers.upsert(PeerWrite("1.1.1.1", 8333, CF, true, false, null))
+            db.peers.upsert(PeerWrite("1.1.1.1", 8333, CF, true, 0, null))
             db.headers.ensureCheckpoint(checkpointDbRecord())
             val cp = db.headers.tip()!!
             val tipHeight = cp.height + 1

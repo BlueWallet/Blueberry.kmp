@@ -43,7 +43,7 @@ class PeerSocketsStoreTest {
         val bus = createMessageBus()
         val db = createSqliteDatabase(":memory:")
         db.peers.upsert(
-            PeerWrite("1.1.1.1", 8333, 0uL, alive = false, usedForBlocks = false, lastProbedAt = null),
+            PeerWrite("1.1.1.1", 8333, 0uL, alive = false, blocksServed = 0, lastProbedAt = null),
         )
         val store = createPeerSocketsStore()
         val unsubs = mutableListOf<() -> Unit>()
@@ -56,7 +56,7 @@ class PeerSocketsStoreTest {
         assertEquals(3, store.get().hdr)
 
         db.peers.upsert(
-            PeerWrite("9.9.9.9", 8333, 1uL, alive = false, usedForBlocks = false, lastProbedAt = null),
+            PeerWrite("9.9.9.9", 8333, 1uL, alive = false, blocksServed = 0, lastProbedAt = null),
         )
         bus.emit(Event.PeersUpdated, PeersUpdatedPayload(at = 2))
         assertEquals(2, store.get().known)

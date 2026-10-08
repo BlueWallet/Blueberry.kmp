@@ -19,4 +19,7 @@ object Config {
     const val blockConnectTimeoutMs: Long = 15_000
     const val blockSyncTimeoutMs: Long = 30_000
     const val blockConcurrency: Int = 30
+
+    /** Blocks one peer may serve before block download and block-peer discovery leave it out. */
+    const val maxBlocksPerPeer: Int = 1
 }
