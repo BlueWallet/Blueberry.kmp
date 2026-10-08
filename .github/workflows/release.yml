@@ -96,7 +96,6 @@ jobs:
           path: dist/blueberry-${{ env.FILE_DATE }}-android.apk
           if-no-files-found: error
           retention-days: 14
-          archive: false
 
   desktop:
     name: desktop-${{ matrix.name }}
@@ -162,7 +161,7 @@ jobs:
 
       - name: Install fakeroot
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y fakeroot
+        run: sudo apt-get update && sudo apt-get install -y fakeroot zip
 
       - name: Add WiX to PATH
         if: runner.os == 'Windows'
@@ -217,7 +216,19 @@ jobs:
           fi
           mkdir -p dist
           cp "${installers[0]}" "dist/blueberry-${FILE_DATE}-${INSTALLER_SUFFIX}"
-          jar -cfM "dist/blueberry-${FILE_DATE}-${ZIP_SUFFIX}" -C "$app_dir" .
+          case "${RUNNER_OS}" in
+            Linux|macOS)
+              zip_out="$(pwd)/dist/blueberry-${FILE_DATE}-${ZIP_SUFFIX}"
+              (cd "$app_dir" && zip -qry -y "$zip_out" .)
+              ;;
+            Windows)
+              tar -a -cf "dist/blueberry-${FILE_DATE}-${ZIP_SUFFIX}" -C "$app_dir" .
+              ;;
+            *)
+              echo "unsupported RUNNER_OS: ${RUNNER_OS}" >&2
+              exit 1
+              ;;
+          esac
 
       # Artifact names: release-linux, release-macos-arm64, release-macos-x64, release-windows
       - uses: actions/upload-artifact@v7
@@ -228,7 +239,6 @@ jobs:
             dist/blueberry-${{ env.FILE_DATE }}-${{ matrix.zip-suffix }}
           if-no-files-found: error
           retention-days: 14
-          archive: false
 
   release:
     name: release
@@ -246,7 +256,7 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           pattern: release-*
-          path: dist
+          path: .
           merge-multiple: true
 
       - name: Publish GitHub Release
