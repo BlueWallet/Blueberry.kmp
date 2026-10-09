@@ -22,7 +22,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "io.bluewallet.blueberry"
-            packageVersion = "1.0.0"
+            packageVersion = (findProperty("packageVersion") as String?)?.ifBlank { null } ?: "1.0.0"
         }
     }
 }
