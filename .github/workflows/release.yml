@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9]"
+      - "v*"
 
 concurrency:
   group: release-${{ github.ref }}
@@ -13,10 +13,36 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    name: version
+    runs-on: ubuntu-latest
+    outputs:
+      version_name: ${{ steps.out.outputs.version_name }}
+      version_code: ${{ steps.out.outputs.version_code }}
+      package_version: ${{ steps.out.outputs.package_version }}
+      file_date: ${{ steps.out.outputs.file_date }}
+    steps:
+      - id: out
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          IFS=. read -r year month day <<< "$tag"
+          hour="$(date -u +%H)"
+          # Windows packageVersion parts must be 0-255, so the year drops 2000.
+          echo "version_name=${year}.${month}.${day}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${year}${month}${day}${hour}" >> "$GITHUB_OUTPUT"
+          echo "package_version=$((10#$year - 2000)).$((10#$month)).$((10#$day))" >> "$GITHUB_OUTPUT"
+          echo "file_date=${year}-${month}-${day}" >> "$GITHUB_OUTPUT"
+
   android:
     name: android
+    needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    env:
+      VERSION_NAME: ${{ needs.version.outputs.version_name }}
+      VERSION_CODE: ${{ needs.version.outputs.version_code }}
+      FILE_DATE: ${{ needs.version.outputs.file_date }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -46,9 +72,6 @@ jobs:
         with:
           path: ~/.konan
           key: ${{ runner.os }}-konan-${{ hashFiles('**/gradle/libs.versions.toml', '**/gradle-wrapper.properties') }}
-
-      - name: Resolve release version
-        run: bash scripts/release-version.sh "${{ github.ref_name }}" "$(date -u +%H)" >> "$GITHUB_ENV"
 
       - name: Bundle release APK
         env:
@@ -99,8 +122,12 @@ jobs:
 
   desktop:
     name: desktop-${{ matrix.name }}
+    needs: version
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180
+    env:
+      PACKAGE_VERSION: ${{ needs.version.outputs.package_version }}
+      FILE_DATE: ${{ needs.version.outputs.file_date }}
     strategy:
       fail-fast: false
       matrix:
@@ -180,10 +207,6 @@ jobs:
           Add-Content -Path $env:GITHUB_PATH -Value $wixBin
           Write-Host "Using WiX at $wixBin"
 
-      - name: Resolve release version
-        shell: bash
-        run: bash scripts/release-version.sh "${{ github.ref_name }}" "$(date -u +%H)" >> "$GITHUB_ENV"
-
       - name: Package ${{ matrix.name }}
         shell: bash
         env:
@@ -250,16 +273,13 @@ jobs:
 
   release:
     name: release
-    needs: [android, desktop]
+    needs: [version, android, desktop]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      FILE_DATE: ${{ needs.version.outputs.file_date }}
     steps:
-      - uses: actions/checkout@v7
-
-      - name: Resolve release version
-        run: bash scripts/release-version.sh "${{ github.ref_name }}" "$(date -u +%H)" >> "$GITHUB_ENV"
-
       - name: Download artifacts
         uses: actions/download-artifact@v7
         with:

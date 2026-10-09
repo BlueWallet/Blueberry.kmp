@@ -15,9 +15,6 @@ dependencies {
     implementation(libs.compose.uiToolingPreview)
 }
 
-val desktopPackageVersion =
-    (findProperty("packageVersion") as String?)?.ifBlank { null } ?: "1.0.0"
-
 compose.desktop {
     application {
         mainClass = "io.bluewallet.blueberry.MainKt"
@@ -25,14 +22,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "io.bluewallet.blueberry"
-            packageVersion = desktopPackageVersion
+            packageVersion = (findProperty("packageVersion") as String?)?.ifBlank { null } ?: "1.0.0"
         }
-    }
-}
-
-tasks.register("printDesktopPackageVersion") {
-    val version = desktopPackageVersion
-    doLast {
-        println(version)
     }
 }
