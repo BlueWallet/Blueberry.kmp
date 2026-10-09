@@ -216,19 +216,27 @@ jobs:
           fi
           mkdir -p dist
           cp "${installers[0]}" "dist/blueberry-${FILE_DATE}-${INSTALLER_SUFFIX}"
+          archive="$(pwd)/dist/blueberry-${FILE_DATE}-${ZIP_SUFFIX}"
           case "${RUNNER_OS}" in
             Linux|macOS)
-              zip_out="$(pwd)/dist/blueberry-${FILE_DATE}-${ZIP_SUFFIX}"
-              (cd "$app_dir" && zip -qry -y "$zip_out" .)
+              (cd "$app_dir" && zip -qry -y "$archive" .)
               ;;
             Windows)
-              tar -a -cf "dist/blueberry-${FILE_DATE}-${ZIP_SUFFIX}" -C "$app_dir" .
+              # Git Bash tar is GNU tar. `tar -a -cf file.zip` writes a tar
+              # archive and exits 0. Windows bsdtar writes a real zip.
+              win_tar="$(cygpath -u "${SYSTEMROOT}")/System32/tar.exe"
+              "$win_tar" -a -cf "$archive" -C "$app_dir" .
               ;;
             *)
               echo "unsupported RUNNER_OS: ${RUNNER_OS}" >&2
               exit 1
               ;;
           esac
+          magic="$(od -An -t x1 -N 4 "$archive" | tr -d ' \n')"
+          if [[ "$magic" != "504b0304" ]]; then
+            echo "app archive is not a zip (magic ${magic})" >&2
+            exit 1
+          fi
 
       # Artifact names: release-linux, release-macos-arm64, release-macos-x64, release-windows
       - uses: actions/upload-artifact@v7

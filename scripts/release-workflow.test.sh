@@ -64,5 +64,7 @@ require 'macos-x64.zip'
 require 'windows-x64.msi'
 require 'windows-x64.zip'
 require 'merge-multiple: true'
+require 'System32/tar.exe'
+require '504b0304'
 
 echo "release-workflow.test.sh passed"
