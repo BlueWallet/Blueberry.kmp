@@ -30,6 +30,10 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            if [[ "${GITHUB_REF}" != "refs/heads/master" ]]; then
+              echo "releases come from master" >&2
+              exit 1
+            fi
             tag="v$(date -u +%Y.%m.%d)"
             http_code="$(curl -sS -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${GH_TOKEN}" \
