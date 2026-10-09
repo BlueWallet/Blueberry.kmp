@@ -16,7 +16,7 @@
     <ID>CyclomaticComplexMethod:WalletTxsStore.kt$WalletTxsStoreImpl$override fun setBlockCounts( parsed: Int, total: Int, at: Long?, )</ID>
     <ID>FunctionNaming:MainViewController.kt$fun MainViewController()</ID>
     <ID>LongMethod:App.kt$@Composable fun App(databasePath: String)</ID>
-    <ID>LongMethod:ClickMeContent.kt$@Composable private fun SettingsActionRow( result: List&lt;String&gt;?, buttonText: String, onClick: () -&gt; Unit, busy: Boolean = false, )</ID>
+    <ID>LongMethod:ClickMeContent.kt$@Composable private fun SettingsActionRow( result: List&lt;String&gt;?, buttonText: String, onClick: () -&gt; Unit, busy: Boolean = false, status: String? = null, )</ID>
     <ID>LongMethod:CoinsScreen.kt$@Composable fun CoinsScreen( runtime: PeersRuntime, db: Database, onBack: () -&gt; Unit, )</ID>
     <ID>LongMethod:MatchingProgressStore.kt$MatchingProgressStoreImpl$override fun applyEvent( at: Long, scanned: Int, total: Int, )</ID>
     <ID>LongMethod:OnboardingApp.kt$@Composable fun OnboardingApp( startAtYearStep: Boolean, onFinished: () -&gt; Unit, persistImportedSecret: (String) -&gt; Unit, persistCreatedWallet: (String) -&gt; Unit, persistSyncYear: (Int) -&gt; Unit, )</ID>

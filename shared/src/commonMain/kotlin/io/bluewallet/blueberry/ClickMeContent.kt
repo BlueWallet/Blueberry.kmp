@@ -24,6 +24,7 @@ import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.PillButton
+import io.bluewallet.echalote.FetchProgressListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,6 +34,7 @@ fun ClickMeContent() {
     var vendorResult by remember { mutableStateOf<List<String>?>(null) }
     var torResult by remember { mutableStateOf<List<String>?>(null) }
     var torBusy by remember { mutableStateOf(false) }
+    var torStage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
         SettingsActionRow(
@@ -43,14 +45,23 @@ fun ClickMeContent() {
         SettingsActionRow(
             result = torResult,
             busy = torBusy,
+            status = torStage,
             buttonText = if (torBusy) "Testing Tor…" else "Test Tor",
             onClick = {
                 if (torBusy) return@SettingsActionRow
+                val listener =
+                    FetchProgressListener { percent, stage ->
+                        val line = torCheckProgressLine(percent, stage) ?: return@FetchProgressListener
+                        scope.launch { torStage = line }
+                    }
                 scope.launch {
                     torBusy = true
+                    torStage = null
                     torResult =
                         try {
-                            withContext(Dispatchers.Default) { checkTorExit() }
+                            withContext(Dispatchers.Default) {
+                                checkTorExit(onProgress = listener)
+                            }
                         } catch (err: Exception) {
                             listOf(err.message ?: err.toString())
                         } finally {
@@ -68,6 +79,7 @@ private fun SettingsActionRow(
     buttonText: String,
     onClick: () -> Unit,
     busy: Boolean = false,
+    status: String? = null,
 ) {
     val passed = result?.firstOrNull() == "ok"
     val shape = RoundedCornerShape(BwSpace.Radius)
@@ -86,11 +98,11 @@ private fun SettingsActionRow(
             when {
                 busy ->
                     Text(
-                        text = "Running…",
-                        color = BwColors.InkMuted,
+                        text = status ?: "\u00A0",
+                        color = if (status != null) BwColors.InkMuted else Color.Transparent,
                         fontFamily = BwFontFamily,
-                        fontSize = BwType.ValueSize,
-                        fontWeight = BwType.Value,
+                        fontSize = BwType.CaptionSize,
+                        fontWeight = BwType.Caption,
                     )
                 result == null ->
                     Text(

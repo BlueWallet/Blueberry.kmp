@@ -106,15 +106,29 @@ private fun ThemeCard(
     )
 }
 
+internal data class SettingsMetricSlots(
+    val label: String,
+    val value: String,
+    val caption: String,
+)
+
+internal fun alwaysShowSyncSlots(): SettingsMetricSlots =
+    SettingsMetricSlots(
+        label = "",
+        value = "Always show sync progress",
+        caption = "Keep Private Sync visible when idle",
+    )
+
 @Composable
 private fun AlwaysShowSyncCard(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
+    val slots = alwaysShowSyncSlots()
     MetricCard(
-        label = "Always show sync progress",
-        value = "",
-        caption = "Keep Private Sync visible when idle",
+        label = slots.label,
+        value = slots.value,
+        caption = slots.caption,
         modifier = Modifier.fillMaxWidth(),
         trailing = {
             BwSwitch(checked = checked, onCheckedChange = onCheckedChange)

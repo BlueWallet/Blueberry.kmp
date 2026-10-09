@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
+internal fun metricCardLabelText(label: String): String? = label.takeIf { it.isNotBlank() }
+
 /** White metric block — sister-project "Buy price average". */
 @Composable
 fun MetricCard(
@@ -40,15 +42,18 @@ fun MetricCard(
         horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                color = BwColors.InkSecondary,
-                fontFamily = BwFontFamily,
-                fontSize = BwType.LabelSize,
-                fontWeight = BwType.Label,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            val visibleLabel = metricCardLabelText(label)
+            if (visibleLabel != null) {
+                Text(
+                    text = visibleLabel,
+                    color = BwColors.InkSecondary,
+                    fontFamily = BwFontFamily,
+                    fontSize = BwType.LabelSize,
+                    fontWeight = BwType.Label,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (value.isNotEmpty()) {
                 Text(
                     text = value,
