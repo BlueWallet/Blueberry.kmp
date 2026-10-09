@@ -3,6 +3,7 @@ package io.bluewallet.blueberry
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TorCheckTest {
@@ -76,6 +77,19 @@ class TorCheckTest {
         assertEquals("0.1s", formatTorCheckElapsed(50))
         assertEquals("21.4s", formatTorCheckElapsed(21_400))
         assertEquals("21s", formatTorCheckElapsed(21_049))
+    }
+
+    @Test
+    fun torCheckProgressLine_replaces_with_one_stage_line() {
+        assertEquals("Starting 0%", torCheckProgressLine(0, "Starting"))
+        assertEquals("Connecting 8%", torCheckProgressLine(8, "Connecting"))
+        assertEquals("Building circuit 62%", torCheckProgressLine(62, "Building circuit"))
+        assertEquals("Done 100%", torCheckProgressLine(100, "Done"))
+        assertEquals("Starting 0%", torCheckProgressLine(-5, " Starting "))
+        assertEquals("Done 100%", torCheckProgressLine(140, "Done"))
+        assertNull(torCheckProgressLine(10, ""))
+        assertNull(torCheckProgressLine(10, "  "))
+        assertNull(torCheckProgressLine(10, "\n"))
     }
 
     @Test

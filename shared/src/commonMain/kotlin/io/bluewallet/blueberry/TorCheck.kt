@@ -3,6 +3,7 @@ package io.bluewallet.blueberry
 import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.echalote.Abort
 import io.bluewallet.echalote.Echalote
+import io.bluewallet.echalote.FetchProgressListener
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -18,6 +19,11 @@ internal fun formatTorCheckElapsed(ms: Long): String {
     return if (frac == 0) "${sec}s" else "$sec.${frac}s"
 }
 
+internal fun torCheckProgressLine(
+    percent: Int,
+    stage: String,
+): String? = stage.trim().takeIf { it.isNotEmpty() }?.let { "$it ${percent.coerceIn(0, 100)}%" }
+
 data class TorCheckIp(
     val isTor: Boolean,
     val ip: String,
@@ -28,9 +34,22 @@ suspend fun checkTorExit(
     backoffMs: Long = 1_500L,
     nowMs: () -> Long = { nowMillis() },
     delayMs: suspend (Long) -> Unit = { delay(it) },
-    fetchOnce: suspend (remainingMs: Long) -> TorCheckIp = { remaining ->
-        fetchTorCheckIp(remaining)
-    },
+    onProgress: FetchProgressListener? = null,
+): List<String> =
+    checkTorExit(
+        overallMs = overallMs,
+        backoffMs = backoffMs,
+        nowMs = nowMs,
+        delayMs = delayMs,
+        fetchOnce = { remaining -> fetchTorCheckIp(remaining, onProgress) },
+    )
+
+suspend fun checkTorExit(
+    overallMs: Long = 180_000L,
+    backoffMs: Long = 1_500L,
+    nowMs: () -> Long = { nowMillis() },
+    delayMs: suspend (Long) -> Unit = { delay(it) },
+    fetchOnce: suspend (remainingMs: Long) -> TorCheckIp,
 ): List<String> {
     val started = nowMs()
     val deadline = started + overallMs
@@ -61,7 +80,10 @@ suspend fun checkTorExit(
     return listOf("integration failed after $attempt attempt(s); exitIPs=$ips; last=$last")
 }
 
-suspend fun fetchTorCheckIp(remainingMs: Long): TorCheckIp {
+suspend fun fetchTorCheckIp(
+    remainingMs: Long,
+    onProgress: FetchProgressListener? = null,
+): TorCheckIp {
     val budget = min(120_000L, remainingMs.coerceAtLeast(1L))
     return coroutineScope {
         val abort = Abort()
@@ -72,7 +94,7 @@ suspend fun fetchTorCheckIp(remainingMs: Long): TorCheckIp {
             }
         try {
             println("TORCHECK fetch-start url=$TOR_CHECK_URL remaining=$remainingMs budget=$budget")
-            val res = Echalote.fetch(TOR_CHECK_URL, abort)
+            val res = Echalote.fetch(TOR_CHECK_URL, abort, onProgress = onProgress)
             println("TORCHECK http status=${res.status} bytes=${res.body.size}")
             parseTorCheckResponse(res.status, res.body)
         } finally {
