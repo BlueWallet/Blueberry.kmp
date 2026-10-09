@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.ref }}
@@ -17,18 +18,39 @@ jobs:
     name: version
     runs-on: ubuntu-latest
     outputs:
+      tag_name: ${{ steps.out.outputs.tag_name }}
       version_name: ${{ steps.out.outputs.version_name }}
       version_code: ${{ steps.out.outputs.version_code }}
       package_version: ${{ steps.out.outputs.package_version }}
       file_date: ${{ steps.out.outputs.file_date }}
     steps:
       - id: out
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME#v}"
-          IFS=. read -r year month day <<< "$tag"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="v$(date -u +%Y.%m.%d)"
+            http_code="$(curl -sS -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}")"
+            if [[ "$http_code" == "200" ]]; then
+              echo "tag ${tag} already exists" >&2
+              exit 1
+            fi
+            if [[ "$http_code" != "404" ]]; then
+              echo "could not check tag ${tag} (HTTP ${http_code})" >&2
+              exit 1
+            fi
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+          name="${tag#v}"
+          IFS=. read -r year month day <<< "$name"
           hour="$(date -u +%H)"
           # Windows packageVersion parts must be 0-255, so the year drops 2000.
+          echo "tag_name=${tag}" >> "$GITHUB_OUTPUT"
           echo "version_name=${year}.${month}.${day}" >> "$GITHUB_OUTPUT"
           echo "version_code=${year}${month}${day}${hour}" >> "$GITHUB_OUTPUT"
           echo "package_version=$((10#$year - 2000)).$((10#$month)).$((10#$day))" >> "$GITHUB_OUTPUT"
@@ -290,6 +312,8 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.version.outputs.tag_name }}
+          target_commitish: ${{ github.sha }}
           fail_on_unmatched_files: true
           generate_release_notes: true
           files: |
