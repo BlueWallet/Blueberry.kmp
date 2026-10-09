@@ -23,6 +23,8 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "io.bluewallet.blueberry"
             packageVersion = (findProperty("packageVersion") as String?)?.ifBlank { null } ?: "1.0.0"
+            // sqlite-jdbc calls java.sql.DriverManager. The default image omits java.sql.
+            modules("java.sql")
         }
     }
 }
