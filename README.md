@@ -4,7 +4,7 @@ This is a Kotlin Multiplatform project targeting Android, iOS, Desktop (JVM).
 
 Press [Run workflow](https://github.com/BlueWallet/Blueberry.kmp/actions/workflows/release.yml).
 
-That publishes a GitHub Release from `master`. The tag is `vYYYY.MM.DD` from the UTC date. A second run on the same UTC day stops. A pushed `v` tag starts the same workflow.
+That publishes a GitHub Release from `master`. The tag is `vYYYY.MM.DD` from the UTC date. A second run on the same UTC day stops. A pushed `v` tag starts the same workflow. Assets are the Android apk, desktop installers (deb, dmg, msi), and an App Store-signed iOS ipa for inspection. The ipa is not a sideload build.
 
 * [/iosApp](./iosApp/iosApp) contains an iOS application. Even if you’re sharing your UI with Compose Multiplatform,
   you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.

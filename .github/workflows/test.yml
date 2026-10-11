@@ -130,3 +130,11 @@ jobs:
         env:
           ROCKETX_API_KEY: ${{ secrets.ROCKETX_API_KEY }}
         run: ./gradlew ${{ matrix.gradle }} --no-daemon
+
+  release-assets:
+    name: release-assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Release asset contract
+        run: bash scripts/release-assets.test.sh
