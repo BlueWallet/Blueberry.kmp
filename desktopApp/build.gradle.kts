@@ -25,6 +25,15 @@ compose.desktop {
             packageVersion = (findProperty("packageVersion") as String?)?.ifBlank { null } ?: "1.0.0"
             // sqlite-jdbc calls java.sql.DriverManager. The default image omits java.sql.
             modules("java.sql")
+            linux {
+                iconFile.set(project.file("icons/icon.png"))
+            }
+            windows {
+                iconFile.set(project.file("icons/icon.ico"))
+            }
+            macOS {
+                iconFile.set(project.file("icons/icon.icns"))
+            }
         }
     }
 }
