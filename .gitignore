@@ -20,3 +20,5 @@ captures
 node_modules/
 blueberry.data/
 AGENTS.local.md
+AuthKey*.p8
+.env*
