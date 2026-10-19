@@ -32,4 +32,14 @@ class TxListCaptionTest {
         assertFalse(txListSecondaryMuted(null, "donation"))
         assertTrue(txListSecondaryMuted(null, "   "))
     }
+
+    @Test
+    fun address_label_fills_in_after_note_and_utxo_label() {
+        assertEquals("savings", txListSecondary("abcd…efgh", null, null, "  savings  "))
+        assertEquals("donation", txListSecondary("abcd…efgh", null, "donation", "savings"))
+        assertEquals("rent", txListSecondary("abcd…efgh", "rent", "donation", "savings"))
+        assertEquals("abcd…efgh", txListSecondary("abcd…efgh", null, null, "   "))
+        assertFalse(txListSecondaryMuted(null, null, "savings"))
+        assertTrue(txListSecondaryMuted(null, null, "   "))
+    }
 }

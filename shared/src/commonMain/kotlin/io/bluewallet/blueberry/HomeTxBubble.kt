@@ -42,7 +42,7 @@ fun HomeTxBubble(
     onClick: () -> Unit,
 ) {
     val incoming = tx.netDeltaSats >= 0
-    val muted = txListSecondaryMuted(tx.paymentLabel, tx.utxoLabel)
+    val muted = txListSecondaryMuted(tx.paymentLabel, tx.utxoLabel, tx.addressLabel)
     Row(
         modifier = Modifier.listRowPanel(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
@@ -68,7 +68,7 @@ fun HomeTxBubble(
                 maxLines = 1,
             )
             Text(
-                text = txListSecondary(tx.shortTxid, tx.paymentLabel, tx.utxoLabel),
+                text = txListSecondary(tx.shortTxid, tx.paymentLabel, tx.utxoLabel, tx.addressLabel),
                 color = if (muted) BwColors.InkMuted else BwColors.Ink,
                 fontFamily = BwFontFamily,
                 fontSize = if (muted) BwType.CaptionSize else BwType.BodySize,
