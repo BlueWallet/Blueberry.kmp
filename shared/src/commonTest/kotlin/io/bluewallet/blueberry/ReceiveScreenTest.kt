@@ -23,4 +23,19 @@ class ReceiveScreenTest {
         assertFalse(showsReceiveTypePicker(db))
         db.close()
     }
+
+    @Test
+    fun label_sheet_shows_for_unlabelled_or_edited_address_only() {
+        assertTrue(showsAddressLabelSheet(address = "bc1qa", label = null, editing = false))
+        assertFalse(showsAddressLabelSheet(address = "bc1qa", label = "rent", editing = false))
+        assertTrue(showsAddressLabelSheet(address = "bc1qa", label = "rent", editing = true))
+        assertFalse(showsAddressLabelSheet(address = null, label = null, editing = false))
+    }
+
+    @Test
+    fun label_save_needs_non_blank_draft() {
+        assertFalse(canSaveAddressLabel(""))
+        assertFalse(canSaveAddressLabel("  \t "))
+        assertTrue(canSaveAddressLabel(" rent "))
+    }
 }
