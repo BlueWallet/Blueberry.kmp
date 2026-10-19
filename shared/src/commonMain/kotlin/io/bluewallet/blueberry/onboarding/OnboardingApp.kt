@@ -58,6 +58,8 @@ import io.bluewallet.blueberry.ui.BlueberryLogo
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.DarkArtworkContent
+import io.bluewallet.blueberry.ui.DarkSceneChrome
 import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.PlainPillButton
 import io.bluewallet.blueberry.ui.PlatformBodyStyle
@@ -73,13 +75,18 @@ import io.bluewallet.blueberry.ui.platformBottomEdgeClearance
 import io.bluewallet.blueberry.ui.platformHeaderClearance
 import io.bluewallet.blueberry.ui.screenPushOffsetPx
 
+class OnboardingPersist(
+    val importedSecret: (String) -> Unit,
+    val createdWallet: (String) -> Unit,
+    val syncYear: (Int) -> Unit,
+    val forgetSecret: () -> Unit,
+)
+
 @Composable
 fun OnboardingApp(
     startAtYearStep: Boolean,
     onFinished: () -> Unit,
-    persistImportedSecret: (String) -> Unit,
-    persistCreatedWallet: (String) -> Unit,
-    persistSyncYear: (Int) -> Unit,
+    persist: OnboardingPersist,
 ) {
     var state by remember(startAtYearStep) {
         mutableStateOf(initialOnboardingState(startAtYearStep))
@@ -92,7 +99,7 @@ fun OnboardingApp(
         when (val effect = reduction.effect) {
             is OnboardingEffect.PersistImportedSecret -> {
                 try {
-                    persistImportedSecret(effect.raw)
+                    persist.importedSecret(effect.raw)
                     state = reduceOnboarding(state, OnboardingEvent.PersistImportOk).state
                 } catch (err: Exception) {
                     state =
@@ -104,7 +111,7 @@ fun OnboardingApp(
             }
             is OnboardingEffect.PersistCreatedWallet -> {
                 try {
-                    persistCreatedWallet(effect.mnemonic)
+                    persist.createdWallet(effect.mnemonic)
                     onFinished()
                 } catch (err: Exception) {
                     state =
@@ -116,8 +123,19 @@ fun OnboardingApp(
             }
             is OnboardingEffect.PersistYear -> {
                 try {
-                    persistSyncYear(effect.year)
+                    persist.syncYear(effect.year)
                     onFinished()
+                } catch (err: Exception) {
+                    state =
+                        reduceOnboarding(
+                            state,
+                            OnboardingEvent.PersistFailed(err.message ?: err.toString()),
+                        ).state
+                }
+            }
+            OnboardingEffect.ForgetImportedSecret -> {
+                try {
+                    persist.forgetSecret()
                 } catch (err: Exception) {
                     state =
                         reduceOnboarding(
@@ -143,97 +161,102 @@ fun OnboardingApp(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        val safe = WindowInsets.safeDrawing.asPaddingValues()
-        val showsHeader =
-            state.step == OnboardingStep.Create ||
-                state.step == OnboardingStep.Import ||
-                (state.step == OnboardingStep.Year && !startAtYearStep)
-        val topChrome =
-            safe.calculateTopPadding() +
-                if (showsHeader) platformHeaderClearance() else 0.dp
-        PlatformScrollEdge(
-            modifier = Modifier.fillMaxSize(),
-            top = topChrome,
-            bottom = safe.calculateBottomPadding(),
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                AnimatedContent(
-                    targetState = state.step,
-                    modifier = Modifier.fillMaxSize(),
-                    transitionSpec = {
-                        val forward = onboardingNavigatesForward(initialState, targetState)
-                        val enter =
-                            slideInHorizontally(
-                                animationSpec = tween(SCREEN_PUSH_DURATION_MS, easing = FastOutSlowInEasing),
-                                initialOffsetX = { if (forward) screenPushOffsetPx(it) else -screenPushOffsetPx(it) / 4 },
-                            ) + fadeIn(animationSpec = tween(SCREEN_PUSH_FADE_MS))
-                        val exit =
-                            slideOutHorizontally(
-                                animationSpec = tween(SCREEN_PUSH_DURATION_MS, easing = FastOutSlowInEasing),
-                                targetOffsetX = { if (forward) -screenPushOffsetPx(it) / 4 else screenPushOffsetPx(it) },
-                            ) + fadeOut(animationSpec = tween(SCREEN_PUSH_FADE_MS))
-                        enter togetherWith exit
-                    },
-                    label = "onboarding-step",
-                ) { step ->
-                    if (step == OnboardingStep.Create) {
-                        CreateSeedPage(
-                            mnemonic = state.mnemonic,
-                            busy = state.busy,
-                            error = state.error,
-                            onContinue = { dispatch(OnboardingEvent.ConfirmCreate) },
-                        )
-                    } else if (step == OnboardingStep.Choose) {
-                        ChooseWelcome(
-                            onCreate = { dispatch(OnboardingEvent.ChooseCreate) },
-                            onImport = { dispatch(OnboardingEvent.ChooseImport) },
-                        )
-                    } else if (step == OnboardingStep.Import) {
-                        ImportWalletPage(
-                            state = state,
-                            scanning = scanning,
-                            dispatch = { dispatch(it) },
-                            onScanningChange = { scanning = it },
-                        )
-                    } else {
-                        SyncYearPage(
-                            selectedYear = state.selectedYear,
-                            busy = state.busy,
-                            error = state.error,
-                            showsHeader = !startAtYearStep,
-                            onSelectYear = { dispatch(OnboardingEvent.SelectYear(it)) },
-                            onContinue = { dispatch(OnboardingEvent.ConfirmYear) },
-                        )
+    DarkSceneChrome(darkArtwork = state.step == OnboardingStep.Choose) {
+        Box(Modifier.fillMaxSize()) {
+            val safe = WindowInsets.safeDrawing.asPaddingValues()
+            val showsHeader =
+                state.step == OnboardingStep.Create ||
+                    state.step == OnboardingStep.Import ||
+                    (state.step == OnboardingStep.Year && !startAtYearStep)
+            val topChrome =
+                safe.calculateTopPadding() +
+                    if (showsHeader) platformHeaderClearance() else 0.dp
+            PlatformScrollEdge(
+                modifier = Modifier.fillMaxSize(),
+                top = topChrome,
+                bottom = safe.calculateBottomPadding(),
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    AnimatedContent(
+                        targetState = state,
+                        modifier = Modifier.fillMaxSize(),
+                        contentKey = { it.step },
+                        transitionSpec = {
+                            val forward = onboardingNavigatesForward(initialState.step, targetState.step)
+                            val enter =
+                                slideInHorizontally(
+                                    animationSpec = tween(SCREEN_PUSH_DURATION_MS, easing = FastOutSlowInEasing),
+                                    initialOffsetX = { if (forward) screenPushOffsetPx(it) else -screenPushOffsetPx(it) / 4 },
+                                ) + fadeIn(animationSpec = tween(SCREEN_PUSH_FADE_MS))
+                            val exit =
+                                slideOutHorizontally(
+                                    animationSpec = tween(SCREEN_PUSH_DURATION_MS, easing = FastOutSlowInEasing),
+                                    targetOffsetX = { if (forward) -screenPushOffsetPx(it) / 4 else screenPushOffsetPx(it) },
+                                ) + fadeOut(animationSpec = tween(SCREEN_PUSH_FADE_MS))
+                            enter togetherWith exit
+                        },
+                        label = "onboarding-step",
+                    ) { page ->
+                        if (page.step == OnboardingStep.Create) {
+                            CreateSeedPage(
+                                mnemonic = page.mnemonic,
+                                busy = page.busy,
+                                error = page.error,
+                                onContinue = { dispatch(OnboardingEvent.ConfirmCreate) },
+                            )
+                        } else if (page.step == OnboardingStep.Choose) {
+                            DarkArtworkContent {
+                                ChooseWelcome(
+                                    onCreate = { dispatch(OnboardingEvent.ChooseCreate) },
+                                    onImport = { dispatch(OnboardingEvent.ChooseImport) },
+                                )
+                            }
+                        } else if (page.step == OnboardingStep.Import) {
+                            ImportWalletPage(
+                                state = page,
+                                scanning = scanning,
+                                dispatch = { dispatch(it) },
+                                onScanningChange = { scanning = it },
+                            )
+                        } else {
+                            SyncYearPage(
+                                selectedYear = page.selectedYear,
+                                busy = page.busy,
+                                error = page.error,
+                                showsHeader = !startAtYearStep,
+                                onSelectYear = { dispatch(OnboardingEvent.SelectYear(it)) },
+                                onContinue = { dispatch(OnboardingEvent.ConfirmYear) },
+                            )
+                        }
                     }
                 }
             }
-        }
-        if (showsHeader) {
-            PlatformScreenHeader(
-                title =
-                    when (state.step) {
-                        OnboardingStep.Create -> "New seed"
-                        OnboardingStep.Import -> "Import"
-                        else -> "Sync from"
+            if (showsHeader) {
+                PlatformScreenHeader(
+                    title =
+                        when (state.step) {
+                            OnboardingStep.Create -> "New seed"
+                            OnboardingStep.Import -> "Import"
+                            else -> "Sync from"
+                        },
+                    onBack = {
+                        if (state.step == OnboardingStep.Import && scanning) {
+                            scanning = false
+                        } else {
+                            dispatch(OnboardingEvent.Back)
+                        }
                     },
-                onBack = {
-                    if (state.step == OnboardingStep.Import && scanning) {
-                        scanning = false
-                    } else {
-                        dispatch(OnboardingEvent.Back)
-                    }
-                },
-                enabled = !state.busy,
-                modifier =
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(
-                            top = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding(),
-                            start = 16.dp,
-                            end = 16.dp,
-                        ),
-            )
+                    enabled = !state.busy,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(
+                                top = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding(),
+                                start = 16.dp,
+                                end = 16.dp,
+                            ),
+                )
+            }
         }
     }
 }
@@ -480,8 +503,8 @@ private fun Modifier.dismissFocusOnOutsideTap(onDismiss: () -> Unit): Modifier =
     pointerInput(onDismiss) {
         awaitEachGesture {
             awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            val up = waitForUpOrCancellation(pass = PointerEventPass.Final)
-            if (up != null) onDismiss()
+            val up = waitForUpOrCancellation(pass = PointerEventPass.Main)
+            if (up != null && !up.isConsumed) onDismiss()
         }
     }
 

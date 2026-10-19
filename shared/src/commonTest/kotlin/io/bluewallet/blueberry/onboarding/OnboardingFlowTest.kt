@@ -144,7 +144,7 @@ class OnboardingFlowTest {
         assertEquals(OnboardingStep.Import, back.state.step)
         assertEquals(abandon, back.state.importValue)
         assertFalse(back.state.busy)
-        assertNull(back.effect)
+        assertEquals(OnboardingEffect.ForgetImportedSecret, back.effect)
     }
 
     @Test

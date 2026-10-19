@@ -6,7 +6,9 @@ import io.bluewallet.blueberry.boot.inspectSyncFromYear
 import io.bluewallet.blueberry.boot.loadSyncFromYear
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.WalletBirthdayInspection
+import io.bluewallet.blueberry.wallet.WalletSecretInspection
 import io.bluewallet.blueberry.wallet.inspectWalletBirthday
+import io.bluewallet.blueberry.wallet.inspectWalletSecret
 import io.bluewallet.blueberry.wallet.loadWalletSecret
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -44,6 +46,15 @@ class OnboardingPersistTest {
         persistSyncYear(db, 2015)
         assertEquals("2015", db.keyValue.get(SYNC_FROM_YEAR_KEY))
         assertEquals(2015, loadSyncFromYear(db))
+        db.close()
+    }
+
+    @Test
+    fun forget_imported_secret_removes_wallet_secret() {
+        val db = createSqliteDatabase(":memory:")
+        persistImportedSecret(db, abandon)
+        forgetImportedSecret(db)
+        assertEquals(WalletSecretInspection.Missing, inspectWalletSecret(db))
         db.close()
     }
 

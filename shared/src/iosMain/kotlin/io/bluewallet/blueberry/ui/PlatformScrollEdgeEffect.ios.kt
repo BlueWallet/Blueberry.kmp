@@ -85,11 +85,13 @@ private fun FadeBlur(
     modifier: Modifier,
 ) {
     val density = LocalDensity.current
+    val dark = LocalDarkPalette.current || LocalForcedDarkChrome.current
     var size by remember { mutableStateOf(IntSize.Zero) }
     UIKitView(
         factory = { FadeBlurView(fadeFromTop) },
         modifier = modifier.onSizeChanged { size = it },
         update = { view ->
+            view.applyTone(dark)
             view.place(
                 width = size.width / density.density.toDouble(),
                 height = size.height / density.density.toDouble(),
@@ -108,25 +110,37 @@ private class FadeBlurView(
     private val fadeFromTop: Boolean,
 ) : UIView(CGRectMake(0.0, 0.0, 0.0, 0.0)) {
     private val effectView: UIVisualEffectView
-    private val blackFill = UIView(CGRectMake(0.0, 0.0, 0.0, 0.0))
+    private val tintFill = UIView(CGRectMake(0.0, 0.0, 0.0, 0.0))
     private val fadeMask = UIImageView()
     private var placedWidth = -1.0
     private var placedHeight = -1.0
+    private var darkTone: Boolean? = null
 
     init {
         userInteractionEnabled = false
         backgroundColor = UIColor.clearColor
         clipsToBounds = true
-        effectView =
-            UIVisualEffectView(
-                effect = UIBlurEffect.effectWithStyle(UIBlurEffectStyle.UIBlurEffectStyleDark),
-            )
+        effectView = UIVisualEffectView()
         effectView.userInteractionEnabled = false
         effectView.backgroundColor = UIColor.clearColor
-        blackFill.userInteractionEnabled = false
-        blackFill.backgroundColor = UIColor.blackColor.colorWithAlphaComponent(0.82)
-        effectView.contentView.addSubview(blackFill)
+        tintFill.userInteractionEnabled = false
+        effectView.contentView.addSubview(tintFill)
         addSubview(effectView)
+        applyTone(dark = true)
+    }
+
+    fun applyTone(dark: Boolean) {
+        if (darkTone == dark) return
+        darkTone = dark
+        val style =
+            if (dark) {
+                UIBlurEffectStyle.UIBlurEffectStyleDark
+            } else {
+                UIBlurEffectStyle.UIBlurEffectStyleLight
+            }
+        effectView.effect = UIBlurEffect.effectWithStyle(style)
+        val color = if (dark) UIColor.blackColor else UIColor.whiteColor
+        tintFill.backgroundColor = color.colorWithAlphaComponent(0.82)
     }
 
     fun place(
@@ -136,7 +150,7 @@ private class FadeBlurView(
         if (width <= 0.0 || height <= 0.0) return
         val rect = CGRectMake(0.0, 0.0, width, height)
         effectView.setFrame(rect)
-        blackFill.setFrame(rect)
+        tintFill.setFrame(rect)
         if (width == placedWidth && height == placedHeight) return
         placedWidth = width
         placedHeight = height

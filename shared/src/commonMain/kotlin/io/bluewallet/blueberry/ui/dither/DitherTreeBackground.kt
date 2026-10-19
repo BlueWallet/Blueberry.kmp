@@ -56,7 +56,6 @@ fun DitherTreeBackground(
     pixelSize: Dp = 3.dp,
     animate: Boolean = true,
 ) {
-    val renderer = remember { DitherTreeRenderer() }
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
     var tick by remember { mutableIntStateOf(0) }
@@ -69,6 +68,9 @@ fun DitherTreeBackground(
         val w = ceil(viewSize.width / cell).toInt().coerceAtLeast(1)
         val h = ceil(viewSize.height / cell).toInt().coerceAtLeast(1)
         val surface = PixelSurface(w, h)
+        // Each effect owns its renderer. A cancelled frame keeps drawing on
+        // Dispatchers.Default, and resize() would replace the buffers under it.
+        val renderer = DitherTreeRenderer()
         renderer.resize(w, h, placement)
         if (!running) {
             val pixels = withContext(Dispatchers.Default) { renderer.render(STILL_TIME, 1f, 0f, palette) }

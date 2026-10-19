@@ -8,7 +8,7 @@
     <ID>ComplexCondition:MatchingProgressStore.kt$MatchingProgressStoreImpl$cur.scanned == scanned &amp;&amp; cur.total == total &amp;&amp; cur.at == at &amp;&amp; cur.progress.etaMs == nextEta &amp;&amp; cur.progress.percent == nextPercent</ID>
     <ID>CyclomaticComplexMethod:App.kt$@Composable fun App(databasePath: String)</ID>
     <ID>CyclomaticComplexMethod:MatchingProgressStore.kt$MatchingProgressStoreImpl$override fun applyEvent( at: Long, scanned: Int, total: Int, )</ID>
-    <ID>CyclomaticComplexMethod:OnboardingApp.kt$@Composable fun OnboardingApp( startAtYearStep: Boolean, onFinished: () -&gt; Unit, persistImportedSecret: (String) -&gt; Unit, persistCreatedWallet: (String) -&gt; Unit, persistSyncYear: (Int) -&gt; Unit, )</ID>
+    <ID>CyclomaticComplexMethod:OnboardingApp.kt$@Composable fun OnboardingApp( startAtYearStep: Boolean, onFinished: () -&gt; Unit, persist: OnboardingPersist, )</ID>
     <ID>CyclomaticComplexMethod:OnboardingFlow.kt$fun reduceOnboarding( state: OnboardingState, event: OnboardingEvent, ): OnboardingReduction</ID>
     <ID>CyclomaticComplexMethod:PeersRuntime.kt$PeersRuntime$private suspend fun startLocked()</ID>
     <ID>CyclomaticComplexMethod:SendScreen.kt$@Composable fun SendScreen( runtime: PeersRuntime, db: Database, onBack: () -&gt; Unit, )</ID>
@@ -19,7 +19,7 @@
     <ID>LongMethod:ClickMeContent.kt$@Composable private fun SettingsActionRow( result: List&lt;String&gt;?, buttonText: String, onClick: () -&gt; Unit, busy: Boolean = false, status: String? = null, )</ID>
     <ID>LongMethod:CoinsScreen.kt$@Composable fun CoinsScreen( runtime: PeersRuntime, db: Database, onBack: () -&gt; Unit, )</ID>
     <ID>LongMethod:MatchingProgressStore.kt$MatchingProgressStoreImpl$override fun applyEvent( at: Long, scanned: Int, total: Int, )</ID>
-    <ID>LongMethod:OnboardingApp.kt$@Composable fun OnboardingApp( startAtYearStep: Boolean, onFinished: () -&gt; Unit, persistImportedSecret: (String) -&gt; Unit, persistCreatedWallet: (String) -&gt; Unit, persistSyncYear: (Int) -&gt; Unit, )</ID>
+    <ID>LongMethod:OnboardingApp.kt$@Composable fun OnboardingApp( startAtYearStep: Boolean, onFinished: () -&gt; Unit, persist: OnboardingPersist, )</ID>
     <ID>LongMethod:OnboardingFlow.kt$fun reduceOnboarding( state: OnboardingState, event: OnboardingEvent, ): OnboardingReduction</ID>
     <ID>LongMethod:PeersRuntime.kt$PeersRuntime$private suspend fun startLocked()</ID>
     <ID>LongMethod:PeersScreen.kt$@Composable fun PeersScreen( db: Database, store: PeerSocketsStore, headersStore: HeadersProgressStore, filtersStore: FiltersProgressStore, matchingStore: MatchingProgressStore, blocksStore: BlocksMatchedStore, walletTxsStore: WalletTxsStore, onOpenSettings: () -&gt; Unit, onOpenReceive: () -&gt; Unit, onOpenSend: () -&gt; Unit, onOpenCoins: () -&gt; Unit, onOpenTx: (String) -&gt; Unit, onDetailedSyncChange: (Boolean) -&gt; Unit, )</ID>

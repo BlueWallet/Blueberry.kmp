@@ -69,6 +69,8 @@ sealed class OnboardingEffect {
     data class PersistYear(
         val year: Int,
     ) : OnboardingEffect()
+
+    data object ForgetImportedSecret : OnboardingEffect()
 }
 
 data class OnboardingReduction(
@@ -123,6 +125,7 @@ fun reduceOnboarding(
                     } else {
                         OnboardingReduction(
                             state.copy(step = OnboardingStep.Import, busy = false, error = null),
+                            OnboardingEffect.ForgetImportedSecret,
                         )
                     }
                 OnboardingStep.Choose -> OnboardingReduction(state)
