@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import io.bluewallet.blueberry.ui.AlwaysBounceScroll
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
@@ -26,45 +27,50 @@ fun SecretScreen(
     secret: String?,
     onBack: () -> Unit,
 ) {
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(BwColors.Paper)
-                .safeDrawingPadding()
-                .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
-        verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+    AlwaysBounceScroll(
+        Modifier
+            .fillMaxSize()
+            .background(BwColors.Paper)
+            .safeDrawingPadding(),
     ) {
-        ScreenHeader(title = "Secret", onBack = onBack)
         Column(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
+            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
         ) {
-            val shown = secret
-            if (shown != null) {
-                ScannableQr(
-                    data = shown,
-                    contentDescription = "Wallet secret QR code",
-                    modifier = Modifier.size(200.dp),
-                )
-                Text(
-                    text = shown,
-                    color = BwColors.Ink,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.BodySize,
-                    fontWeight = BwType.Body,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            } else {
-                Text(
-                    text = "No secret",
-                    color = BwColors.InkMuted,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.BodySize,
-                    fontWeight = BwType.Body,
-                )
+            ScreenHeader(title = "Secret", onBack = onBack)
+            Column(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(BwSpace.Gap, Alignment.CenterVertically),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                val shown = secret
+                if (shown != null) {
+                    ScannableQr(
+                        data = shown,
+                        contentDescription = "Wallet secret QR code",
+                        modifier = Modifier.size(200.dp),
+                    )
+                    Text(
+                        text = shown,
+                        color = BwColors.Ink,
+                        fontFamily = BwFontFamily,
+                        fontSize = BwType.BodySize,
+                        fontWeight = BwType.Body,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    Text(
+                        text = "No secret",
+                        color = BwColors.InkMuted,
+                        fontFamily = BwFontFamily,
+                        fontSize = BwType.BodySize,
+                        fontWeight = BwType.Body,
+                    )
+                }
             }
         }
     }

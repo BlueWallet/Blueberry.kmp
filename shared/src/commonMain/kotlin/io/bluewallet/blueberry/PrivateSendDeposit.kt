@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -33,6 +31,7 @@ import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.PillButton
+import io.bluewallet.blueberry.ui.alwaysBounceVerticalScroll
 
 fun privateSendProvider(): Pair<String, String> = "Provider" to "rocketx.exchange"
 
@@ -95,7 +94,7 @@ internal fun PrivateSendDeposit(
         modifier =
             Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .alwaysBounceVerticalScroll(),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         PrivateSendFacts(

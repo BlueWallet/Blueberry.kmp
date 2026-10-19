@@ -31,6 +31,7 @@ import io.bluewallet.blueberry.bus.FiltersProgressPayload
 import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.parse.snapshotReceiveAddress
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.ui.AlwaysBounceScroll
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
@@ -98,88 +99,93 @@ fun ReceiveScreen(
             }
         onDispose { off() }
     }
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(BwColors.Paper)
-                .safeDrawingPadding()
-                .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
-        verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+    AlwaysBounceScroll(
+        Modifier
+            .fillMaxSize()
+            .background(BwColors.Paper)
+            .safeDrawingPadding(),
     ) {
-        ScreenHeader(title = "Receive", onBack = onBack)
-        if (showsReceiveTypePicker(db)) {
-            Box {
-                Text(
-                    text = receiveType.receiveLabel(),
-                    color = BwColors.Link,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.BodySize,
-                    fontWeight = BwType.Body,
-                    modifier = Modifier.clickable { menuOpen = true },
-                )
-                DropdownMenu(
-                    expanded = menuOpen,
-                    onDismissRequest = { menuOpen = false },
-                ) {
-                    for (type in HD_SCRIPT_TYPES) {
-                        DropdownMenuItem(
-                            text = { Text(type.receiveLabel()) },
-                            onClick = {
-                                saveReceiveScriptType(db, type)
-                                receiveType = type
-                                menuOpen = false
-                                address = currentReceiveAddress(runtime, db)
-                            },
-                        )
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
+            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+        ) {
+            ScreenHeader(title = "Receive", onBack = onBack)
+            if (showsReceiveTypePicker(db)) {
+                Box {
+                    Text(
+                        text = receiveType.receiveLabel(),
+                        color = BwColors.Link,
+                        fontFamily = BwFontFamily,
+                        fontSize = BwType.BodySize,
+                        fontWeight = BwType.Body,
+                        modifier = Modifier.clickable { menuOpen = true },
+                    )
+                    DropdownMenu(
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false },
+                    ) {
+                        for (type in HD_SCRIPT_TYPES) {
+                            DropdownMenuItem(
+                                text = { Text(type.receiveLabel()) },
+                                onClick = {
+                                    saveReceiveScriptType(db, type)
+                                    receiveType = type
+                                    menuOpen = false
+                                    address = currentReceiveAddress(runtime, db)
+                                },
+                            )
+                        }
                     }
                 }
             }
-        }
-        Column(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            val shown = address
-            if (shown != null) {
-                ScannableQr(
-                    data = shown,
-                    contentDescription = "Receive address QR code",
-                    modifier = Modifier.size(200.dp),
-                )
-                Text(
-                    text = shown,
-                    color = BwColors.Ink,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.BodySize,
-                    fontWeight = BwType.Body,
-                    textAlign = TextAlign.Center,
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                clipboard.setText(AnnotatedString(shown))
-                                copied = true
-                            },
-                )
-                if (copied) {
+            Column(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(BwSpace.Gap, Alignment.CenterVertically),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                val shown = address
+                if (shown != null) {
+                    ScannableQr(
+                        data = shown,
+                        contentDescription = "Receive address QR code",
+                        modifier = Modifier.size(200.dp),
+                    )
                     Text(
-                        text = "Copied",
-                        color = BwColors.Success,
+                        text = shown,
+                        color = BwColors.Ink,
                         fontFamily = BwFontFamily,
-                        fontSize = BwType.CaptionSize,
-                        fontWeight = BwType.Caption,
+                        fontSize = BwType.BodySize,
+                        fontWeight = BwType.Body,
+                        textAlign = TextAlign.Center,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    clipboard.setText(AnnotatedString(shown))
+                                    copied = true
+                                },
+                    )
+                    if (copied) {
+                        Text(
+                            text = "Copied",
+                            color = BwColors.Success,
+                            fontFamily = BwFontFamily,
+                            fontSize = BwType.CaptionSize,
+                            fontWeight = BwType.Caption,
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "No unused address",
+                        color = BwColors.InkMuted,
+                        fontFamily = BwFontFamily,
+                        fontSize = BwType.BodySize,
+                        fontWeight = BwType.Body,
                     )
                 }
-            } else {
-                Text(
-                    text = "No unused address",
-                    color = BwColors.InkMuted,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.BodySize,
-                    fontWeight = BwType.Body,
-                )
             }
         }
     }

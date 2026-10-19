@@ -44,11 +44,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.bluewallet.blueberry.boot.loadHomeDetailedSync
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.ui.AlwaysBounceScroll
 import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.alwaysBounceTail
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -164,26 +166,28 @@ fun PeersScreen(
                 .fillMaxSize()
                 .background(BwColors.Paper),
     ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .safeDrawingPadding(),
-        ) {
-            HomeTopBar(onOpenSettings = onOpenSettings)
-            HomePinnedChrome(
-                walletTxs = walletTxs,
-                onOpenReceive = onOpenReceive,
-                onOpenSend = onOpenSend,
-                onOpenCoins = onOpenCoins,
-            )
-            HomeTxList(
-                walletTxs = walletTxs,
-                listState = listState,
-                onOpenTx = onOpenTx,
-                dockVisible = showDock && !detailedSync,
-                modifier = Modifier.weight(1f),
-            )
+        AlwaysBounceScroll(Modifier.fillMaxSize()) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .safeDrawingPadding(),
+            ) {
+                HomeTopBar(onOpenSettings = onOpenSettings)
+                HomePinnedChrome(
+                    walletTxs = walletTxs,
+                    onOpenReceive = onOpenReceive,
+                    onOpenSend = onOpenSend,
+                    onOpenCoins = onOpenCoins,
+                )
+                HomeTxList(
+                    walletTxs = walletTxs,
+                    listState = listState,
+                    onOpenTx = onOpenTx,
+                    dockVisible = showDock && !detailedSync,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
         AnimatedVisibility(
             visible = detailedSync,
@@ -340,6 +344,7 @@ private fun HomeTxList(
                 HomeTxBubble(tx = tx, onClick = { onOpenTx(tx.txid) })
             }
         }
+        alwaysBounceTail(listState)
     }
 }
 

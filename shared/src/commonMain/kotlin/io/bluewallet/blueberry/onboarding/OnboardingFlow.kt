@@ -114,12 +114,19 @@ fun reduceOnboarding(
             )
         }
         OnboardingEvent.Back -> {
-            if (state.step != OnboardingStep.Create && state.step != OnboardingStep.Import) {
-                return OnboardingReduction(state)
+            when (state.step) {
+                OnboardingStep.Create, OnboardingStep.Import ->
+                    OnboardingReduction(OnboardingState(step = OnboardingStep.Choose))
+                OnboardingStep.Year ->
+                    if (state.importValue.isEmpty()) {
+                        OnboardingReduction(state)
+                    } else {
+                        OnboardingReduction(
+                            state.copy(step = OnboardingStep.Import, busy = false, error = null),
+                        )
+                    }
+                OnboardingStep.Choose -> OnboardingReduction(state)
             }
-            OnboardingReduction(
-                OnboardingState(step = OnboardingStep.Choose),
-            )
         }
         is OnboardingEvent.ImportChanged -> {
             if (state.step != OnboardingStep.Import) return OnboardingReduction(state)

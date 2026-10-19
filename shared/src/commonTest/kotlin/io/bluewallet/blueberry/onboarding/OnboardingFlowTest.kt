@@ -131,6 +131,23 @@ class OnboardingFlowTest {
     }
 
     @Test
+    fun back_from_year_after_import_returns_to_import() {
+        var state =
+            reduceOnboarding(
+                initialOnboardingState(false),
+                OnboardingEvent.ChooseImport,
+            ).state
+        state = reduceOnboarding(state, OnboardingEvent.ImportChanged(abandon)).state
+        val submitted = reduceOnboarding(state, OnboardingEvent.SubmitImport)
+        val year = reduceOnboarding(submitted.state, OnboardingEvent.PersistImportOk).state
+        val back = reduceOnboarding(year, OnboardingEvent.Back)
+        assertEquals(OnboardingStep.Import, back.state.step)
+        assertEquals(abandon, back.state.importValue)
+        assertFalse(back.state.busy)
+        assertNull(back.effect)
+    }
+
+    @Test
     fun confirm_while_busy_is_ignored() {
         var state =
             reduceOnboarding(

@@ -15,9 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +44,7 @@ import io.bluewallet.blueberry.parse.buildActiveSendTx
 import io.bluewallet.blueberry.parse.savePaymentLabel
 import io.bluewallet.blueberry.parse.utxoValuePercent
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.ui.AlwaysBounceScroll
 import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwCheckbox
 import io.bluewallet.blueberry.ui.BwColors
@@ -54,6 +54,8 @@ import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.HorizontalProgressBar
 import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.ScreenHeader
+import io.bluewallet.blueberry.ui.alwaysBounceTail
+import io.bluewallet.blueberry.ui.alwaysBounceVerticalScroll
 import io.bluewallet.blueberry.ui.overlayBackStack
 import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.PsbtSendResult
@@ -164,258 +166,263 @@ fun SendScreen(
         overlayBackStack.push(cb)
         onDispose { overlayBackStack.pop(cb) }
     }
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(BwColors.Paper)
-                .safeDrawingPadding()
-                .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
-        verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+    AlwaysBounceScroll(
+        Modifier
+            .fillMaxSize()
+            .background(BwColors.Paper)
+            .safeDrawingPadding(),
     ) {
-        ScreenHeader(
-            title = if (step == SendStep.PrivateSend) "Private Send" else "Send",
-            onBack = { goBack() },
-        )
-        when (step) {
-            SendStep.Utxos ->
-                UtxoStep(
-                    modifier = Modifier.weight(1f),
-                    utxos = snap.utxos,
-                    selectedKeys = selectedKeys,
-                    onToggle = { key ->
-                        selectedKeys = if (key in selectedKeys) selectedKeys - key else selectedKeys + key
-                    },
-                    onContinue = {
-                        if (selectedKeys.isNotEmpty()) step = SendStep.Details
-                    },
-                )
-            SendStep.Details ->
-                if (scanning) {
-                    QrScanOverlay(
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
+            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+        ) {
+            ScreenHeader(
+                title = if (step == SendStep.PrivateSend) "Private Send" else "Send",
+                onBack = { goBack() },
+            )
+            when (step) {
+                SendStep.Utxos ->
+                    UtxoStep(
                         modifier = Modifier.weight(1f),
-                        onResult = { payload ->
-                            applySendPayload(payload)
-                            scanning = false
+                        utxos = snap.utxos,
+                        selectedKeys = selectedKeys,
+                        onToggle = { key ->
+                            selectedKeys = if (key in selectedKeys) selectedKeys - key else selectedKeys + key
+                        },
+                        onContinue = {
+                            if (selectedKeys.isNotEmpty()) step = SendStep.Details
                         },
                     )
-                } else {
-                    DetailsStep(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        form =
-                            DetailsForm(
-                                selectedSum = selectedSum,
-                                address = address,
-                                amount = amount,
-                                label = label,
-                                feeRate = feeRate,
-                                privateSend = privateSend,
-                                invalid = invalidField,
-                                feeError = feeError,
-                            ),
-                        onEvent = handler@{ event ->
-                            when (event) {
-                                is DetailsEvent.Address -> applySendPayload(event.value)
-                                is DetailsEvent.Amount -> {
-                                    amount = event.value
-                                    if (invalidField == SendField.Amount) invalidField = null
-                                }
-                                is DetailsEvent.Label -> {
-                                    label = event.value
-                                    if (invalidField == SendField.Label) invalidField = null
-                                }
-                                is DetailsEvent.FeeRate -> {
-                                    feeRate = event.value
-                                    feeError = null
-                                    if (invalidField == SendField.FeeRate) invalidField = null
-                                }
-                                is DetailsEvent.PrivateSend -> privateSend = event.checked
-                                DetailsEvent.Scan -> scanning = true
-                                DetailsEvent.Max -> {
-                                    amount = "MAX"
-                                    if (invalidField == SendField.Amount) invalidField = null
-                                }
-                                DetailsEvent.Continue -> {
-                                    when (val result = validateSendDetails(address, amount, label, selectedSum, feeRate)) {
-                                        is SendDetailsValidation.Ok -> {
-                                            details = result.details
-                                            invalidField = null
-                                            if (sendContinueTarget(privateSend) is SendContinueTarget.PrivateSend) {
-                                                val signErr =
-                                                    runCatching {
-                                                        privateSendSigningError(parseWalletSecret(loadWalletSecret(db)).kind)
-                                                    }.getOrElse { "Private send needs a signing wallet" }
-                                                if (signErr != null) {
-                                                    feeError = signErr
-                                                    return@handler
-                                                }
-                                                val refund = currentReceiveAddress(runtime, db)
-                                                if (refund.isNullOrEmpty()) {
-                                                    feeError = "missing refund address"
-                                                    return@handler
-                                                }
-                                                val pickedPrivate = pickSelected(snap.utxos, selectedKeys)
-                                                if (pickedPrivate is PickUtxos.Error) {
-                                                    feeError = pickedPrivate.error
-                                                    return@handler
-                                                }
-                                                val selectedPrivate = (pickedPrivate as PickUtxos.Ok).selected
-                                                privateSession =
-                                                    PrivateSendSession(
-                                                        destination = result.details.toAddress,
-                                                        label = result.details.paymentLabel,
-                                                        feeRateSatPerVb = result.feeRateSatPerVb,
-                                                        amountSats = result.details.amountSats,
-                                                        utxos =
-                                                            selectedPrivate.map {
-                                                                SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey)
-                                                            },
-                                                        refundAddress = refund,
-                                                    )
-                                                feeError = null
-                                                privateSigned = null
-                                                step = SendStep.PrivateSend
-                                                return@handler
-                                            }
-                                            val w = wallet
-                                            if (w == null) {
-                                                feeError = "missing send details"
-                                                return@handler
-                                            }
-                                            val picked = pickSelected(snap.utxos, selectedKeys)
-                                            if (picked is PickUtxos.Error) {
-                                                feeError = picked.error
-                                                return@handler
-                                            }
-                                            val selected = (picked as PickUtxos.Ok).selected
-                                            val d = result.details
-                                            try {
-                                                val built =
-                                                    buildActiveSendTx(
-                                                        db,
-                                                        w,
-                                                        SendBuildParams(
+                SendStep.Details ->
+                    if (scanning) {
+                        QrScanOverlay(
+                            modifier = Modifier.weight(1f),
+                            onResult = { payload ->
+                                applySendPayload(payload)
+                                scanning = false
+                            },
+                        )
+                    } else {
+                        DetailsStep(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            form =
+                                DetailsForm(
+                                    selectedSum = selectedSum,
+                                    address = address,
+                                    amount = amount,
+                                    label = label,
+                                    feeRate = feeRate,
+                                    privateSend = privateSend,
+                                    invalid = invalidField,
+                                    feeError = feeError,
+                                ),
+                            onEvent = handler@{ event ->
+                                when (event) {
+                                    is DetailsEvent.Address -> applySendPayload(event.value)
+                                    is DetailsEvent.Amount -> {
+                                        amount = event.value
+                                        if (invalidField == SendField.Amount) invalidField = null
+                                    }
+                                    is DetailsEvent.Label -> {
+                                        label = event.value
+                                        if (invalidField == SendField.Label) invalidField = null
+                                    }
+                                    is DetailsEvent.FeeRate -> {
+                                        feeRate = event.value
+                                        feeError = null
+                                        if (invalidField == SendField.FeeRate) invalidField = null
+                                    }
+                                    is DetailsEvent.PrivateSend -> privateSend = event.checked
+                                    DetailsEvent.Scan -> scanning = true
+                                    DetailsEvent.Max -> {
+                                        amount = "MAX"
+                                        if (invalidField == SendField.Amount) invalidField = null
+                                    }
+                                    DetailsEvent.Continue -> {
+                                        when (val result = validateSendDetails(address, amount, label, selectedSum, feeRate)) {
+                                            is SendDetailsValidation.Ok -> {
+                                                details = result.details
+                                                invalidField = null
+                                                if (sendContinueTarget(privateSend) is SendContinueTarget.PrivateSend) {
+                                                    val signErr =
+                                                        runCatching {
+                                                            privateSendSigningError(parseWalletSecret(loadWalletSecret(db)).kind)
+                                                        }.getOrElse { "Private send needs a signing wallet" }
+                                                    if (signErr != null) {
+                                                        feeError = signErr
+                                                        return@handler
+                                                    }
+                                                    val refund = currentReceiveAddress(runtime, db)
+                                                    if (refund.isNullOrEmpty()) {
+                                                        feeError = "missing refund address"
+                                                        return@handler
+                                                    }
+                                                    val pickedPrivate = pickSelected(snap.utxos, selectedKeys)
+                                                    if (pickedPrivate is PickUtxos.Error) {
+                                                        feeError = pickedPrivate.error
+                                                        return@handler
+                                                    }
+                                                    val selectedPrivate = (pickedPrivate as PickUtxos.Ok).selected
+                                                    privateSession =
+                                                        PrivateSendSession(
+                                                            destination = result.details.toAddress,
+                                                            label = result.details.paymentLabel,
+                                                            feeRateSatPerVb = result.feeRateSatPerVb,
+                                                            amountSats = result.details.amountSats,
                                                             utxos =
-                                                                selected.map {
+                                                                selectedPrivate.map {
                                                                     SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey)
                                                                 },
-                                                            toAddress = d.toAddress,
-                                                            amountSats = d.amountSats,
-                                                            feeRateSatPerVb = result.feeRateSatPerVb,
-                                                        ),
-                                                    )
-                                                val txid =
-                                                    when (built) {
-                                                        is SignedSendResult -> built.txid
-                                                        is PsbtSendResult -> built.txid
-                                                    }
-                                                val changeVouts =
-                                                    when (built) {
-                                                        is SignedSendResult -> built.changeVouts
-                                                        is PsbtSendResult -> built.changeVouts
-                                                    }
-                                                editLabels(db) {
-                                                    savePaymentLabel(db, txid, d.paymentLabel, changeVouts)
+                                                            refundAddress = refund,
+                                                        )
+                                                    feeError = null
+                                                    privateSigned = null
+                                                    step = SendStep.PrivateSend
+                                                    return@handler
                                                 }
-                                                uploadLabels(scope, db)
-                                                preview = built
-                                                previewUtxos =
-                                                    selected.map {
-                                                        SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey)
+                                                val w = wallet
+                                                if (w == null) {
+                                                    feeError = "missing send details"
+                                                    return@handler
+                                                }
+                                                val picked = pickSelected(snap.utxos, selectedKeys)
+                                                if (picked is PickUtxos.Error) {
+                                                    feeError = picked.error
+                                                    return@handler
+                                                }
+                                                val selected = (picked as PickUtxos.Ok).selected
+                                                val d = result.details
+                                                try {
+                                                    val built =
+                                                        buildActiveSendTx(
+                                                            db,
+                                                            w,
+                                                            SendBuildParams(
+                                                                utxos =
+                                                                    selected.map {
+                                                                        SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey)
+                                                                    },
+                                                                toAddress = d.toAddress,
+                                                                amountSats = d.amountSats,
+                                                                feeRateSatPerVb = result.feeRateSatPerVb,
+                                                            ),
+                                                        )
+                                                    val txid =
+                                                        when (built) {
+                                                            is SignedSendResult -> built.txid
+                                                            is PsbtSendResult -> built.txid
+                                                        }
+                                                    val changeVouts =
+                                                        when (built) {
+                                                            is SignedSendResult -> built.changeVouts
+                                                            is PsbtSendResult -> built.changeVouts
+                                                        }
+                                                    editLabels(db) {
+                                                        savePaymentLabel(db, txid, d.paymentLabel, changeVouts)
                                                     }
-                                                previewInputSum = selected.sumOf { it.valueSats }
-                                                feeError = null
-                                                cancelArmedForId = null
-                                                step = SendStep.Preview
-                                            } catch (err: Throwable) {
-                                                feeError = err.message ?: err.toString()
+                                                    uploadLabels(scope, db)
+                                                    preview = built
+                                                    previewUtxos =
+                                                        selected.map {
+                                                            SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey)
+                                                        }
+                                                    previewInputSum = selected.sumOf { it.valueSats }
+                                                    feeError = null
+                                                    cancelArmedForId = null
+                                                    step = SendStep.Preview
+                                                } catch (err: Throwable) {
+                                                    feeError = err.message ?: err.toString()
+                                                }
                                             }
+                                            is SendDetailsValidation.Invalid -> invalidField = result.field
                                         }
-                                        is SendDetailsValidation.Invalid -> invalidField = result.field
                                     }
                                 }
-                            }
-                        },
-                    )
+                            },
+                        )
+                    }
+                SendStep.PrivateSend -> {
+                    val session = privateSession
+                    if (session == null) {
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth())
+                    } else {
+                        PrivateSendStep(
+                            session = session,
+                            host =
+                                PrivateSendHost(
+                                    db = db,
+                                    wallet = wallet,
+                                    refundAddress = session.refundAddress,
+                                    broadcast = broadcast,
+                                    callbacks =
+                                        PrivateSendCallbacks(
+                                            onSigned = { privateSigned = it },
+                                            onBroadcast = { signed, row ->
+                                                val req =
+                                                    enqueueArmedBroadcast(runtime.broadcastStore, signed.txHex) {
+                                                        runtime.armPrivateSendPersist(row)
+                                                    } ?: return@PrivateSendCallbacks
+                                                runtime.bus.emit(Event.BroadcastRequest, req)
+                                            },
+                                            finish =
+                                                BroadcastFinishActions(
+                                                    onDone = {
+                                                        runtime.broadcastStore.reset()
+                                                        onBack()
+                                                    },
+                                                    onRetry = {
+                                                        val hex = privateSigned?.txHex ?: return@BroadcastFinishActions
+                                                        val req = enqueueBroadcast(runtime.broadcastStore, hex)
+                                                        if (req != null) runtime.bus.emit(Event.BroadcastRequest, req)
+                                                    },
+                                                ),
+                                        ),
+                                ),
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                        )
+                    }
                 }
-            SendStep.PrivateSend -> {
-                val session = privateSession
-                if (session == null) {
-                    Box(modifier = Modifier.weight(1f).fillMaxWidth())
-                } else {
-                    PrivateSendStep(
-                        session = session,
-                        host =
-                            PrivateSendHost(
-                                db = db,
-                                wallet = wallet,
-                                refundAddress = session.refundAddress,
-                                broadcast = broadcast,
-                                callbacks =
-                                    PrivateSendCallbacks(
-                                        onSigned = { privateSigned = it },
-                                        onBroadcast = { signed, row ->
-                                            val req =
-                                                enqueueArmedBroadcast(runtime.broadcastStore, signed.txHex) {
-                                                    runtime.armPrivateSendPersist(row)
-                                                } ?: return@PrivateSendCallbacks
-                                            runtime.bus.emit(Event.BroadcastRequest, req)
-                                        },
-                                        finish =
-                                            BroadcastFinishActions(
-                                                onDone = {
-                                                    runtime.broadcastStore.reset()
-                                                    onBack()
-                                                },
-                                                onRetry = {
-                                                    val hex = privateSigned?.txHex ?: return@BroadcastFinishActions
-                                                    val req = enqueueBroadcast(runtime.broadcastStore, hex)
-                                                    if (req != null) runtime.bus.emit(Event.BroadcastRequest, req)
-                                                },
-                                            ),
-                                    ),
-                            ),
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                    )
-                }
+                SendStep.Preview ->
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        PreviewStep(
+                            preview = preview,
+                            details = details,
+                            inputSum = previewInputSum,
+                            broadcast = broadcast,
+                            actions =
+                                PreviewActions(
+                                    onBroadcast = {
+                                        val signed = preview as? SignedSendResult ?: return@PreviewActions
+                                        val dest = details?.toAddress ?: return@PreviewActions
+                                        val req =
+                                            enqueueArmedBroadcast(runtime.broadcastStore, signed.txHex) {
+                                                runtime.armSendPersist(sendRecord(dest, previewUtxos, signed))
+                                            } ?: return@PreviewActions
+                                        runtime.bus.emit(Event.BroadcastRequest, req)
+                                    },
+                                    finish =
+                                        BroadcastFinishActions(
+                                            onDone = {
+                                                runtime.broadcastStore.reset()
+                                                onBack()
+                                            },
+                                            onRetry = {
+                                                val signed = preview as? SignedSendResult ?: return@BroadcastFinishActions
+                                                val dest = details?.toAddress ?: return@BroadcastFinishActions
+                                                val req =
+                                                    enqueueArmedBroadcast(runtime.broadcastStore, signed.txHex) {
+                                                        runtime.armSendPersist(sendRecord(dest, previewUtxos, signed))
+                                                    } ?: return@BroadcastFinishActions
+                                                runtime.bus.emit(Event.BroadcastRequest, req)
+                                            },
+                                        ),
+                                ),
+                        )
+                    }
             }
-            SendStep.Preview ->
-                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    PreviewStep(
-                        preview = preview,
-                        details = details,
-                        inputSum = previewInputSum,
-                        broadcast = broadcast,
-                        actions =
-                            PreviewActions(
-                                onBroadcast = {
-                                    val signed = preview as? SignedSendResult ?: return@PreviewActions
-                                    val dest = details?.toAddress ?: return@PreviewActions
-                                    val req =
-                                        enqueueArmedBroadcast(runtime.broadcastStore, signed.txHex) {
-                                            runtime.armSendPersist(sendRecord(dest, previewUtxos, signed))
-                                        } ?: return@PreviewActions
-                                    runtime.bus.emit(Event.BroadcastRequest, req)
-                                },
-                                finish =
-                                    BroadcastFinishActions(
-                                        onDone = {
-                                            runtime.broadcastStore.reset()
-                                            onBack()
-                                        },
-                                        onRetry = {
-                                            val signed = preview as? SignedSendResult ?: return@BroadcastFinishActions
-                                            val dest = details?.toAddress ?: return@BroadcastFinishActions
-                                            val req =
-                                                enqueueArmedBroadcast(runtime.broadcastStore, signed.txHex) {
-                                                    runtime.armSendPersist(sendRecord(dest, previewUtxos, signed))
-                                                } ?: return@BroadcastFinishActions
-                                            runtime.bus.emit(Event.BroadcastRequest, req)
-                                        },
-                                    ),
-                            ),
-                    )
-                }
         }
     }
 }
@@ -457,7 +464,8 @@ private fun UtxoStep(
         )
     } else {
         val maxValue = utxos.maxOf { it.valueSats }
-        LazyColumn(modifier = modifier.fillMaxWidth()) {
+        val listState = rememberLazyListState()
+        LazyColumn(modifier = modifier.fillMaxWidth(), state = listState) {
             items(utxos, key = { it.key }) { u ->
                 val checked = u.key in selectedKeys
                 UtxoStepRow(
@@ -467,6 +475,7 @@ private fun UtxoStep(
                     onToggle = onToggle,
                 )
             }
+            alwaysBounceTail(listState)
         }
     }
     PillButton(
@@ -581,7 +590,7 @@ private fun DetailsStep(
         modifier =
             modifier
                 .imePadding()
-                .verticalScroll(rememberScrollState()),
+                .alwaysBounceVerticalScroll(),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
