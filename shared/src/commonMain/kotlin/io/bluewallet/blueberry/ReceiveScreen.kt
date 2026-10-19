@@ -99,7 +99,7 @@ fun showsAddressLabelSheet(
     address: String?,
     label: String?,
     editing: Boolean,
-): Boolean = address != null && (label == null || editing)
+): Boolean = address != null && (label.isNullOrBlank() || editing)
 
 fun canSaveAddressLabel(draft: String): Boolean = draft.isNotBlank()
 

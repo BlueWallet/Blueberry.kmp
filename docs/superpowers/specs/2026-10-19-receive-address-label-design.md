@@ -44,13 +44,13 @@ The `address_labels` table and `setAddressLabel(db, address, label)` exist (comm
 - `ReceiveScreen.kt`: pin `address` (drop the `walletTxsStore` `DisposableEffect`). Add `label`, `editing` and `draft` state keyed on `address`. Draw the cover over the QR and address column, and the label row.
 - `ReceiveLabelSheet` (private composable, in `ReceiveScreen.kt` or `ReceiveLabelSheet.kt`): `draft`, `onDraft`, `dismissText`, `onSave`, `onDismiss`.
 - Pure helpers (top level, `ReceiveScreen.kt`):
-  - `showsAddressLabelSheet(address: String?, label: String?, editing: Boolean): Boolean` returns `address != null && (label == null || editing)`.
+  - `showsAddressLabelSheet(address: String?, label: String?, editing: Boolean): Boolean` returns `address != null && (label.isNullOrBlank() || editing)`; a blank stored label (e.g. restored from backup) counts as no label.
   - `canSaveAddressLabel(draft: String): Boolean` returns `draft.isNotBlank()`.
 - Reuse `PillButton`, `TextAction`, `OverlayBackEffects`, `BwColors`, `BwType`, `BwSpace`. No new theme tokens.
 
 ## Testing
 
-- TDD on the two helpers in `shared/src/commonTest/.../ReceiveScreenTest.kt`. Cases: unlabelled address, labelled address, labelled address in edit mode, null address. Blank, whitespace-only and non-empty drafts.
+- TDD on the two helpers in `shared/src/commonTest/.../ReceiveScreenTest.kt`. Cases: unlabelled address, blank and whitespace-only stored label, labelled address, labelled address in edit mode, null address. Blank, whitespace-only and non-empty drafts.
 - Pinning is the removal of a subscription. It has no unit test and is covered by the visual check.
 - Verify: `ktlintCheck detekt :storage:jvmTest :shared:jvmTest :androidApp:assembleDebug`.
 - Visual check in the desktop app, done separately: new wallet → prompt → save → label under QR → edit → cancel → type switch → prompt again.

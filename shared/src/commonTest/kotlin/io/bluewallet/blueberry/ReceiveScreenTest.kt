@@ -27,6 +27,8 @@ class ReceiveScreenTest {
     @Test
     fun label_sheet_shows_for_unlabelled_or_edited_address_only() {
         assertTrue(showsAddressLabelSheet(address = "bc1qa", label = null, editing = false))
+        assertTrue(showsAddressLabelSheet(address = "bc1qa", label = "", editing = false))
+        assertTrue(showsAddressLabelSheet(address = "bc1qa", label = "  \t ", editing = false))
         assertFalse(showsAddressLabelSheet(address = "bc1qa", label = "rent", editing = false))
         assertTrue(showsAddressLabelSheet(address = "bc1qa", label = "rent", editing = true))
         assertFalse(showsAddressLabelSheet(address = null, label = null, editing = false))
