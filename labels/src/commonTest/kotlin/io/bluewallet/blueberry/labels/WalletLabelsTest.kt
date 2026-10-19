@@ -11,6 +11,7 @@ class WalletLabelsTest {
             WalletLabels(
                 utxoNames = listOf(UtxoLabel(OUTPOINT, "say \"hi\"")),
                 paymentLabels = listOf(PaymentLabel(TXID, "rent")),
+                addressLabels = listOf(AddressLabel(ADDRESS, "donations")),
             )
         val payload = encryptWalletLabels(ACCOUNT_KEY, labels)
         val plaintext = decryptMetadataFile(ACCOUNT_KEY, payload).decodeToString()
@@ -19,6 +20,7 @@ class WalletLabelsTest {
             """
             {"type":"output","ref":"$OUTPOINT","label":"say \"hi\""}
             {"type":"tx","ref":"$TXID","label":"rent"}
+            {"type":"addr","ref":"$ADDRESS","label":"donations"}
             """.trimIndent(),
             plaintext,
         )
@@ -58,6 +60,7 @@ class WalletLabelsTest {
             WalletLabels(
                 utxoNames = listOf(UtxoLabel(OUTPOINT, "keep")),
                 paymentLabels = listOf(PaymentLabel(TXID, "rent")),
+                addressLabels = listOf(AddressLabel("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "skip")),
             ),
             decryptWalletLabels(ACCOUNT_KEY, payload),
         )
@@ -68,6 +71,20 @@ class WalletLabelsTest {
         val payload = encryptWalletLabels(ACCOUNT_KEY, WalletLabels(emptyList(), emptyList()))
 
         assertEquals(WalletLabels(emptyList(), emptyList()), storedWalletLabels(ACCOUNT_KEY, payload))
+    }
+
+    @Test
+    fun stored_wallet_labels_accepts_an_addr_only_file() {
+        val payload =
+            encryptWalletLabels(
+                ACCOUNT_KEY,
+                WalletLabels(emptyList(), emptyList(), listOf(AddressLabel(ADDRESS, "donations"))),
+            )
+
+        assertEquals(
+            WalletLabels(emptyList(), emptyList(), listOf(AddressLabel(ADDRESS, "donations"))),
+            storedWalletLabels(ACCOUNT_KEY, payload),
+        )
     }
 
     @Test
@@ -95,3 +112,4 @@ class WalletLabelsTest {
 private const val ACCOUNT_KEY = "v5kCxSKLTsnwmgPBeaRyFDWeG9zXouF34L72763zjLrS4LWy8"
 private const val TXID = "350eebc1012ce2339b71b5fca317a0d174abc3a633684bc65a71845deb596539"
 private const val OUTPOINT = "$TXID:0"
+private const val ADDRESS = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
