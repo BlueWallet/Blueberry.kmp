@@ -85,13 +85,7 @@ internal fun MaterialScreenHeader(
                 navigationIconContentColor = BwColors.Ink,
             ),
         navigationIcon = {
-            IconButton(
-                onClick = onBack,
-                enabled = enabled,
-                modifier = Modifier.semantics { contentDescription = "Back" },
-            ) {
-                BackArrow()
-            }
+            HeaderBackButton(onClick = onBack, enabled = enabled)
         },
         title = { Text(title) },
     )
@@ -99,6 +93,22 @@ internal fun MaterialScreenHeader(
 
 @Composable
 internal fun MaterialBodyStyle(): TextStyle = MaterialTheme.typography.bodyLarge.copy(color = BwColors.Ink)
+
+/** Shared back control. iOS 26 draws liquid glass instead; every other target uses this. */
+@Composable
+internal fun HeaderBackButton(
+    onClick: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.semantics { contentDescription = "Back" },
+    ) {
+        BackArrow()
+    }
+}
 
 @Composable
 private fun BackArrow() {

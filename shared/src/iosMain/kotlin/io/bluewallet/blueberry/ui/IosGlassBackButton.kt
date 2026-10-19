@@ -13,11 +13,12 @@ import platform.UIKit.UIAction
 import platform.UIKit.UIButton
 import platform.UIKit.UIButtonConfiguration
 import platform.UIKit.UIColor
+import platform.UIKit.UIDevice
 import platform.UIKit.UIImage
 
 /**
- * Native iOS 26 liquid-glass back control. Compose draws behind it; the button is a UIKit
- * glass button placed above the canvas so the material can sample that content.
+ * iOS back control for [PlatformScreenHeader]. iOS 26 and later use a liquid-glass button.
+ * Earlier systems use [HeaderBackButton], the same control as Android and desktop.
  */
 @OptIn(ExperimentalForeignApi::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -25,6 +26,21 @@ internal fun IosGlassBackButton(
     onBack: () -> Unit,
     enabled: Boolean,
     modifier: Modifier = Modifier,
+) {
+    val glass = remember { supportsIosLiquidGlass(UIDevice.currentDevice.systemVersion) }
+    if (glass) {
+        LiquidGlassBackButton(onBack = onBack, enabled = enabled, modifier = modifier)
+    } else {
+        HeaderBackButton(onClick = onBack, enabled = enabled, modifier = modifier)
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class, ExperimentalComposeUiApi::class)
+@Composable
+private fun LiquidGlassBackButton(
+    onBack: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier,
 ) {
     val action = remember { BackAction() }
     UIKitView(
