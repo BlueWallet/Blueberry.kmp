@@ -6,6 +6,7 @@ import fr.acinq.bitcoin.DeterministicWallet
 import fr.acinq.bitcoin.MnemonicCode
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class IsAddressValidTest {
@@ -35,5 +36,16 @@ class IsAddressValidTest {
     @Test
     fun trims_whitespace_around_a_valid_address() {
         assertTrue(isAddressValid("  $BLUE_EXTERNAL_0  "))
+    }
+
+    @Test
+    fun address_from_output_script_is_null_for_short_or_unknown_scripts() {
+        val hash = ByteArray(20) { 7 }
+        val p2pkh = byteArrayOf(0x76, 0xa9.toByte(), 0x14) + hash + byteArrayOf(0x88.toByte(), 0xac.toByte())
+        val p2sh = byteArrayOf(0xa9.toByte(), 0x14) + hash + byteArrayOf(0x87.toByte())
+        assertTrue(addressFromOutputScript(p2pkh)!!.startsWith("1"))
+        assertTrue(addressFromOutputScript(p2sh)!!.startsWith("3"))
+        assertNull(addressFromOutputScript(byteArrayOf(0x6a, 0x01, 0x00)))
+        assertNull(addressFromOutputScript(ByteArray(0)))
     }
 }

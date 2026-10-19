@@ -18,9 +18,15 @@ data class PaymentLabel(
     val label: String,
 )
 
+data class AddressLabel(
+    val address: String,
+    val label: String,
+)
+
 data class WalletLabels(
     val utxoNames: List<UtxoLabel>,
     val paymentLabels: List<PaymentLabel>,
+    val addressLabels: List<AddressLabel> = emptyList(),
 )
 
 /** BIP-329 JSONL of [labels], sealed with the SLIP-0015 file cipher. */
@@ -36,12 +42,15 @@ fun encryptWalletLabels(
             labels.paymentLabels.sortedBy { it.txid }.forEach { row ->
                 add(bip329Line("tx", row.txid, row.label))
             }
+            labels.addressLabels.sortedBy { it.address }.forEach { row ->
+                add(bip329Line("addr", row.address, row.label))
+            }
         }
     return encryptMetadataFile(accountKey, lines.joinToString("\n").encodeToByteArray())
 }
 
 /**
- * Opens a SLIP-0015 payload and returns BIP-329 `output` and `tx` rows.
+ * Opens a SLIP-0015 payload and returns BIP-329 `output`, `tx` and `addr` rows.
  * A line that is not valid JSON, or not one of those records, is skipped.
  */
 fun decryptWalletLabels(
@@ -51,7 +60,7 @@ fun decryptWalletLabels(
 
 /**
  * Labels from a stored file. A blank document is an empty set.
- * A non-blank document with no output or tx rows is not a label file.
+ * A non-blank document with no output, tx or addr rows is not a label file.
  */
 fun storedWalletLabels(
     accountKey: String,
@@ -59,23 +68,26 @@ fun storedWalletLabels(
 ): WalletLabels? {
     val text = decryptMetadataFile(accountKey, payload).decodeToString()
     val labels = labelsFromPlaintext(text)
-    val hasRow = labels.utxoNames.isNotEmpty() || labels.paymentLabels.isNotEmpty()
+    val hasRow = labels.utxoNames.isNotEmpty() || labels.paymentLabels.isNotEmpty() || labels.addressLabels.isNotEmpty()
     return if (text.isBlank() || hasRow) labels else null
 }
 
 private fun labelsFromPlaintext(text: String): WalletLabels {
     val utxoNames = linkedMapOf<String, String>()
     val paymentLabels = linkedMapOf<String, String>()
+    val addressLabels = linkedMapOf<String, String>()
     text.split('\n').forEach { line ->
         val record = bip329Record(line.trim()) ?: return@forEach
         when (record.type) {
             "output" -> utxoNames[record.ref] = record.label
             "tx" -> paymentLabels[record.ref] = record.label
+            "addr" -> addressLabels[record.ref] = record.label
         }
     }
     return WalletLabels(
         utxoNames = utxoNames.map { (outpoint, name) -> UtxoLabel(outpoint, name) }.sortedBy { it.outpoint },
         paymentLabels = paymentLabels.map { (txid, label) -> PaymentLabel(txid, label) }.sortedBy { it.txid },
+        addressLabels = addressLabels.map { (address, label) -> AddressLabel(address, label) }.sortedBy { it.address },
     )
 }
 
@@ -101,7 +113,7 @@ private fun bip329Record(line: String): Bip329Record? {
     val type = obj?.let { jsonString(it, "type") }
     val ref = obj?.let { jsonString(it, "ref") }
     val label = obj?.let { jsonString(it, "label") }
-    val knownType = type == "output" || type == "tx"
+    val knownType = type == "output" || type == "tx" || type == "addr"
     return if (knownType && ref != null && label != null) {
         Bip329Record(type, ref, label)
     } else {

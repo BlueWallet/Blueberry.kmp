@@ -5,6 +5,7 @@ import io.bluewallet.blueberry.bus.MessageBus
 import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.parse.TxFee
 import io.bluewallet.blueberry.parse.TxRow
+import io.bluewallet.blueberry.parse.firstAddressLabel
 import io.bluewallet.blueberry.parse.firstUtxoLabelByTxid
 import io.bluewallet.blueberry.parse.formatBlockTimeLabel
 import io.bluewallet.blueberry.parse.formatBtc
@@ -19,6 +20,7 @@ import io.bluewallet.blueberry.parse.utxoValueBar
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
 import io.bluewallet.blueberry.wallet.Wallet
+import io.bluewallet.blueberry.wallet.hexToBytes
 import io.bluewallet.headers.decodeBlockHeader
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -33,6 +35,7 @@ data class WalletTxRow(
     val netDeltaLabel: String,
     val paymentLabel: String? = null,
     val utxoLabel: String? = null,
+    val addressLabel: String? = null,
     val privateSend: Boolean = false,
     val fee: TxFee? = null,
     val blockTimeS: Long? = null,
@@ -186,11 +189,19 @@ private data class PendingSendCandidate(
     val privateSend: Boolean,
 )
 
+/** Label sources for tx rows: note by txid, first UTXO name by txid, and first address label from tx bytes. */
+private class TxRowLabels(
+    val noteByTxid: Map<String, String>,
+    val utxoByTxid: Map<String, String>,
+    private val byAddress: Map<String, String>,
+) {
+    fun address(tx: ByteArray?): String? = if (tx == null || byAddress.isEmpty()) null else firstAddressLabel(tx, byAddress)
+}
+
 private fun pendingSendRows(
     db: Database,
     confirmedByTxid: Map<String, Long>,
-    labelByTxid: Map<String, String>,
-    utxoLabelByTxid: Map<String, String>,
+    labels: TxRowLabels,
     keepAddresses: List<String>,
 ): List<WalletTxRow> {
     val candidates =
@@ -229,13 +240,12 @@ private fun pendingSendRows(
             stillPending += row
         }
     }
-    return pendingWalletRows(stillPending, labelByTxid, utxoLabelByTxid)
+    return pendingWalletRows(stillPending, labels)
 }
 
 private fun pendingWalletRows(
     pending: List<PendingSendCandidate>,
-    labelByTxid: Map<String, String>,
-    utxoLabelByTxid: Map<String, String>,
+    labels: TxRowLabels,
 ): List<WalletTxRow> =
     pending.sortedByDescending { it.createdAt }.map { row ->
         val delta =
@@ -247,14 +257,13 @@ private fun pendingWalletRows(
                     keepAddresses = row.keepAddresses,
                 )
             }.getOrElse { -row.coins.sumOf { coin -> coin.valueSats } }
-        pendingWalletTxRow(row, delta, labelByTxid, utxoLabelByTxid)
+        pendingWalletTxRow(row, delta, labels)
     }
 
 private fun pendingWalletTxRow(
     row: PendingSendCandidate,
     delta: Long,
-    labelByTxid: Map<String, String>,
-    utxoLabelByTxid: Map<String, String>,
+    labels: TxRowLabels,
 ): WalletTxRow =
     WalletTxRow(
         txid = row.txid,
@@ -263,8 +272,9 @@ private fun pendingWalletTxRow(
         timeLabel = padBlockTimeLabel("pending"),
         netDeltaSats = delta,
         netDeltaLabel = formatNetDelta(delta),
-        paymentLabel = labelByTxid[row.txid],
-        utxoLabel = utxoLabelByTxid[row.txid],
+        paymentLabel = labels.noteByTxid[row.txid],
+        utxoLabel = labels.utxoByTxid[row.txid],
+        addressLabel = labels.address(runCatching { hexToBytes(row.txHex) }.getOrNull()),
         privateSend = row.privateSend,
     )
 
@@ -277,14 +287,18 @@ fun snapshotFromDb(
     val stored = db.transactions.list()
     val balanceSats = stored.fold(0L) { s, t -> s + t.netDeltaSats }
     val timeLabels = mutableMapOf<Int, HeightTimeLabel>()
-    val labelByTxid = db.txPaymentLabels.list().associate { it.txid to it.label }
     val privateSendTxids =
         db.privateSends
             .list()
             .map { it.txid }
             .toSet()
     val nameByOutpoint = db.utxoNames.list().associate { it.outpoint to it.name }
-    val utxoLabelByTxid = firstUtxoLabelByTxid(nameByOutpoint)
+    val labels =
+        TxRowLabels(
+            noteByTxid = db.txPaymentLabels.list().associate { it.txid to it.label },
+            utxoByTxid = firstUtxoLabelByTxid(nameByOutpoint),
+            byAddress = db.addressLabels.list().associate { it.address to it.label },
+        )
 
     var utxos = emptyList<WalletUtxoRow>()
     var fees = emptyMap<String, TxFee>()
@@ -344,8 +358,9 @@ fun snapshotFromDb(
                 blockTimeS = whenLabel.unixSeconds,
                 netDeltaSats = tx.netDeltaSats,
                 netDeltaLabel = formatNetDelta(tx.netDeltaSats),
-                paymentLabel = labelByTxid[tx.txid],
-                utxoLabel = utxoLabelByTxid[tx.txid],
+                paymentLabel = labels.noteByTxid[tx.txid],
+                utxoLabel = labels.utxoByTxid[tx.txid],
+                addressLabel = labels.address(tx.tx),
                 privateSend = tx.txid in privateSendTxids,
                 fee = fees[tx.txid],
             )
@@ -354,8 +369,7 @@ fun snapshotFromDb(
         pendingSendRows(
             db = db,
             confirmedByTxid = stored.associate { it.txid to it.height.toLong() },
-            labelByTxid = labelByTxid,
-            utxoLabelByTxid = utxoLabelByTxid,
+            labels = labels,
             keepAddresses =
                 wallet
                     ?.snapshot()

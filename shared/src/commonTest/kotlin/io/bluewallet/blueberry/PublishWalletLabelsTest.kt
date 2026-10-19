@@ -1,6 +1,7 @@
 package io.bluewallet.blueberry
 
 import fr.acinq.bitcoin.MnemonicCode
+import io.bluewallet.blueberry.labels.AddressLabel
 import io.bluewallet.blueberry.labels.PaymentLabel
 import io.bluewallet.blueberry.labels.UtxoLabel
 import io.bluewallet.blueberry.labels.WalletLabels
@@ -26,6 +27,7 @@ class PublishWalletLabelsTest {
             db.txPaymentLabels
                 .upsert(TxPaymentLabelRow(txid, "rent"))
             db.utxoNames.upsert("$txid:1", "change")
+            db.addressLabels.upsert(ADDRESS, "donations")
 
             publishWalletLabels(db) { namespace, body ->
                 posts += namespace to body
@@ -40,6 +42,7 @@ class PublishWalletLabelsTest {
                 WalletLabels(
                     utxoNames = listOf(UtxoLabel("$txid:1", "change")),
                     paymentLabels = listOf(PaymentLabel(txid, "rent")),
+                    addressLabels = listOf(AddressLabel(ADDRESS, "donations")),
                 ),
                 decryptWalletLabels(labelingAccountKey(seed), Base64.decode(body)),
             )
@@ -126,3 +129,5 @@ private fun fingerprintHex(bytes: ByteArray): String =
         val hex = "0123456789abcdef"
         "${hex[value shr 4]}${hex[value and 0x0f]}"
     }
+
+private const val ADDRESS = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"

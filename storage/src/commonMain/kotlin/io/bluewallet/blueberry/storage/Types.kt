@@ -239,6 +239,24 @@ interface UtxoNamesRepository {
     fun list(): List<UtxoNameRow>
 }
 
+data class AddressLabelRow(
+    val address: String,
+    val label: String,
+)
+
+interface AddressLabelsRepository {
+    fun get(address: String): String?
+
+    fun upsert(
+        address: String,
+        label: String,
+    )
+
+    fun delete(address: String)
+
+    fun list(): List<AddressLabelRow>
+}
+
 data class TxPaymentLabelRow(
     val txid: String,
     val label: String,
@@ -402,6 +420,7 @@ interface Database {
     val keyValue: KeyValueRepository
     val utxoNames: UtxoNamesRepository
     val txPaymentLabels: TxPaymentLabelsRepository
+    val addressLabels: AddressLabelsRepository
     val privateSends: PrivateSendsRepository
     val sends: SendsRepository
 

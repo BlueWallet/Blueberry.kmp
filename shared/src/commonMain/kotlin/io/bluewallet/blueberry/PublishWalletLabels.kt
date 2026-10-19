@@ -3,6 +3,7 @@
 package io.bluewallet.blueberry
 
 import fr.acinq.bitcoin.MnemonicCode
+import io.bluewallet.blueberry.labels.AddressLabel
 import io.bluewallet.blueberry.labels.PaymentLabel
 import io.bluewallet.blueberry.labels.UtxoLabel
 import io.bluewallet.blueberry.labels.WalletLabels
@@ -101,6 +102,7 @@ private suspend fun uploadUntilCaughtUp(
                     WalletLabels(
                         utxoNames = db.utxoNames.list().map { UtxoLabel(it.outpoint, it.name) },
                         paymentLabels = db.txPaymentLabels.list().map { PaymentLabel(it.txid, it.label) },
+                        addressLabels = db.addressLabels.list().map { AddressLabel(it.address, it.label) },
                     )
             }
         val seq = post(namespace, Base64.encode(encryptWalletLabels(accountKey, labels)))
@@ -142,10 +144,12 @@ private suspend fun pullLabelsIfRemoteAhead(
                 db.transaction {
                     db.utxoNames.list().forEach { db.utxoNames.delete(it.outpoint) }
                     db.txPaymentLabels.list().forEach { db.txPaymentLabels.delete(it.txid) }
+                    db.addressLabels.list().forEach { db.addressLabels.delete(it.address) }
                     labels.utxoNames.forEach { db.utxoNames.upsert(it.outpoint, it.name) }
                     labels.paymentLabels.forEach { row ->
                         db.txPaymentLabels.upsert(TxPaymentLabelRow(row.txid, row.label))
                     }
+                    labels.addressLabels.forEach { db.addressLabels.upsert(it.address, it.label) }
                     db.keyValue.set(LABELS_REMOTE_SEQ_KEY, remoteSeq.toString())
                 }
                 replaced = true

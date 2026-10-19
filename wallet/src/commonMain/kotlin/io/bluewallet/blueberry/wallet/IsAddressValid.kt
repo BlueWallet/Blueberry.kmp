@@ -128,8 +128,7 @@ private fun witnessAddress(
 ): String? {
     val programStart = 2
     val match = script.size == size && script[0] == header.toByte() && script[1] == (size - programStart).toByte()
-    val program = script.copyOfRange(programStart, size)
-    return if (match) Bech32.encodeWitnessAddress("bc", version.toByte(), program) else null
+    return if (match) Bech32.encodeWitnessAddress("bc", version.toByte(), script.copyOfRange(programStart, size)) else null
 }
 
 private fun p2pkhAddress(script: ByteArray): String? {

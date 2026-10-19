@@ -4,12 +4,11 @@ fun txListSecondary(
     shortTxid: String,
     note: String?,
     utxoLabel: String? = null,
-): String {
-    val trimmed = note?.trim().orEmpty().ifEmpty { utxoLabel?.trim().orEmpty() }
-    return if (trimmed.isEmpty()) shortTxid else trimmed
-}
+    addressLabel: String? = null,
+): String = listOf(note, utxoLabel, addressLabel).firstNotNullOfOrNull { it?.trim()?.ifEmpty { null } } ?: shortTxid
 
 fun txListSecondaryMuted(
     note: String?,
     utxoLabel: String? = null,
-): Boolean = note?.trim().isNullOrEmpty() && utxoLabel?.trim().isNullOrEmpty()
+    addressLabel: String? = null,
+): Boolean = listOf(note, utxoLabel, addressLabel).all { it?.trim().isNullOrEmpty() }
