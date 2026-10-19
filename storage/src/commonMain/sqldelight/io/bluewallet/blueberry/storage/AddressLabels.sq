@@ -1,0 +1,12 @@
+get:
+SELECT label FROM address_labels WHERE address = ?;
+
+upsert:
+INSERT INTO address_labels(address, label) VALUES (?, ?)
+ON CONFLICT(address) DO UPDATE SET label = excluded.label;
+
+delete:
+DELETE FROM address_labels WHERE address = ?;
+
+list:
+SELECT address, label FROM address_labels ORDER BY address;

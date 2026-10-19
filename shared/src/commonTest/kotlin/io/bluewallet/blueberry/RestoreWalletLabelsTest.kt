@@ -1,11 +1,13 @@
 package io.bluewallet.blueberry
 
 import fr.acinq.bitcoin.MnemonicCode
+import io.bluewallet.blueberry.labels.AddressLabel
 import io.bluewallet.blueberry.labels.UtxoLabel
 import io.bluewallet.blueberry.labels.WalletLabels
 import io.bluewallet.blueberry.labels.encryptMetadataFile
 import io.bluewallet.blueberry.labels.encryptWalletLabels
 import io.bluewallet.blueberry.labels.labelingAccountKey
+import io.bluewallet.blueberry.storage.AddressLabelRow
 import io.bluewallet.blueberry.storage.TxPaymentLabelRow
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.saveWalletSecret
@@ -25,11 +27,13 @@ class RestoreWalletLabelsTest {
             val out = "$txid:0"
             db.utxoNames.upsert(out, "local-only")
             db.txPaymentLabels.upsert(TxPaymentLabelRow(txid, "old"))
+            db.addressLabels.upsert("bc1qlocal", "local-only")
             db.keyValue.set(LABELS_REMOTE_SEQ_KEY, "1")
             val remote =
                 WalletLabels(
                     utxoNames = listOf(UtxoLabel(out, "from-remote")),
                     paymentLabels = emptyList(),
+                    addressLabels = listOf(AddressLabel(ADDRESS, "from-remote")),
                 )
             val blob = remoteBlob(mnemonic, remote)
 
@@ -42,6 +46,7 @@ class RestoreWalletLabelsTest {
             assertEquals(true, restored)
             assertEquals("from-remote", db.utxoNames.get(out))
             assertNull(db.txPaymentLabels.get(txid))
+            assertEquals(listOf(AddressLabelRow(ADDRESS, "from-remote")), db.addressLabels.list())
             assertEquals("5", db.keyValue.get(LABELS_REMOTE_SEQ_KEY))
             assertTrue(posts.isEmpty())
             assertEquals(2, gets.size)
@@ -76,6 +81,7 @@ class RestoreWalletLabelsTest {
             saveWalletSecret(db, ABANDON)
             val out = "ab".repeat(32) + ":0"
             db.utxoNames.upsert(out, "keep")
+            db.addressLabels.upsert(ADDRESS, "keep")
             db.keyValue.set(LABELS_REMOTE_SEQ_KEY, "1")
             val blob =
                 Base64.encode(
@@ -93,6 +99,7 @@ class RestoreWalletLabelsTest {
 
             assertEquals(false, restored)
             assertEquals("keep", db.utxoNames.get(out))
+            assertEquals("keep", db.addressLabels.get(ADDRESS))
             assertEquals("1", db.keyValue.get(LABELS_REMOTE_SEQ_KEY))
             assertEquals(2, gets.size)
         }
@@ -172,3 +179,5 @@ private fun runRestore(
         }
     }
 }
+
+private const val ADDRESS = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"

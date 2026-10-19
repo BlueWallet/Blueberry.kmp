@@ -6,11 +6,15 @@ import fr.acinq.bitcoin.Transaction
 import fr.acinq.bitcoin.TxHash
 import fr.acinq.bitcoin.TxIn
 import fr.acinq.bitcoin.TxOut
+import io.bluewallet.blueberry.storage.PrivateSendCoin
+import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.AddressScriptType
+import io.bluewallet.blueberry.wallet.addressFromOutputScript
 import io.bluewallet.blueberry.wallet.createWallet
 import io.bluewallet.blueberry.wallet.deriveWatchWallet
+import io.bluewallet.blueberry.wallet.hexFromBytes
 import io.bluewallet.blueberry.wallet.outpointKey
 import io.bluewallet.blueberry.wallet.saveWalletSecret
 import kotlin.test.Test
@@ -69,4 +73,51 @@ class PaymentLabelResolveTest {
         assertEquals("cold storage", snap.txs.single().utxoLabel)
         db.close()
     }
+
+    @Test
+    fun snapshot_exposes_address_label_without_wallet_and_drops_it_when_cleared() {
+        val db = createSqliteDatabase(":memory:")
+        val first = txPaying(1, LABELLED_SCRIPT)
+        val second = txPaying(2, LABELLED_SCRIPT)
+        db.transactions.upsert(StoredTx(first.txid.toString(), 1, 0, "11".repeat(32), Transaction.write(first), 1_000L))
+        db.transactions.upsert(StoredTx(second.txid.toString(), 2, 0, "22".repeat(32), Transaction.write(second), 1_000L))
+        db.addressLabels.upsert(addressFromOutputScript(LABELLED_SCRIPT)!!, "savings")
+
+        assertEquals(listOf("savings", "savings"), snapshotFromDb(db, 1, 1, wallet = null).txs.map { it.addressLabel })
+
+        db.addressLabels.delete(addressFromOutputScript(LABELLED_SCRIPT)!!)
+        assertEquals(listOf(null, null), snapshotFromDb(db, 2, 2, wallet = null).txs.map { it.addressLabel })
+        db.close()
+    }
+
+    @Test
+    fun pending_send_exposes_address_label_from_tx_hex() {
+        val db = createSqliteDatabase(":memory:")
+        val send = txPaying(3, LABELLED_SCRIPT)
+        db.sends.upsert(
+            SendRow(
+                txid = send.txid.toString(),
+                txHex = hexFromBytes(Transaction.write(send)),
+                destination = addressFromOutputScript(LABELLED_SCRIPT)!!,
+                coins = listOf(PrivateSendCoin("bb".repeat(32), 0, 2_000L)),
+            ),
+        )
+        db.addressLabels.upsert(addressFromOutputScript(LABELLED_SCRIPT)!!, "savings")
+
+        assertEquals("savings", snapshotFromDb(db, 1, 1, wallet = null).txs.single().addressLabel)
+        db.close()
+    }
 }
+
+private val LABELLED_SCRIPT = byteArrayOf(0x00, 0x14) + ByteArray(20) { 5 }
+
+private fun txPaying(
+    seed: Byte,
+    script: ByteArray,
+): Transaction =
+    Transaction(
+        2L,
+        listOf(TxIn(OutPoint(TxHash(ByteArray(32) { seed }), 0L), 0xffffffffL)),
+        listOf(TxOut(Satoshi(1_000L), script)),
+        0L,
+    )

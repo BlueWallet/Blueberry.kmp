@@ -14,6 +14,7 @@ class SchemaTest {
         try {
             assertEquals(
                 listOf(
+                    "address_labels",
                     "blocks",
                     "filter_headers",
                     "filters",
@@ -77,6 +78,7 @@ class SchemaTest {
             assertEquals(listOf("key", "value"), columnNames(driver, "key_value"))
             assertEquals(listOf("outpoint", "name"), columnNames(driver, "utxo_names"))
             assertEquals(listOf("txid", "label"), columnNames(driver, "tx_payment_labels"))
+            assertEquals(listOf("address", "label"), columnNames(driver, "address_labels"))
             assertEquals(
                 listOf(
                     "txid",

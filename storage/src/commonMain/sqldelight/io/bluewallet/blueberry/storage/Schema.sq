@@ -71,6 +71,11 @@ CREATE TABLE IF NOT EXISTS tx_payment_labels (
   label TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS address_labels (
+  address TEXT PRIMARY KEY,
+  label TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS private_sends (
   txid TEXT PRIMARY KEY,
   partner TEXT NOT NULL,

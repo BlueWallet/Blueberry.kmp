@@ -83,6 +83,28 @@ internal class SqliteDatabase(
                     .map { TxPaymentLabelRow(it.txid, it.label) }
         }
 
+    override val addressLabels =
+        object : AddressLabelsRepository {
+            override fun get(address: String): String? = storageDb.addressLabelsQueries.get(address).executeAsOneOrNull()
+
+            override fun upsert(
+                address: String,
+                label: String,
+            ) {
+                storageDb.addressLabelsQueries.upsert(address, label)
+            }
+
+            override fun delete(address: String) {
+                storageDb.addressLabelsQueries.delete(address)
+            }
+
+            override fun list(): List<AddressLabelRow> =
+                storageDb.addressLabelsQueries
+                    .list()
+                    .executeAsList()
+                    .map { AddressLabelRow(it.address, it.label) }
+        }
+
     override val privateSends =
         object : PrivateSendsRepository {
             override fun get(txid: String): PrivateSendRow? =
