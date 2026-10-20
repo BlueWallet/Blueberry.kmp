@@ -24,6 +24,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
@@ -93,43 +94,64 @@ fun CoinsPanel(
                 }
                 else -> CoinsPanelBubbleStrip(bubbles = control.bubbles)
             }
-            if (control.linkedGroupCount > 0 && !placeholder) {
-                val dark = LocalDarkPalette.current
-                val legendFill = BwColors.Ink.copy(alpha = if (dark) 0.06f else 0.05f)
-                val legendStroke =
-                    if (dark) {
-                        BwColors.Ink.copy(alpha = 0.28f)
-                    } else {
-                        BwColors.Border
-                    }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(width = 22.dp, height = 12.dp)
-                                .clip(RoundedCornerShape(50))
-                                .background(legendFill, RoundedCornerShape(50)),
-                    ) {
-                        Canvas(Modifier.fillMaxSize()) {
-                            drawRoundRect(
-                                color = legendStroke,
-                                style = Stroke(width = 1.dp.toPx()),
-                                cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
-                            )
-                        }
-                    }
-                    Text(
-                        text = "Outlined coins already share on-chain history",
-                        color = BwColors.InkSecondary,
-                        fontFamily = BwFontFamily,
-                        fontSize = 12.sp,
-                    )
+            if (!placeholder) {
+                val linked = control.groups.filter { it.linked }
+                if (linked.any { it.provable }) {
+                    CoinsPanelLegend(provable = true, text = "Outlined coins already share on-chain history")
+                }
+                if (linked.any { !it.provable }) {
+                    CoinsPanelLegend(provable = false, text = "Dashed coins are probably linked through change")
                 }
             }
         }
+    }
+}
+
+/** Solid outline for provable groups, dashed for groups joined only by a change guess. */
+private fun DrawScope.groupOutline(provable: Boolean): Stroke =
+    Stroke(
+        width = 1.dp.toPx(),
+        pathEffect = if (provable) null else PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 2.dp.toPx())),
+    )
+
+@Composable
+private fun CoinsPanelLegend(
+    provable: Boolean,
+    text: String,
+) {
+    val dark = LocalDarkPalette.current
+    val legendFill = BwColors.Ink.copy(alpha = if (dark) 0.06f else 0.05f)
+    val legendStroke =
+        if (dark) {
+            BwColors.Ink.copy(alpha = 0.28f)
+        } else {
+            BwColors.Border
+        }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .size(width = 22.dp, height = 12.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(legendFill, RoundedCornerShape(50)),
+        ) {
+            Canvas(Modifier.fillMaxSize()) {
+                drawRoundRect(
+                    color = legendStroke,
+                    style = groupOutline(provable),
+                    cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
+                )
+            }
+        }
+        Text(
+            text = text,
+            color = BwColors.InkSecondary,
+            fontFamily = BwFontFamily,
+            fontSize = 12.sp,
+        )
     }
 }
 
@@ -252,7 +274,7 @@ private fun CoinsPanelBubbleStrip(bubbles: List<CoinControlBubble>) {
                         topLeft = Offset(x, cy - stadiumH / 2f),
                         size = Size(stadiumW, stadiumH),
                         cornerRadius = CornerRadius(stadiumH / 2f, stadiumH / 2f),
-                        style = Stroke(width = 1.dp.toPx()),
+                        style = groupOutline(group.first().provable),
                     )
                     var cx = x + pad
                     for ((idx, item) in group.withIndex()) {

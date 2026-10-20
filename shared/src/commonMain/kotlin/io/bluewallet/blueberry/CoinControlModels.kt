@@ -59,6 +59,8 @@ data class CoinControlBubble(
     val colorArgb: Long,
     val isFrozen: Boolean,
     val linkedGroupId: String?,
+    /** False when the coin's group is joined only by a change guess. */
+    val provable: Boolean = true,
 )
 
 data class CoinControlSnapshot(
@@ -266,6 +268,7 @@ private fun orderedBubbles(
                     colorArgb = c.colorArgb,
                     isFrozen = c.isFrozen,
                     linkedGroupId = g.groupId,
+                    provable = g.provable,
                 ),
             )
         }
@@ -304,7 +307,12 @@ fun filterCoinControlGroups(
         if (coins.isEmpty()) {
             null
         } else {
-            g.copy(coins = coins, totalSats = coins.sumOf { it.valueSats })
+            g.copy(
+                coins = coins,
+                totalSats = coins.sumOf { it.valueSats },
+                linked = g.linked && coins.size >= 2,
+                provable = coins.map { it.certainGroupId }.toSet().size == 1 || !g.linked,
+            )
         }
     }
 }

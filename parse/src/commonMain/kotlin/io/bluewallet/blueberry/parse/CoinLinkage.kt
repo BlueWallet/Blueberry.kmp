@@ -60,9 +60,10 @@ private const val ROUND_SATS = 10_000L
  *
  * Candidates are narrowed in order, and a step that would leave none is skipped:
  * an output paying an input's own address is change outright; outputs to addresses seen before
- * are payments; with every input known, an output at least as large as the smallest input is a
- * payment (that input would have been unnecessary); outputs whose script type differs from the
- * inputs' are payments; round amounts are payments.
+ * are payments; an output at least as large as the smallest input is a payment (that input would
+ * have been unnecessary); outputs whose script type differs from the inputs' are payments; round
+ * amounts are payments. Rules that read the inputs need every input, so they are skipped when
+ * [allInputsOwned] is false and the foreign inputs' scripts and values are unknown.
  */
 internal fun guessChangeVout(
     inputs: List<SpendInput>,
@@ -72,7 +73,7 @@ internal fun guessChangeVout(
 ): Int? {
     if (outputs.size < 2) return null
     val inputScripts = inputs.map { it.scriptHex }.toSet()
-    val toInputAddress = outputs.indexOfFirst { it.scriptHex in inputScripts }
+    val toInputAddress = if (allInputsOwned) outputs.indexOfFirst { it.scriptHex in inputScripts } else -1
     val candidates =
         if (toInputAddress >= 0) {
             listOf(toInputAddress)
@@ -94,7 +95,7 @@ private fun narrowChangeCandidates(
         listOf(
             { it.scriptHex !in seenScripts },
             { !allInputsOwned || inputs.size < 2 || minInput == null || it.valueSats < minInput },
-            { inputTypes.size != 1 || scriptKind(it.scriptHex) in inputTypes },
+            { !allInputsOwned || inputTypes.size != 1 || scriptKind(it.scriptHex) in inputTypes },
             { it.valueSats % ROUND_SATS != 0L },
         )
     var candidates = outputs.indices.toList()

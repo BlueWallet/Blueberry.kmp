@@ -77,6 +77,25 @@ class CoinControlModelsTest {
     }
 
     @Test
+    fun filter_recomputes_provable_from_visible_coins() {
+        // Group A: c2 and c8 (both change) are provably linked; c1 joins only by a change guess.
+        val snap = fixtureSnapshot(certainOverride = mapOf("c1:0" to "c1:0"))
+        assertFalse(snap.groups[0].provable)
+        val change = filterCoinControlGroups(snap, CoinControlFilter.Change).first { it.groupId == "group-A" }
+        assertEquals(setOf("c2:0", "c8:0"), change.coins.map { it.key }.toSet())
+        assertTrue(change.linked)
+        assertTrue(change.provable)
+    }
+
+    @Test
+    fun filter_leaving_one_coin_of_a_group_is_not_linked() {
+        val labeled = filterCoinControlGroups(fixtureSnapshot(), CoinControlFilter.Labeled)
+        val fromA = labeled.first { it.groupId == "group-A" }
+        assertEquals(listOf("c1:0"), fromA.coins.map { it.key })
+        assertFalse(fromA.linked)
+    }
+
+    @Test
     fun privacy_cross_group_amber() {
         val snap = fixtureSnapshot()
         val c1 = snap.coins.first { it.key == "c1:0" }
@@ -228,6 +247,7 @@ private val FIXTURE =
 private fun fixtureSnapshot(
     feeRate: Double? = 10.0,
     provableLinks: Boolean = true,
+    certainOverride: Map<String, String> = emptyMap(),
 ): CoinControlSnapshot {
     val p2wpkh =
         ByteArray(22) {
@@ -270,6 +290,6 @@ private fun fixtureSnapshot(
         }
     val frozen = FIXTURE.filter { it.isFrozen }.map { "${it.id}:0" }.toSet()
     val ages = FIXTURE.associate { "${it.id}:0" to formatCoinAgeDays(it.ageDays) }
-    val certain = if (provableLinks) groupIds else groupIds.keys.associateWith { it }
+    val certain = (if (provableLinks) groupIds else groupIds.keys.associateWith { it }) + certainOverride
     return buildCoinControlSnapshot(utxos, CoinLinkage(certain = certain, likely = groupIds), frozen, feeRate, ages)
 }

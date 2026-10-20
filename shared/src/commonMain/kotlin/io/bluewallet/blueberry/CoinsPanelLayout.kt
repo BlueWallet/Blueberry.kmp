@@ -8,6 +8,7 @@ data class BubbleLayoutItem(
     val colorArgb: Long,
     val isFrozen: Boolean,
     val linkedGroupId: String?,
+    val provable: Boolean = true,
 )
 
 data class BubbleStripLayout(
@@ -88,6 +89,7 @@ fun layoutBubbleStrip(
                 colorArgb = b.colorArgb,
                 isFrozen = b.isFrozen,
                 linkedGroupId = b.linkedGroupId,
+                provable = b.provable,
             )
         }
     return BubbleStripLayout(items, overflow, scale)

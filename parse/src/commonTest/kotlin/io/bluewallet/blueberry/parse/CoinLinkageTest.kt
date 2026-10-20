@@ -19,7 +19,8 @@ class CoinLinkageTest {
     private val ext2 = p2wpkhScript(watchKey0("m/84'/0'/0'/0/2"))
     private val chg0 = p2wpkhScript(watchKey0("m/84'/0'/0'/1/0"))
     private val receiveScripts = listOf(ext0, ext1, ext2)
-    private val changeScripts = listOf(chg0)
+    private val taprootChange = byteArrayOf(0x51, 0x20) + ByteArray(32) { 9 }
+    private val changeScripts = listOf(chg0, taprootChange)
     private val taprootPayee = byteArrayOf(0x51, 0x20) + ByteArray(32) { 7 }
 
     private fun linkageOf(vararg txs: Transaction): CoinLinkage =
@@ -136,6 +137,21 @@ class CoinLinkageTest {
             )
         val l = linkageOf(spent, sibling, earlier, liveSibling, spend)
         assertEquals(l.likely[key(liveSibling, 0)], l.likely[key(spend, 1)])
+    }
+
+    @Test
+    fun foreign_input_disables_rules_that_read_the_inputs() {
+        val spent = coinbaseLikeReceive(ext0, 50_000, prevSalt = 26)
+        val sibling = coinbaseLikeReceive(ext0, 3_000, prevSalt = 27)
+        // Our p2wpkh input plus an unknown (e.g. p2tr) input; our change is p2tr.
+        val foreignPrevout = "ee".repeat(32)
+        val spend =
+            spendOwned(
+                inputs = listOf(spent.txid.toString() to 0, foreignPrevout to 0),
+                outputs = listOf(unrelatedScript() to 41_234L, taprootChange to 22_345L),
+            )
+        val l = linkageOf(spent, sibling, spend)
+        assertEquals(l.likely[key(sibling, 0)], l.likely[key(spend, 1)])
     }
 
     @Test
