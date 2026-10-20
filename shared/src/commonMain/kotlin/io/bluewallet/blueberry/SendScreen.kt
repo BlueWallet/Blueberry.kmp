@@ -67,9 +67,11 @@ fun SendScreen(
     db: Database,
     onBack: () -> Unit,
     initialSelectedKeys: Set<String> = emptySet(),
+    initialForm: SendFormDraft = SendFormDraft(),
     onChooseCoins: () -> Unit = {},
     onBroadcastSuccess: () -> Unit = {},
     onSelectedKeysChange: (Set<String>) -> Unit = {},
+    onFormChange: (SendFormDraft) -> Unit = {},
     onFeeRateChange: (Double?) -> Unit = {},
 ) {
     val wallet = runtime.wallet
@@ -83,15 +85,15 @@ fun SendScreen(
     var previewUtxos by remember { mutableStateOf<List<SendInputUtxo>>(emptyList()) }
     var snap by remember { mutableStateOf(runtime.walletTxsStore.get()) }
     var broadcast by remember { mutableStateOf(runtime.broadcastStore.get()) }
-    var address by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var label by remember { mutableStateOf("") }
+    var address by remember { mutableStateOf(initialForm.address) }
+    var amount by remember { mutableStateOf(initialForm.amount) }
+    var label by remember { mutableStateOf(initialForm.label) }
     var invalidField by remember { mutableStateOf<SendField?>(null) }
-    var feeRate by remember { mutableStateOf("") }
+    var feeRate by remember { mutableStateOf(initialForm.feeRateText) }
     var feeError by remember { mutableStateOf<String?>(null) }
     var cancelArmedForId by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
-    var privateSend by remember { mutableStateOf(false) }
+    var privateSend by remember { mutableStateOf(initialForm.privateSend) }
     var privateSession by remember { mutableStateOf<PrivateSendSession?>(null) }
     var privateSigned by remember { mutableStateOf<SignedSendResult?>(null) }
     val scope = rememberCoroutineScope()
@@ -103,10 +105,31 @@ fun SendScreen(
         val off = runtime.broadcastStore.subscribe { scope.launch { broadcast = runtime.broadcastStore.get() } }
         onDispose { off() }
     }
-    val selectedSum = snap.utxos.filter { it.key in selectedKeys }.sumOf { it.valueSats }
+    val selectedSum =
+        snap.utxos.filter { it.key in selectedKeys && !it.isFrozen }.sumOf { it.valueSats }
     LaunchedEffect(selectedKeys) {
         onSelectedKeysChange(selectedKeys)
         if (isInsufficientSelectionError(feeError)) feeError = null
+    }
+    LaunchedEffect(snap.utxos) {
+        val frozen =
+            snap.utxos
+                .filter { it.isFrozen }
+                .map { it.key }
+                .toSet()
+        val cleaned = selectedKeys - frozen
+        if (cleaned != selectedKeys) selectedKeys = cleaned
+    }
+    LaunchedEffect(address, amount, label, feeRate, privateSend) {
+        onFormChange(
+            SendFormDraft(
+                address = address,
+                amount = amount,
+                label = label,
+                feeRateText = feeRate,
+                privateSend = privateSend,
+            ),
+        )
     }
     LaunchedEffect(feeRate) { onFeeRateChange(parseFeeRateSatPerVb(feeRate)) }
     LaunchedEffect(initialSelectedKeys) {
@@ -457,12 +480,17 @@ fun SendScreen(
     }
 }
 
+internal fun spendableSelectedKeys(
+    utxos: List<WalletUtxoRow>,
+    keys: Set<String>,
+): List<String> = utxos.filter { it.key in keys && !it.isFrozen }.map { it.key }
+
 private fun pickSelected(
     utxos: List<WalletUtxoRow>,
     keys: Set<String>,
 ): PickUtxos<WalletUtxoRow> =
     io.bluewallet.blueberry.parse
-        .pickUtxosByKeys(utxos, keys.toList()) { it.key }
+        .pickUtxosByKeys(utxos, spendableSelectedKeys(utxos, keys)) { it.key }
 
 private sealed class DetailsEvent {
     data class Address(

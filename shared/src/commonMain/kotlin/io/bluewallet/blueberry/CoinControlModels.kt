@@ -287,7 +287,11 @@ fun filterCoinControlGroups(
                     CoinControlFilter.Frozen -> c.isFrozen
                 }
             }
-        if (coins.isEmpty()) null else g.copy(coins = coins)
+        if (coins.isEmpty()) {
+            null
+        } else {
+            g.copy(coins = coins, totalSats = coins.sumOf { it.valueSats })
+        }
     }
 }
 
@@ -295,20 +299,33 @@ fun privacyNoticeForSelection(
     selected: List<CoinControlCoin>,
 ): PrivacyNotice {
     val k = selected.size
-    if (k == 0) {
-        return PrivacyNotice(
-            PrivacyNoticeKind.Hint,
-            "Tap coins to choose exactly what this payment spends.",
-        )
-    }
-    val n = selected.map { it.groupId }.toSet().size
-    val kind = if (n == 1) PrivacyNoticeKind.Safe else PrivacyNoticeKind.Warning
-    val message =
-        if (n == 1) {
-            "These coins already share history, so spending them together reveals nothing new."
-        } else {
-            "Joins $n unlinked histories. Anyone watching the chain will learn these coins share an owner."
+    return when {
+        k == 0 ->
+            PrivacyNotice(
+                PrivacyNoticeKind.Hint,
+                "Tap coins to choose exactly what this payment spends.",
+            )
+        k == 1 ->
+            PrivacyNotice(
+                PrivacyNoticeKind.Safe,
+                "One coin selected. Spending it alone does not link other outputs.",
+                costLine = nearDustCostLine(selected),
+            )
+        else -> {
+            val n = selected.map { it.groupId }.toSet().size
+            val kind = if (n == 1) PrivacyNoticeKind.Safe else PrivacyNoticeKind.Warning
+            val message =
+                if (n == 1) {
+                    "These coins already share history, so spending them together reveals nothing new."
+                } else {
+                    "Joins $n unlinked histories. Anyone watching the chain will learn these coins share an owner."
+                }
+            PrivacyNotice(kind, message, nearDustCostLine(selected))
         }
+    }
+}
+
+internal fun nearDustCostLine(selected: List<CoinControlCoin>): String? {
     val costly =
         selected.filter { it.nearDust || it.uneconomical }.mapNotNull { c ->
             val cost = c.spendCostSat ?: return@mapNotNull null
@@ -316,19 +333,17 @@ fun privacyNoticeForSelection(
             val pct = ((cost * 100.0) / c.valueSats).roundToLong()
             Triple(c, cost, pct)
         }
-    val costLine =
-        when {
-            costly.isEmpty() -> null
-            costly.size == 1 -> {
-                val (_, cost, pct) = costly.first()
-                "1 coin costs about $cost sats to spend, $pct% of its value."
-            }
-            else -> {
-                val (_, cost, pct) = costly.maxBy { it.third }
-                "${costly.size} coins include one that costs about $cost sats to spend, $pct% of its value."
-            }
+    return when {
+        costly.isEmpty() -> null
+        costly.size == 1 -> {
+            val (_, cost, pct) = costly.first()
+            "1 coin costs about $cost sats to spend, $pct% of its value."
         }
-    return PrivacyNotice(kind, message, costLine)
+        else -> {
+            val (_, cost, pct) = costly.maxBy { it.third }
+            "${costly.size} coins include one that costs about $cost sats to spend, $pct% of its value."
+        }
+    }
 }
 
 fun coinControlHeaderRight(

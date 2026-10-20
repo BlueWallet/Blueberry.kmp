@@ -67,6 +67,7 @@ internal fun WalletNavHost(
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     var sendSelectedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var sendForm by remember { mutableStateOf(SendFormDraft()) }
     var sendFeeRateSatPerVb by remember { mutableStateOf<Double?>(null) }
     // Subscribe so recomposition runs when the stack changes (for LocalHomeVisible).
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -115,9 +116,14 @@ internal fun WalletNavHost(
                     db = db,
                     onBack = goBack,
                     initialSelectedKeys = sendSelectedKeys,
+                    initialForm = sendForm,
                     onChooseCoins = { navController.navigate(CoinsRoute(picker = true)) },
-                    onBroadcastSuccess = { sendSelectedKeys = emptySet() },
+                    onBroadcastSuccess = {
+                        sendSelectedKeys = emptySet()
+                        sendForm = SendFormDraft()
+                    },
                     onSelectedKeysChange = { sendSelectedKeys = it },
+                    onFormChange = { sendForm = it },
                     onFeeRateChange = { sendFeeRateSatPerVb = it },
                 )
             }
@@ -146,6 +152,7 @@ internal fun WalletNavHost(
                         sendSelectedKeys = keys
                         goBack()
                     },
+                    onFrozenKey = { key -> sendSelectedKeys = sendSelectedKeys - key },
                 )
             }
             composable<TxDetailsRoute> { entry ->

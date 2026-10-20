@@ -118,6 +118,7 @@ fun CoinsScreen(
     initialSelectedKeys: Set<String> = emptySet(),
     onSendWithCoins: (Set<String>) -> Unit = {},
     onConfirmSelection: (Set<String>) -> Unit = {},
+    onFrozenKey: (String) -> Unit = {},
     feeRateSatPerVb: Double? = null,
 ) {
     var snap by remember { mutableStateOf(runtime.walletTxsStore.get()) }
@@ -322,7 +323,10 @@ fun CoinsScreen(
                         val wallet = runtime.wallet ?: return@CoinsUtxoSheet
                         setUtxoFrozen(db, wallet, runtime.walletTxsStore, row.key, frozen)
                         snap = runtime.walletTxsStore.get()
-                        if (frozen) selectedKeys = selectedKeys - row.key
+                        if (frozen) {
+                            selectedKeys = selectedKeys - row.key
+                            onFrozenKey(row.key)
+                        }
                         editingKey = null
                     },
                 )

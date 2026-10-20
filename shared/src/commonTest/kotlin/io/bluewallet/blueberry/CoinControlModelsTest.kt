@@ -117,6 +117,73 @@ class CoinControlModelsTest {
         assertEquals(PrivacyNoticeKind.Hint, notice.kind)
         assertFalse(notice.message.isBlank())
     }
+
+    @Test
+    fun privacy_single_coin_safe_copy() {
+        val snap = fixtureSnapshot()
+        val c4 = snap.coins.first { it.key == "c4:0" }
+        val notice = privacyNoticeForSelection(listOf(c4))
+        assertEquals(PrivacyNoticeKind.Safe, notice.kind)
+        assertTrue(notice.message.contains("One coin selected"))
+        assertTrue(notice.message.contains("does not link"))
+        assertNull(notice.costLine)
+    }
+
+    @Test
+    fun filter_recomputes_group_totals() {
+        val snap = fixtureSnapshot()
+        val frozen = filterCoinControlGroups(snap, CoinControlFilter.Frozen)
+        assertEquals(1, frozen.size)
+        assertEquals(listOf("c11:0"), frozen.single().coins.map { it.key })
+        assertEquals(292L, frozen.single().totalSats)
+
+        val change = filterCoinControlGroups(snap, CoinControlFilter.Change)
+        assertTrue(change.isNotEmpty())
+        for (group in change) {
+            assertEquals(group.coins.sumOf { it.valueSats }, group.totalSats)
+        }
+        val salaryChange = change.first { it.title == "Salary Sept group" }
+        assertEquals(listOf("c2:0", "c8:0"), salaryChange.coins.map { it.key })
+        assertEquals(63_356L, salaryChange.totalSats)
+    }
+
+    @Test
+    fun spendable_selected_keys_drops_frozen() {
+        val utxos =
+            listOf(
+                WalletUtxoRow(
+                    key = "a:0",
+                    txid = "aa",
+                    vout = 0,
+                    outpointShort = "a",
+                    valueSats = 100,
+                    scriptPubKey = ByteArray(0),
+                    amountLabel = "",
+                    height = 1,
+                    ageLabel = "1d",
+                    valueBar = "",
+                    name = null,
+                    isChange = false,
+                    isFrozen = false,
+                ),
+                WalletUtxoRow(
+                    key = "b:0",
+                    txid = "bb",
+                    vout = 0,
+                    outpointShort = "b",
+                    valueSats = 50,
+                    scriptPubKey = ByteArray(0),
+                    amountLabel = "",
+                    height = 1,
+                    ageLabel = "1d",
+                    valueBar = "",
+                    name = null,
+                    isChange = false,
+                    isFrozen = true,
+                ),
+            )
+        assertEquals(listOf("a:0"), spendableSelectedKeys(utxos, setOf("a:0", "b:0")))
+    }
 }
 
 private data class FixtureCoin(

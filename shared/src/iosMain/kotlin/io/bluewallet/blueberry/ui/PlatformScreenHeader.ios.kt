@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -102,14 +104,14 @@ private fun IosBarTitle(
     title: String,
     modifier: Modifier = Modifier,
 ) {
+    val ink = BwColors.Ink
     UIKitView(
         factory = {
             val label = UILabel()
             label.text = title
             label.textAlignment = NSTextAlignmentCenter
             label.font = UIFont.systemFontOfSize(17.0, UIFontWeightSemibold)
-            // Dark palette: match Compose BwColors.Ink (white).
-            label.textColor = UIColor.whiteColor
+            label.textColor = ink.toUiColor()
             label.backgroundColor = UIColor.clearColor
             label.numberOfLines = 1L
             label.lineBreakMode = NSLineBreakByTruncatingTail
@@ -119,6 +121,7 @@ private fun IosBarTitle(
         modifier = modifier,
         update = { label ->
             label.text = title
+            label.textColor = ink.toUiColor()
             label.userInteractionEnabled = false
         },
         properties =
@@ -140,15 +143,15 @@ private fun IosOverlayTextAction(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val actionColor = BwColors.Action
+    val latestOnClick = rememberUpdatedState(onClick)
     val action = remember { TrailingAction() }
+    action.onClick = { latestOnClick.value() }
     UIKitView(
         factory = {
-            // Match dark-palette BwColors.Action (#C7C7CC).
-            val actionColor =
-                UIColor.colorWithRed(199.0 / 255.0, green = 199.0 / 255.0, blue = 204.0 / 255.0, alpha = 1.0)
             val configuration = UIButtonConfiguration.plainButtonConfiguration()
             configuration.title = text
-            configuration.baseForegroundColor = actionColor
+            configuration.baseForegroundColor = actionColor.toUiColor()
             val button =
                 UIButton.buttonWithConfiguration(
                     configuration,
@@ -170,8 +173,12 @@ private fun IosOverlayTextAction(
                     }
                 },
         update = { button ->
-            action.onClick = onClick
             button.setTitle(text, forState = UIControlStateNormal)
+            button.setTitleColor(actionColor.toUiColor(), forState = UIControlStateNormal)
+            button.configuration?.let { config ->
+                config.baseForegroundColor = actionColor.toUiColor()
+                button.configuration = config
+            }
         },
         properties = UIKitInteropProperties(placedAsOverlay = true),
     )
@@ -180,6 +187,14 @@ private fun IosOverlayTextAction(
 private class TrailingAction {
     var onClick: () -> Unit = {}
 }
+
+private fun Color.toUiColor(): UIColor =
+    UIColor.colorWithRed(
+        red.toDouble(),
+        green = green.toDouble(),
+        blue = blue.toDouble(),
+        alpha = alpha.toDouble(),
+    )
 
 @Composable
 actual fun platformHeaderClearance(): Dp = NavigationBarHeight
