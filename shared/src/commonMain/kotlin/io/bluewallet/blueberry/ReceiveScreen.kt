@@ -29,6 +29,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -44,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.FiltersProgressPayload
 import io.bluewallet.blueberry.headers.nowMillis
+import io.bluewallet.blueberry.parse.ReceiveChain
+import io.bluewallet.blueberry.parse.receiveChain
 import io.bluewallet.blueberry.parse.snapshotReceiveAddress
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.BwColors
@@ -54,6 +58,7 @@ import io.bluewallet.blueberry.ui.OverlayBackEffects
 import io.bluewallet.blueberry.ui.ScannableQr
 import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.wallet.HD_SCRIPT_TYPES
+import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.WalletSecretKind
 import io.bluewallet.blueberry.wallet.compactFilterFrom
 import io.bluewallet.blueberry.wallet.createWallet
@@ -67,13 +72,13 @@ import kotlin.math.max
 /** Placeholder drawn while the label sheet is up; deliberately not a bitcoin address. */
 private const val PLACEHOLDER_QR_DATA = "blueberry"
 private const val PLACEHOLDER_ADDRESS = "•••• •••• •••• •••• ••••"
-private const val PLACEHOLDER_ALPHA = 0.15f
+internal const val PLACEHOLDER_ALPHA = 0.15f
 
 fun currentReceiveAddress(
     runtime: PeersRuntime,
     db: Database,
 ): String? {
-    val wallet = runtime.wallet ?: runCatching { createWallet(db) }.getOrNull() ?: return null
+    val wallet = receiveWallet(runtime, db) ?: return null
     val before = wallet.gaps()
     val address = snapshotReceiveAddress(db, wallet)
     val after = wallet.gaps()
@@ -95,6 +100,17 @@ fun currentReceiveAddress(
     return address
 }
 
+private fun receiveWallet(
+    runtime: PeersRuntime,
+    db: Database,
+): Wallet? = runtime.wallet ?: runCatching { createWallet(db) }.getOrNull()
+
+private fun receiveChainFrom(
+    runtime: PeersRuntime,
+    db: Database,
+    start: String?,
+): ReceiveChain? = start?.let { address -> receiveWallet(runtime, db)?.let { receiveChain(db, it, address) } }
+
 fun showsAddressLabelSheet(
     address: String?,
     label: String?,
@@ -114,17 +130,30 @@ fun ReceiveScreen(
     onBack: () -> Unit,
 ) {
     // Pinned: computed on open and on type switch only, so an incoming payment never swaps it mid-view.
-    var address by remember(runtime, db) { mutableStateOf(currentReceiveAddress(runtime, db)) }
+    var start by remember(runtime, db) { mutableStateOf(currentReceiveAddress(runtime, db)) }
+    var receiveType by remember(db) { mutableStateOf(loadReceiveScriptType(db)) }
+    val chain = remember(start, receiveType) { receiveChainFrom(runtime, db, start) }
+    var index by remember(chain) { mutableStateOf(chain?.start ?: 0) }
+    val address = chain?.addresses?.getOrNull(index)?.address ?: start
+    val nav = receiveNav(chain, index) { index = it }
     var label by remember(address) { mutableStateOf(address?.let { db.addressLabels.get(it) }) }
     var editing by remember(address) { mutableStateOf(false) }
     var draft by remember(address) { mutableStateOf("") }
-    var receiveType by remember(db) { mutableStateOf(loadReceiveScriptType(db)) }
     var menuOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val sheetShown = showsAddressLabelSheet(address, label, editing)
+    val keyFocus = remember { FocusRequester() }
+    // Re-take key focus whenever the sheet comes or goes, so desktop arrow keys keep stepping.
+    LaunchedEffect(sheetShown) { runCatching { keyFocus.requestFocus() } }
     OverlayBackEffects(enabled = editing, onDismiss = { editing = false }) {
         // Sheet sits below the content (not over it), so the placeholder centres in the space left above it.
-        Column(modifier = Modifier.fillMaxSize().background(BwColors.Paper)) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(BwColors.Paper)
+                    .receiveArrowKeys(nav, keyFocus),
+        ) {
             Column(
                 modifier =
                     Modifier
@@ -156,7 +185,7 @@ fun ReceiveScreen(
                                         saveReceiveScriptType(db, type)
                                         receiveType = type
                                         menuOpen = false
-                                        address = currentReceiveAddress(runtime, db)
+                                        start = currentReceiveAddress(runtime, db)
                                     },
                                 )
                             }
@@ -172,11 +201,12 @@ fun ReceiveScreen(
                     when {
                         shown == null -> NoUnusedAddress()
                         // Cover: while the sheet is up the real QR and address are never composed.
-                        sheetShown -> ReceiveAddressPlaceholder()
+                        sheetShown -> ReceiveAddressPlaceholder(nav)
                         else ->
                             ReceiveAddress(
                                 address = shown,
                                 label = label.orEmpty(),
+                                nav = nav,
                                 onEditLabel = {
                                     draft = label.orEmpty()
                                     editing = true
@@ -219,15 +249,18 @@ fun ReceiveScreen(
 private fun ReceiveAddress(
     address: String,
     label: String,
+    nav: ReceiveNav?,
     onEditLabel: () -> Unit,
 ) {
     var copied by remember(address) { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
-    ScannableQr(
-        data = address,
-        contentDescription = "Receive address QR code",
-        modifier = Modifier.size(200.dp),
-    )
+    ReceiveQrRow(nav, hidden = false) {
+        ScannableQr(
+            data = address,
+            contentDescription = "Receive address QR code",
+            modifier = Modifier.size(200.dp),
+        )
+    }
     Text(
         text = label,
         color = BwColors.Link,
@@ -237,6 +270,15 @@ private fun ReceiveAddress(
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onEditLabel),
     )
+    if (nav?.used == true) {
+        Text(
+            text = "used",
+            color = BwColors.Danger,
+            fontFamily = BwFontFamily,
+            fontSize = BwType.CaptionSize,
+            fontWeight = BwType.Caption,
+        )
+    }
     Text(
         text = address,
         color = BwColors.Ink,
@@ -264,18 +306,19 @@ private fun ReceiveAddress(
 }
 
 @Composable
-private fun ColumnScope.ReceiveAddressPlaceholder() {
-    ScannableQr(
-        data = PLACEHOLDER_QR_DATA,
-        contentDescription = "Receive address QR code placeholder",
-        // Shrinks below 200dp when little room is left (small screen, keyboard open).
-        modifier =
-            Modifier
-                .weight(1f, fill = false)
-                .sizeIn(maxWidth = 200.dp, maxHeight = 200.dp)
-                .aspectRatio(1f)
-                .alpha(PLACEHOLDER_ALPHA),
-    )
+private fun ColumnScope.ReceiveAddressPlaceholder(nav: ReceiveNav?) {
+    // Shrinks below 200dp when little room is left (small screen, keyboard open).
+    ReceiveQrRow(nav, hidden = true, Modifier.weight(1f, fill = false)) {
+        ScannableQr(
+            data = PLACEHOLDER_QR_DATA,
+            contentDescription = "Receive address QR code placeholder",
+            modifier =
+                Modifier
+                    .sizeIn(maxWidth = 200.dp, maxHeight = 200.dp)
+                    .aspectRatio(1f)
+                    .alpha(PLACEHOLDER_ALPHA),
+        )
+    }
     Text(
         text = PLACEHOLDER_ADDRESS,
         color = BwColors.Ink,

@@ -9,6 +9,15 @@ fun firstUnusedIndex(used: List<Int>): Int {
     return i
 }
 
+/**
+ * Highest external index Receive may show: [GAP_LIMIT] past the highest used index, so a seed
+ * restore (which stops after [GAP_LIMIT] unused) still finds it, capped to the watched window.
+ */
+fun lastReceiveIndex(
+    usedExternal: Collection<Int>,
+    windowSize: Int,
+): Int = minOf((usedExternal.maxOrNull() ?: -1) + GAP_LIMIT, windowSize - 1)
+
 fun firstUnusedExternalAddress(
     wallet: WatchWallet,
     usedExternal: List<Int>,

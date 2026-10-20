@@ -1,8 +1,11 @@
 package io.bluewallet.blueberry
 
+import io.bluewallet.blueberry.parse.ReceiveChain
 import io.bluewallet.blueberry.storage.createSqliteDatabase
+import io.bluewallet.blueberry.wallet.WatchAddress
 import io.bluewallet.blueberry.wallet.saveWalletSecret
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -39,5 +42,33 @@ class ReceiveScreenTest {
         assertFalse(canSaveAddressLabel(""))
         assertFalse(canSaveAddressLabel("  \t "))
         assertTrue(canSaveAddressLabel(" rent "))
+    }
+
+    @Test
+    fun step_stays_between_zero_and_last_index() {
+        assertFalse(canStepReceive(index = 0, delta = -1, lastIndex = 19))
+        assertTrue(canStepReceive(index = 0, delta = 1, lastIndex = 19))
+        assertTrue(canStepReceive(index = 5, delta = -1, lastIndex = 19))
+        assertTrue(canStepReceive(index = 18, delta = 1, lastIndex = 19))
+        assertFalse(canStepReceive(index = 19, delta = 1, lastIndex = 19))
+    }
+
+    @Test
+    fun path_caption_is_hidden_until_the_address_is_labelled() {
+        assertEquals("m/84'/0'/0'/0/5", receivePathCaption("m/84'/0'/0'/0/5", hidden = false))
+        assertEquals(PLACEHOLDER_PATH, receivePathCaption("m/84'/0'/0'/0/5", hidden = true))
+        assertFalse(PLACEHOLDER_PATH.any { it.isLetterOrDigit() })
+    }
+
+    @Test
+    fun steps_queued_before_the_next_frame_never_pass_the_bound() {
+        val chain = ReceiveChain((0 until 20).map { WatchAddress("m/84'/0'/0'/0/$it", it, false, "a$it", ByteArray(0)) }, emptySet(), 18)
+        var index = 18
+        val nav = receiveNav(chain, index) { index = it }!!
+        // Two taps/key repeats against the same frame's nav: the second must not step past index 19.
+        nav.step(1)
+        nav.step(1)
+        assertEquals(19, index)
+        assertFalse(receiveNav(chain, 19) {}!!.step(1))
     }
 }

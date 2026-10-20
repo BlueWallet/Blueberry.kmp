@@ -124,12 +124,7 @@ fun snapshotReceiveAddress(
 ): String? {
     var watch = wallet.refresh()
     val txs = db.transactions.list()
-    val receiveType =
-        if (parseWalletSecret(watch.secret).kind == WalletSecretKind.MNEMONIC) {
-            loadReceiveScriptType(db)
-        } else {
-            AddressScriptType.P2WPKH
-        }
+    val receiveType = receiveScriptType(db, watch)
     if (watch.kind != WatchWalletKind.BIP84) {
         return receiveAddressFromWallet(watch, txs, receiveType)
     }
@@ -167,6 +162,17 @@ fun snapshotReceiveAddress(
         watch = wallet.refresh()
     }
 }
+
+/** Saved receive type for mnemonic wallets; everything else receives on native segwit. */
+internal fun receiveScriptType(
+    db: Database,
+    watch: WatchWallet,
+): AddressScriptType =
+    if (parseWalletSecret(watch.secret).kind == WalletSecretKind.MNEMONIC) {
+        loadReceiveScriptType(db)
+    } else {
+        AddressScriptType.P2WPKH
+    }
 
 private fun queueReceiveRescan(db: Database) {
     val fromHeight = compactFilterFrom(db) ?: db.transactions.minHeight()
