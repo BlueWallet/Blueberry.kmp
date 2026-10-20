@@ -11,8 +11,6 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import platform.UIKit.UIFont
 import platform.UIKit.UIFontWeightSemibold
 
-actual val BwDefaultFontWeight: FontWeight = FontWeight.Normal
-
 @OptIn(ExperimentalForeignApi::class)
 actual val BwFontFamily: FontFamily = sfProFamily()
 

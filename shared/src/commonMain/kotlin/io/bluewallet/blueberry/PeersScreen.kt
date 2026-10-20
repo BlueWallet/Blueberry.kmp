@@ -33,7 +33,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,7 +59,6 @@ import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.LocalDarkPalette
-import io.bluewallet.blueberry.ui.LocalScrollEdgeOverlaysEnabled
 import io.bluewallet.blueberry.ui.PlatformScrollEdge
 import io.bluewallet.blueberry.ui.alwaysBounceTail
 import io.bluewallet.blueberry.ui.dither.DitherSyncGlow
@@ -179,6 +177,8 @@ fun PeersScreen(
     val safe = WindowInsets.safeDrawing.asPaddingValues()
     val topChrome = safe.calculateTopPadding() + platformHeaderClearance()
     val glowActive = !dockIdle && !detailedSync
+    // Nothing covers home: no pushed screen and no sync sheet.
+    val homeInFront = homeVisible && !detailedSync
     val bottomEdge =
         if (glowActive) {
             0.dp
@@ -186,135 +186,135 @@ fun PeersScreen(
             (HomeSyncDockBottomInset - platformBottomEdgeClearance()).coerceAtLeast(0.dp)
         }
     val hazeState = rememberHazeState()
-    // Common ancestor so iOS edge overlays drop under the Compose sync scrim.
-    CompositionLocalProvider(LocalScrollEdgeOverlaysEnabled provides !detailedSync) {
-        Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(BwColors.Paper)
+                    .hazeSource(state = hazeState),
+        ) {
+            DitherSyncGlow(
+                active = glowActive,
+                animate = !rememberReducedMotion(),
+                visible = homeVisible,
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(220.dp),
+            )
+            PlatformScrollEdge(
+                modifier = Modifier.fillMaxSize(),
+                top = topChrome,
+                bottom = bottomEdge,
+                // iOS edge blurs are UIKit overlays; drop them under the sync scrim and pushed screens.
+                showEdges = homeInFront,
+            ) {
+                val dockVisible = showDock && !detailedSync
+                LazyColumn(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .windowInsetsPadding(
+                                WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
+                            ),
+                    state = listState,
+                    contentPadding =
+                        PaddingValues(
+                            top = topChrome,
+                            bottom = if (dockVisible) 240.dp else safe.calculateBottomPadding() + 24.dp,
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    homeFeed(
+                        walletTxs = walletTxs,
+                        open =
+                            HomeOpen(
+                                receive = onOpenReceive,
+                                send = onOpenSend,
+                                coins = onOpenCoins,
+                                tx = onOpenTx,
+                            ),
+                        dockVisible = dockVisible,
+                    )
+                    alwaysBounceTail(listState)
+                }
+            }
+        }
+        if (homeInFront) {
+            HomeStickyHeader(onOpenSettings = onOpenSettings, modifier = Modifier.align(Alignment.TopCenter))
+        }
+        AnimatedVisibility(
+            visible = detailedSync,
+            enter = fadeIn(animationSpec = tween(220)),
+            exit = fadeOut(animationSpec = tween(180)),
+        ) {
+            val scrim =
+                if (LocalDarkPalette.current) {
+                    Color.Black.copy(alpha = 0.78f)
+                } else {
+                    Color.Black.copy(alpha = 0.36f)
+                }
             Box(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .background(BwColors.Paper)
-                        .hazeSource(state = hazeState),
-            ) {
-                DitherSyncGlow(
-                    active = glowActive,
-                    animate = !rememberReducedMotion(),
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .height(220.dp),
-                )
-                PlatformScrollEdge(
-                    modifier = Modifier.fillMaxSize(),
-                    top = topChrome,
-                    bottom = bottomEdge,
-                ) {
-                    val dockVisible = showDock && !detailedSync
-                    LazyColumn(
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .windowInsetsPadding(
-                                    WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
-                                ),
-                        state = listState,
-                        contentPadding =
-                            PaddingValues(
-                                top = topChrome,
-                                bottom = if (dockVisible) 240.dp else safe.calculateBottomPadding() + 24.dp,
-                            ),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        homeFeed(
-                            walletTxs = walletTxs,
-                            open =
-                                HomeOpen(
-                                    receive = onOpenReceive,
-                                    send = onOpenSend,
-                                    coins = onOpenCoins,
-                                    tx = onOpenTx,
-                                ),
-                            dockVisible = dockVisible,
-                        )
-                        alwaysBounceTail(listState)
-                    }
-                }
-            }
-            if (homeVisible && !detailedSync) {
-                HomeStickyHeader(onOpenSettings = onOpenSettings, modifier = Modifier.align(Alignment.TopCenter))
-            }
-            AnimatedVisibility(
-                visible = detailedSync,
-                enter = fadeIn(animationSpec = tween(220)),
-                exit = fadeOut(animationSpec = tween(180)),
-            ) {
-                val scrim =
-                    if (LocalDarkPalette.current) {
-                        Color.Black.copy(alpha = 0.78f)
-                    } else {
-                        Color.Black.copy(alpha = 0.36f)
-                    }
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .background(scrim)
-                            .clickable { setDetailedSync(false) },
-                )
-            }
-            AnimatedVisibility(
-                visible = detailedSync,
+                        .background(scrim)
+                        .clickable { setDetailedSync(false) },
+            )
+        }
+        AnimatedVisibility(
+            visible = detailedSync,
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+            enter =
+                slideInVertically(
+                    animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+                    initialOffsetY = { it },
+                ) + fadeIn(animationSpec = tween(200)),
+            exit =
+                slideOutVertically(
+                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                    targetOffsetY = { it },
+                ) + fadeOut(animationSpec = tween(160)),
+        ) {
+            HomeSyncSheet(
+                ui = syncUi,
+                onToggle = { setDetailedSync(false) },
                 modifier =
                     Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth(),
-                enter =
+                        .fillMaxWidth()
+                        .heightIn(max = 640.dp)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+            )
+        }
+        AnimatedVisibility(
+            visible = !detailedSync && showDock,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter =
+                fadeIn(animationSpec = tween(200)) +
                     slideInVertically(
-                        animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
-                        initialOffsetY = { it },
-                    ) + fadeIn(animationSpec = tween(200)),
-                exit =
+                        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                        initialOffsetY = { it / 3 },
+                    ),
+            exit =
+                fadeOut(animationSpec = tween(150)) +
                     slideOutVertically(
-                        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
-                        targetOffsetY = { it },
-                    ) + fadeOut(animationSpec = tween(160)),
-            ) {
-                HomeSyncSheet(
-                    ui = syncUi,
-                    onToggle = { setDetailedSync(false) },
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 640.dp)
-                            .navigationBarsPadding()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                )
-            }
-            AnimatedVisibility(
-                visible = !detailedSync && showDock,
-                modifier = Modifier.align(Alignment.BottomCenter),
-                enter =
-                    fadeIn(animationSpec = tween(200)) +
-                        slideInVertically(
-                            animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
-                            initialOffsetY = { it / 3 },
-                        ),
-                exit =
-                    fadeOut(animationSpec = tween(150)) +
-                        slideOutVertically(
-                            animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-                            targetOffsetY = { it / 3 },
-                        ),
-            ) {
-                HomeSyncDock(
-                    percent = unified,
-                    etaMs = etaMs,
-                    listState = listState,
-                    hazeState = hazeState,
-                    onClick = { setDetailedSync(true) },
-                )
-            }
+                        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+                        targetOffsetY = { it / 3 },
+                    ),
+        ) {
+            HomeSyncDock(
+                percent = unified,
+                etaMs = etaMs,
+                listState = listState,
+                hazeState = hazeState,
+                onClick = { setDetailedSync(true) },
+            )
         }
     }
 }

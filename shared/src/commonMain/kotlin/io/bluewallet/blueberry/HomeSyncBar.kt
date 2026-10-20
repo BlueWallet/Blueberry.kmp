@@ -6,8 +6,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,6 +49,7 @@ fun HomeSyncDock(
     hazeState: HazeState,
     onClick: () -> Unit,
 ) {
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Column(
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -62,7 +66,8 @@ fun HomeSyncDock(
         )
         ListScrollStrip(
             listState = listState,
-            modifier = Modifier.fillMaxWidth().height(HomeSyncDockBottomInset),
+            // Taller Android 3-button navigation bars would otherwise cover the card.
+            modifier = Modifier.fillMaxWidth().height(maxOf(HomeSyncDockBottomInset, navBottom)),
         )
     }
 }

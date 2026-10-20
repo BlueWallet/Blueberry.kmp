@@ -136,9 +136,6 @@ object BwSpace {
 
 expect val BwFontFamily: FontFamily
 
-/** Weight used when a Material body style does not ask for another. Chrome labels use [BwType]. */
-expect val BwDefaultFontWeight: FontWeight
-
 /** Weights from the sister dashboard: actions and labels sit above Regular. */
 object BwType {
     val Action = FontWeight.SemiBold
@@ -195,7 +192,6 @@ private fun bwColorScheme(dark: Boolean) =
 private fun bwTypography(): Typography {
     val base = Typography()
     val family = BwFontFamily
-    val body = BwDefaultFontWeight
     return base.copy(
         displayLarge = base.displayLarge.copy(fontFamily = family),
         displayMedium = base.displayMedium.copy(fontFamily = family),
@@ -206,9 +202,9 @@ private fun bwTypography(): Typography {
         titleLarge = base.titleLarge.copy(fontFamily = family),
         titleMedium = base.titleMedium.copy(fontFamily = family),
         titleSmall = base.titleSmall.copy(fontFamily = family),
-        bodyLarge = base.bodyLarge.copy(fontFamily = family, fontWeight = body),
-        bodyMedium = base.bodyMedium.copy(fontFamily = family, fontWeight = body),
-        bodySmall = base.bodySmall.copy(fontFamily = family, fontWeight = body),
+        bodyLarge = base.bodyLarge.copy(fontFamily = family),
+        bodyMedium = base.bodyMedium.copy(fontFamily = family),
+        bodySmall = base.bodySmall.copy(fontFamily = family),
         labelLarge = base.labelLarge.copy(fontFamily = family),
         labelMedium = base.labelMedium.copy(fontFamily = family),
         labelSmall = base.labelSmall.copy(fontFamily = family),

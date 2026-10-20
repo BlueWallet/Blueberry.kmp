@@ -93,16 +93,10 @@ private fun LazyListState.alwaysBounceTailHeight(): Dp {
         others.sumOf { it.size } +
             info.beforeContentPadding +
             info.afterContentPadding +
-            bounceItemSpacingPx(otherCount, info.mainAxisItemSpacing)
+            info.mainAxisItemSpacing * otherCount
     val px = bounceTailPx(viewport, occupied, others.size == otherCount)
     return with(LocalDensity.current) { px.toDp() }
 }
-
-/** Compose places N−1 gaps between N items. */
-internal fun bounceItemSpacingPx(
-    itemCount: Int,
-    spacingPx: Int,
-): Int = spacingPx * (itemCount - 1).coerceAtLeast(0)
 
 internal fun bounceTailPx(
     viewportPx: Int,

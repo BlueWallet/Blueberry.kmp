@@ -70,6 +70,6 @@ actual fun PlatformBodyStyle(): TextStyle =
         fontFamily = BwFontFamily,
         fontSize = 17.sp,
         lineHeight = 22.sp,
-        fontWeight = BwDefaultFontWeight,
+        fontWeight = FontWeight.Normal,
         color = BwColors.Ink,
     )

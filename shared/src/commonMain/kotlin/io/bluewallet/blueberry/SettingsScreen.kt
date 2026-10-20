@@ -80,6 +80,7 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxSize(),
             top = topChrome,
             bottom = safe.calculateBottomPadding(),
+            showEdges = !childOpen,
         ) {
             Column(
                 modifier =

@@ -62,14 +62,15 @@ expect fun PlatformLargeTitle(
  * Compose scrolling is not a UIScrollView, so this overlays a system blur.
  * Other platforms draw the content unchanged.
  *
- * iOS fades are UIKit overlays (above Compose siblings). Wrap a common ancestor
- * by providing `LocalScrollEdgeOverlaysEnabled = false` while a Compose modal scrim is up.
+ * iOS fades are UIKit overlays, drawn above every Compose sibling. Pass
+ * [showEdges] = false while a Compose scrim or pushed screen covers the content.
  */
 @Composable
 expect fun PlatformScrollEdge(
     modifier: Modifier = Modifier,
     top: Dp = 0.dp,
     bottom: Dp = 0.dp,
+    showEdges: Boolean = true,
     content: @Composable () -> Unit,
 )
 

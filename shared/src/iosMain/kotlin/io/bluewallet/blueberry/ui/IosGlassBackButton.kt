@@ -5,7 +5,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
@@ -75,7 +79,16 @@ internal fun IosGlassSymbolButton(
         modifier =
             modifier
                 .size(44.dp)
-                .semantics { contentDescription = accessibilityLabel },
+                .semantics {
+                    // Same node shape as the Compose IconButton fallback.
+                    contentDescription = accessibilityLabel
+                    role = Role.Button
+                    if (!enabled) disabled()
+                    onClick {
+                        if (enabled) action.onClick()
+                        enabled
+                    }
+                },
         update = { button ->
             action.onClick = onClick
             button.enabled = enabled

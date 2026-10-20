@@ -5,16 +5,8 @@ import kotlin.test.assertEquals
 
 class BounceTailTest {
     @Test
-    fun item_spacing_counts_gaps_not_items() {
-        assertEquals(0, bounceItemSpacingPx(itemCount = 0, spacingPx = 8))
-        assertEquals(0, bounceItemSpacingPx(itemCount = 1, spacingPx = 8))
-        assertEquals(8, bounceItemSpacingPx(itemCount = 2, spacingPx = 8))
-        assertEquals(16, bounceItemSpacingPx(itemCount = 3, spacingPx = 8))
-    }
-
-    @Test
     fun short_content_fills_to_one_pixel_past_the_viewport() {
-        val occupied = 200 + 40 + bounceItemSpacingPx(itemCount = 2, spacingPx = 8)
+        val occupied = 200 + 40 + 8 * 2
         val tail = bounceTailPx(viewportPx = 800, occupiedPx = occupied, allOthersVisible = true)
         assertEquals(801, occupied + tail)
     }
