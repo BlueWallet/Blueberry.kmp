@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 /** iOS 26+ large system button. Full-width primary actions use this height. */
 val ProminentButtonHeight = 50.dp
 
-private val TintedPillFill = Color(0xFF0F2E44)
+private val TintedPillFillDark = Color(0xFF0F2E44)
 private val PlainPillFill = Color.Transparent
 
 /** Solid blue pill — sister-project "+ add". */
@@ -100,7 +100,7 @@ private fun PressablePill(
     }
 }
 
-/** Pill with a solid `#0F2E44` fill and a main-blue label. */
+/** Pill with a solid wash fill and a main-blue label. Dark uses `#0F2E44`; light uses AccentSoft. */
 @Composable
 fun TintedPillButton(
     text: String,
@@ -113,7 +113,7 @@ fun TintedPillButton(
         onClick = onClick,
         modifier = modifier,
         height = height,
-        fill = TintedPillFill,
+        fill = if (LocalDarkPalette.current) TintedPillFillDark else BwPalette.Light.AccentSoft,
     )
 }
 

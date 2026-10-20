@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 
 private val BounceTail = 1.dp
 
+/** Bundle-saveable LazyList key — Android rejects plain object keys. */
 private const val ALWAYS_BOUNCE_TAIL_KEY = "always-bounce-tail"
 
 /**

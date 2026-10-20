@@ -85,7 +85,7 @@ private fun FadeBlur(
     modifier: Modifier,
 ) {
     val density = LocalDensity.current
-    val dark = LocalDarkPalette.current || LocalForcedDarkChrome.current
+    val dark = LocalDarkPalette.current
     var size by remember { mutableStateOf(IntSize.Zero) }
     UIKitView(
         factory = { FadeBlurView(fadeFromTop) },

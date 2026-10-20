@@ -51,34 +51,12 @@ object BwPalette {
         val Success = Color(0xFF37C0A1)
         val Danger = Color(0xFFD0021B)
         val Warning = Color(0xFFF38C47)
-        val Border = Color(0xFFEDEDED)
+        val Border = Color(0xFFC5CAD3)
         val OnAccent = Color(0xFFFFFFFF)
     }
 }
 
 internal val LocalDarkPalette = staticCompositionLocalOf { true }
-
-/** True while the always-dark tree is the current scene, so the iOS edge blur matches it. */
-internal val LocalForcedDarkChrome = staticCompositionLocalOf { false }
-
-/**
- * Status-bar content and the iOS scroll-edge blur follow the dark tree while
- * [darkArtwork] is the screen being shown.
- */
-@Composable
-internal fun DarkSceneChrome(
-    darkArtwork: Boolean,
-    content: @Composable () -> Unit,
-) {
-    ApplySystemBars(LocalDarkPalette.current || darkArtwork)
-    CompositionLocalProvider(LocalForcedDarkChrome provides darkArtwork, content = content)
-}
-
-/** Dark lockup for content drawn on the tree. The rest of the app keeps its palette. */
-@Composable
-internal fun DarkArtworkContent(content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalDarkPalette provides true, content = content)
-}
 
 object BwColors {
     val Paper: Color

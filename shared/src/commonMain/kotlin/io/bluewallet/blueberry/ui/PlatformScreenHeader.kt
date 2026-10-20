@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -41,7 +42,10 @@ expect fun PlatformBodyStyle(): TextStyle
 @Composable
 expect fun platformHeaderClearance(): Dp
 
-/** Space below scroll content so it clears the bottom edge blur. Zero where there is no blur. */
+/**
+ * Space below scroll content above the system bottom chrome.
+ * iOS also clears the edge blur; Android uses this as nav / gesture breathing room.
+ */
 @Composable
 expect fun platformBottomEdgeClearance(): Dp
 
@@ -87,7 +91,12 @@ internal fun MaterialScreenHeader(
         navigationIcon = {
             HeaderBackButton(onClick = onBack, enabled = enabled)
         },
-        title = { Text(title) },
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+            )
+        },
     )
 }
 

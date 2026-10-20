@@ -14,13 +14,27 @@ import kotlin.math.sqrt
 /** Colour ramp for the dither, darkest first, as ARGB ints. */
 class DitherPalette(
     val colors: IntArray,
+    /** Soft paper backdrop; keeps the top bright for navy type. */
+    val lightBackdrop: Boolean = false,
 ) {
     companion object {
         val Blueberry = ramp(0xFF05070D, 0xFF0D1630, 0xFF1C3878, 0xFF3F79CF, 0xFFA9C6F5)
+        val BlueberryLight =
+            ramp(
+                0xFFF7F8FA,
+                0xFFE4EEFB,
+                0xFFB8D0F0,
+                0xFF5B8FD4,
+                0xFF0C2550,
+                lightBackdrop = true,
+            )
         val Dusk = ramp(0xFF07060E, 0xFF17123A, 0xFF3A2F8F, 0xFF6E6BE0, 0xFFC9C3FA)
         val Ink = ramp(0xFF06070A, 0xFF141820, 0xFF2C3442, 0xFF6B7A92, 0xFFD9E1EE)
 
-        private fun ramp(vararg argb: Long) = DitherPalette(IntArray(argb.size) { argb[it].toInt() })
+        private fun ramp(
+            vararg argb: Long,
+            lightBackdrop: Boolean = false,
+        ) = DitherPalette(IntArray(argb.size) { argb[it].toInt() }, lightBackdrop)
     }
 }
 
@@ -98,6 +112,7 @@ class DitherTreeRenderer(
         width: Int,
         height: Int,
         placement: TreePlacement,
+        lightBackdrop: Boolean = false,
     ) {
         require(width > 0 && height > 0) { "size must be positive" }
         this.width = width
@@ -120,13 +135,20 @@ class DitherTreeRenderer(
             val scrimLift = 1f - trunk
             scrim =
                 FloatArray(height) { y ->
-                    0.3f + 0.7f * smooth((y.toFloat() / height - (0.3f - scrimLift)) / 0.38f)
+                    val band = smooth((y.toFloat() / height - (0.3f - scrimLift)) / 0.38f)
+                    // Light paper keeps the top bright for navy type; dark still
+                    // darkens that band for the pale lockup.
+                    if (lightBackdrop) 0.82f + 0.18f * band else 0.3f + 0.7f * band
                 }
         } else {
             treeX = width * 0.73f
             baseY = height * 0.94f
             unit = height * 0.92f
-            scrim = FloatArray(width) { x -> 0.26f + 0.74f * smooth((x.toFloat() / width - 0.26f) / 0.36f) }
+            scrim =
+                FloatArray(width) { x ->
+                    val band = smooth((x.toFloat() / width - 0.26f) / 0.36f)
+                    if (lightBackdrop) 0.82f + 0.18f * band else 0.26f + 0.74f * band
+                }
         }
     }
 

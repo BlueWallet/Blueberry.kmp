@@ -71,7 +71,7 @@ fun DitherTreeBackground(
         // Each effect owns its renderer. A cancelled frame keeps drawing on
         // Dispatchers.Default, and resize() would replace the buffers under it.
         val renderer = DitherTreeRenderer()
-        renderer.resize(w, h, placement)
+        renderer.resize(w, h, placement, lightBackdrop = palette.lightBackdrop)
         if (!running) {
             val pixels = withContext(Dispatchers.Default) { renderer.render(STILL_TIME, 1f, 0f, palette) }
             image = surface.update(pixels)

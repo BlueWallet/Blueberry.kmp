@@ -28,8 +28,9 @@ actual fun PlatformBodyStyle(): TextStyle = MaterialBodyStyle()
 @Composable
 actual fun platformHeaderClearance(): Dp = 64.dp
 
+/** Breathing room above the system nav / gesture bar. */
 @Composable
-actual fun platformBottomEdgeClearance(): Dp = 0.dp
+actual fun platformBottomEdgeClearance(): Dp = 24.dp
 
 @Composable
 actual fun PlatformLargeTitle(

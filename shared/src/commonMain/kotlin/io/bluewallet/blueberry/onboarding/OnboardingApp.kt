@@ -5,7 +5,6 @@ package io.bluewallet.blueberry.onboarding
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -59,18 +58,19 @@ import io.bluewallet.blueberry.ui.BlueberryLogo
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwType
-import io.bluewallet.blueberry.ui.DarkArtworkContent
-import io.bluewallet.blueberry.ui.DarkSceneChrome
+import io.bluewallet.blueberry.ui.LocalDarkPalette
 import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.PlainPillButton
 import io.bluewallet.blueberry.ui.PlatformBodyStyle
 import io.bluewallet.blueberry.ui.PlatformLargeTitle
 import io.bluewallet.blueberry.ui.PlatformScreenHeader
 import io.bluewallet.blueberry.ui.PlatformScrollEdge
+import io.bluewallet.blueberry.ui.PlatformWelcomeTaglineStyle
 import io.bluewallet.blueberry.ui.ProminentButtonHeight
 import io.bluewallet.blueberry.ui.SCREEN_PUSH_DURATION_MS
 import io.bluewallet.blueberry.ui.SCREEN_PUSH_FADE_MS
 import io.bluewallet.blueberry.ui.TintedPillButton
+import io.bluewallet.blueberry.ui.dither.DitherPalette
 import io.bluewallet.blueberry.ui.dither.DitherTreeBackground
 import io.bluewallet.blueberry.ui.platformBottomEdgeClearance
 import io.bluewallet.blueberry.ui.platformHeaderClearance
@@ -163,102 +163,98 @@ fun OnboardingApp(
         }
     }
 
-    val pages = updateTransition(targetState = state, label = "onboarding-step")
-    // Follow the page on screen, not the destination, so the chrome flips once the slide ends.
-    DarkSceneChrome(darkArtwork = pages.currentState.step == OnboardingStep.Choose) {
-        Box(Modifier.fillMaxSize()) {
-            val safe = WindowInsets.safeDrawing.asPaddingValues()
-            val showsHeader =
-                state.step == OnboardingStep.Create ||
-                    state.step == OnboardingStep.Import ||
-                    (state.step == OnboardingStep.Year && !startAtYearStep)
-            val topChrome =
-                safe.calculateTopPadding() +
-                    if (showsHeader) platformHeaderClearance() else 0.dp
-            PlatformScrollEdge(
-                modifier = Modifier.fillMaxSize(),
-                top = topChrome,
-                bottom = safe.calculateBottomPadding(),
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    pages.AnimatedContent(
-                        modifier = Modifier.fillMaxSize(),
-                        contentKey = { it.step },
-                        transitionSpec = {
-                            val forward = onboardingNavigatesForward(initialState.step, targetState.step)
-                            val enter =
-                                slideInHorizontally(
-                                    animationSpec = tween(SCREEN_PUSH_DURATION_MS, easing = FastOutSlowInEasing),
-                                    initialOffsetX = { if (forward) screenPushOffsetPx(it) else -screenPushOffsetPx(it) / 4 },
-                                ) + fadeIn(animationSpec = tween(SCREEN_PUSH_FADE_MS))
-                            val exit =
-                                slideOutHorizontally(
-                                    animationSpec = tween(SCREEN_PUSH_DURATION_MS, easing = FastOutSlowInEasing),
-                                    targetOffsetX = { if (forward) -screenPushOffsetPx(it) / 4 else screenPushOffsetPx(it) },
-                                ) + fadeOut(animationSpec = tween(SCREEN_PUSH_FADE_MS))
-                            enter togetherWith exit
-                        },
-                    ) { page ->
-                        if (page.step == OnboardingStep.Create) {
-                            CreateSeedPage(
-                                mnemonic = page.mnemonic,
-                                busy = page.busy,
-                                error = page.error,
-                                onContinue = { dispatch(OnboardingEvent.ConfirmCreate) },
-                            )
-                        } else if (page.step == OnboardingStep.Choose) {
-                            DarkArtworkContent {
-                                ChooseWelcome(
-                                    onCreate = { dispatch(OnboardingEvent.ChooseCreate) },
-                                    onImport = { dispatch(OnboardingEvent.ChooseImport) },
-                                )
-                            }
-                        } else if (page.step == OnboardingStep.Import) {
-                            ImportWalletPage(
-                                state = page,
-                                scanning = scanning,
-                                dispatch = { dispatch(it) },
-                                onScanningChange = { scanning = it },
-                            )
-                        } else {
-                            SyncYearPage(
-                                selectedYear = page.selectedYear,
-                                busy = page.busy,
-                                error = page.error,
-                                showsHeader = !startAtYearStep,
-                                onSelectYear = { dispatch(OnboardingEvent.SelectYear(it)) },
-                                onContinue = { dispatch(OnboardingEvent.ConfirmYear) },
-                            )
-                        }
+    Box(Modifier.fillMaxSize()) {
+        val safe = WindowInsets.safeDrawing.asPaddingValues()
+        val showsHeader =
+            state.step == OnboardingStep.Create ||
+                state.step == OnboardingStep.Import ||
+                (state.step == OnboardingStep.Year && !startAtYearStep)
+        val topChrome =
+            safe.calculateTopPadding() +
+                if (showsHeader) platformHeaderClearance() else 0.dp
+        PlatformScrollEdge(
+            modifier = Modifier.fillMaxSize(),
+            top = topChrome,
+            bottom = safe.calculateBottomPadding(),
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                AnimatedContent(
+                    targetState = state,
+                    modifier = Modifier.fillMaxSize(),
+                    contentKey = { it.step },
+                    transitionSpec = {
+                        val forward = onboardingNavigatesForward(initialState.step, targetState.step)
+                        val enter =
+                            slideInHorizontally(
+                                animationSpec = tween(SCREEN_PUSH_DURATION_MS, easing = FastOutSlowInEasing),
+                                initialOffsetX = { if (forward) screenPushOffsetPx(it) else -screenPushOffsetPx(it) / 4 },
+                            ) + fadeIn(animationSpec = tween(SCREEN_PUSH_FADE_MS))
+                        val exit =
+                            slideOutHorizontally(
+                                animationSpec = tween(SCREEN_PUSH_DURATION_MS, easing = FastOutSlowInEasing),
+                                targetOffsetX = { if (forward) -screenPushOffsetPx(it) / 4 else screenPushOffsetPx(it) },
+                            ) + fadeOut(animationSpec = tween(SCREEN_PUSH_FADE_MS))
+                        enter togetherWith exit
+                    },
+                    label = "onboarding-step",
+                ) { page ->
+                    if (page.step == OnboardingStep.Create) {
+                        CreateSeedPage(
+                            mnemonic = page.mnemonic,
+                            busy = page.busy,
+                            error = page.error,
+                            onContinue = { dispatch(OnboardingEvent.ConfirmCreate) },
+                        )
+                    } else if (page.step == OnboardingStep.Choose) {
+                        ChooseWelcome(
+                            onCreate = { dispatch(OnboardingEvent.ChooseCreate) },
+                            onImport = { dispatch(OnboardingEvent.ChooseImport) },
+                        )
+                    } else if (page.step == OnboardingStep.Import) {
+                        ImportWalletPage(
+                            state = page,
+                            scanning = scanning,
+                            dispatch = { dispatch(it) },
+                            onScanningChange = { scanning = it },
+                        )
+                    } else {
+                        SyncYearPage(
+                            selectedYear = page.selectedYear,
+                            busy = page.busy,
+                            error = page.error,
+                            showsHeader = !startAtYearStep,
+                            onSelectYear = { dispatch(OnboardingEvent.SelectYear(it)) },
+                            onContinue = { dispatch(OnboardingEvent.ConfirmYear) },
+                        )
                     }
                 }
             }
-            if (showsHeader) {
-                PlatformScreenHeader(
-                    title =
-                        when (state.step) {
-                            OnboardingStep.Create -> "New seed"
-                            OnboardingStep.Import -> "Import"
-                            else -> "Sync from"
-                        },
-                    onBack = {
-                        if (state.step == OnboardingStep.Import && scanning) {
-                            scanning = false
-                        } else {
-                            dispatch(OnboardingEvent.Back)
-                        }
+        }
+        if (showsHeader) {
+            PlatformScreenHeader(
+                title =
+                    when (state.step) {
+                        OnboardingStep.Create -> "New seed"
+                        OnboardingStep.Import -> "Import"
+                        else -> "Sync from"
                     },
-                    enabled = !state.busy,
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(
-                                top = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding(),
-                                start = 16.dp,
-                                end = 16.dp,
-                            ),
-                )
-            }
+                onBack = {
+                    if (state.step == OnboardingStep.Import && scanning) {
+                        scanning = false
+                    } else {
+                        dispatch(OnboardingEvent.Back)
+                    }
+                },
+                enabled = !state.busy,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(
+                            top = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding(),
+                            start = 16.dp,
+                            end = 16.dp,
+                        ),
+            )
         }
     }
 }
@@ -293,10 +289,23 @@ private fun ChooseWelcome(
     onCreate: () -> Unit,
     onImport: () -> Unit,
 ) {
+    val palette =
+        if (LocalDarkPalette.current) DitherPalette.Blueberry else DitherPalette.BlueberryLight
     Box(Modifier.fillMaxSize()) {
-        DitherTreeBackground()
+        DitherTreeBackground(palette = palette)
         EdgeToEdgeScroll(extraBottom = (-16).dp) {
             BlueberryLogo()
+            Spacer(Modifier.height(56.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Your balance is nobody's business",
+                    style = PlatformWelcomeTaglineStyle().copy(fontWeight = FontWeight.Bold),
+                )
+                Text(
+                    text = "The privacy Bitcoin wallet",
+                    style = PlatformWelcomeTaglineStyle(),
+                )
+            }
             Spacer(Modifier.weight(1f))
             TintedPillButton(
                 text = "Create new wallet",

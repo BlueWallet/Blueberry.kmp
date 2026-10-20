@@ -41,7 +41,7 @@ class BwPaletteTest {
         assertEquals(Color(0xFF37C0A1), BwPalette.Light.Success)
         assertEquals(Color(0xFFD0021B), BwPalette.Light.Danger)
         assertEquals(Color(0xFFF38C47), BwPalette.Light.Warning)
-        assertEquals(Color(0xFFEDEDED), BwPalette.Light.Border)
+        assertEquals(Color(0xFFC5CAD3), BwPalette.Light.Border)
         assertEquals(Color(0xFFFFFFFF), BwPalette.Light.OnAccent)
     }
 }
