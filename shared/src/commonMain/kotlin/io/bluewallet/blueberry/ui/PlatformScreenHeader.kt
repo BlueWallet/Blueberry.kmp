@@ -63,7 +63,7 @@ expect fun PlatformLargeTitle(
  * Other platforms draw the content unchanged.
  *
  * iOS fades are UIKit overlays (above Compose siblings). Wrap a common ancestor
- * with [SuppressScrollEdgeOverlays] while a Compose modal scrim is up.
+ * by providing `LocalScrollEdgeOverlaysEnabled = false` while a Compose modal scrim is up.
  */
 @Composable
 expect fun PlatformScrollEdge(

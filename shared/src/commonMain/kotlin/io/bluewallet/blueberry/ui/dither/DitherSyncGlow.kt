@@ -60,20 +60,16 @@ private class GlowClock {
  * true the band fades up from the bottom edge (~0.5 s); when it turns false it
  * sinks away (~1 s) and then stops rendering entirely. It also stops while the
  * screen is not resumed. `animate = false` keeps the fade but drops the
- * shimmer, pulse and drift (for reduced motion).
- *
- * @param palette defaults to [DitherPalette.GlowDark] or [DitherPalette.GlowLight]
- *   to follow the app theme
+ * shimmer, pulse and drift (for reduced motion). Colors follow the app theme.
  */
 @Composable
 fun DitherSyncGlow(
     active: Boolean,
     modifier: Modifier = Modifier,
-    palette: DitherPalette? = null,
     pixelSize: Dp = 3.dp,
     animate: Boolean = true,
 ) {
-    val colors = palette ?: if (LocalDarkPalette.current) DitherPalette.GlowDark else DitherPalette.GlowLight
+    val colors = if (LocalDarkPalette.current) DitherPalette.GlowDark else DitherPalette.GlowLight
     val clock = remember { GlowClock() }
     val wanted by rememberUpdatedState(active)
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
