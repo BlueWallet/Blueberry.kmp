@@ -3,6 +3,7 @@ package io.bluewallet.blueberry.ui
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,24 +25,35 @@ import androidx.compose.ui.unit.dp
 
 private val BounceTail = 1.dp
 
-private object AlwaysBounceTailKey
+private const val ALWAYS_BOUNCE_TAIL_KEY = "always-bounce-tail"
 
 /**
  * Fills the incoming space and scrolls with the platform overscroll.
  * On iOS that is the system rubber-band. The tail keeps a scroll range so the
  * bounce still runs when the content fits on the screen. Children can use
  * [androidx.compose.foundation.layout.ColumnScope.weight].
+ *
+ * With [growWithContent], content taller than the viewport keeps its own height
+ * and scrolls instead of being squeezed. It sizes from intrinsic heights, so leave
+ * it off when the content holds a lazy list.
  */
 @Composable
 fun AlwaysBounceScroll(
     modifier: Modifier = Modifier,
+    growWithContent: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     BoxWithConstraints(modifier) {
         val viewport = maxHeight
+        val height =
+            if (growWithContent) {
+                Modifier.heightIn(min = viewport).height(IntrinsicSize.Min)
+            } else {
+                Modifier.height(viewport)
+            }
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
             Column(
-                modifier = Modifier.fillMaxWidth().height(viewport),
+                modifier = Modifier.fillMaxWidth().then(height),
                 content = content,
             )
             Spacer(Modifier.height(BounceTail))
@@ -65,7 +77,7 @@ fun Modifier.alwaysBounceVerticalScroll(): Modifier {
 
 /** Keeps a [LazyColumn] rubber-banding when every item already fits. */
 fun LazyListScope.alwaysBounceTail(state: LazyListState) {
-    item(key = AlwaysBounceTailKey) {
+    item(key = ALWAYS_BOUNCE_TAIL_KEY) {
         Spacer(Modifier.height(state.alwaysBounceTailHeight()).fillMaxWidth())
     }
 }
@@ -74,7 +86,7 @@ fun LazyListScope.alwaysBounceTail(state: LazyListState) {
 private fun LazyListState.alwaysBounceTailHeight(): Dp {
     val info = layoutInfo
     val viewport = (info.viewportEndOffset - info.viewportStartOffset).coerceAtLeast(0)
-    val others = info.visibleItemsInfo.filter { it.key != AlwaysBounceTailKey }
+    val others = info.visibleItemsInfo.filter { it.key != ALWAYS_BOUNCE_TAIL_KEY }
     val otherCount = (info.totalItemsCount - 1).coerceAtLeast(0)
     val occupied =
         others.sumOf { it.size } +

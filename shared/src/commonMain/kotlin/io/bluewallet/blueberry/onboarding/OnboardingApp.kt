@@ -5,6 +5,7 @@ package io.bluewallet.blueberry.onboarding
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -162,7 +163,9 @@ fun OnboardingApp(
         }
     }
 
-    DarkSceneChrome(darkArtwork = state.step == OnboardingStep.Choose) {
+    val pages = updateTransition(targetState = state, label = "onboarding-step")
+    // Follow the page on screen, not the destination, so the chrome flips once the slide ends.
+    DarkSceneChrome(darkArtwork = pages.currentState.step == OnboardingStep.Choose) {
         Box(Modifier.fillMaxSize()) {
             val safe = WindowInsets.safeDrawing.asPaddingValues()
             val showsHeader =
@@ -178,8 +181,7 @@ fun OnboardingApp(
                 bottom = safe.calculateBottomPadding(),
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    AnimatedContent(
-                        targetState = state,
+                    pages.AnimatedContent(
                         modifier = Modifier.fillMaxSize(),
                         contentKey = { it.step },
                         transitionSpec = {
@@ -196,7 +198,6 @@ fun OnboardingApp(
                                 ) + fadeOut(animationSpec = tween(SCREEN_PUSH_FADE_MS))
                             enter togetherWith exit
                         },
-                        label = "onboarding-step",
                     ) { page ->
                         if (page.step == OnboardingStep.Create) {
                             CreateSeedPage(
@@ -270,7 +271,7 @@ private fun EdgeToEdgeScroll(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val safe = WindowInsets.safeDrawing.asPaddingValues()
-    AlwaysBounceScroll(modifier.fillMaxSize()) {
+    AlwaysBounceScroll(modifier.fillMaxSize(), growWithContent = true) {
         Column(
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),

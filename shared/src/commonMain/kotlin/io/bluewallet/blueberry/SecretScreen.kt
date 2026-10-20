@@ -32,6 +32,7 @@ fun SecretScreen(
             .fillMaxSize()
             .background(BwColors.Paper)
             .safeDrawingPadding(),
+        growWithContent = true,
     ) {
         Column(
             modifier =

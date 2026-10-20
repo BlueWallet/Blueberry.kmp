@@ -26,6 +26,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -47,8 +49,8 @@ import kotlin.math.roundToInt
 /** How long a fling keeps coasting before the dial snaps to a year. */
 internal const val YEAR_FLING_COAST_SECONDS = 0.28f
 
-/** Samples older than this are dropped from the fling velocity window. */
-internal const val YEAR_VELOCITY_WINDOW_MS = 100L
+/** Fastest fling the dial honours, in years per second, so one coast moves a few years at most. */
+internal const val YEAR_MAX_FLING_PER_SECOND = 12f
 
 private val YearSlot = 108.dp
 private const val YEAR_SPRING_DAMPING = 0.72f
@@ -61,47 +63,19 @@ internal fun settledYearIndex(
     coastSeconds: Float = YEAR_FLING_COAST_SECONDS,
 ): Int {
     if (lastIndex < 0) return 0
+    val velocity = velocityPerSecond.coerceIn(-YEAR_MAX_FLING_PER_SECOND, YEAR_MAX_FLING_PER_SECOND)
     val projected =
-        (position + velocityPerSecond * coastSeconds).coerceIn(0f, lastIndex.toFloat())
+        (position + velocity * coastSeconds).coerceIn(0f, lastIndex.toFloat())
     return projected.roundToInt().coerceIn(0, lastIndex)
 }
 
-/**
- * Rolling window of index deltas. A stop empties recent motion so the coast is
- * quiet; a fling keeps the last ~[YEAR_VELOCITY_WINDOW_MS] of travel.
- */
-internal class YearVelocityWindow(
-    private val windowMs: Long = YEAR_VELOCITY_WINDOW_MS,
-) {
-    private val times = ArrayDeque<Long>()
-    private val deltas = ArrayDeque<Float>()
-
-    fun add(
-        timeMs: Long,
-        indexDelta: Float,
-    ) {
-        times.addLast(timeMs)
-        deltas.addLast(indexDelta)
-        trim(timeMs)
-    }
-
-    fun velocityPerSecond(nowMs: Long): Float {
-        trim(nowMs)
-        if (times.isEmpty()) return 0f
-        val oldest = times.first()
-        val newest = times.last()
-        val dt = (newest - oldest).coerceAtLeast(1L)
-        var travel = 0f
-        for (delta in deltas) travel += delta
-        return travel / dt * 1000f
-    }
-
-    private fun trim(nowMs: Long) {
-        while (times.isNotEmpty() && nowMs - times.first() > windowMs) {
-            times.removeFirst()
-            deltas.removeFirst()
-        }
-    }
+/** Index velocity at release. Compose's tracker fits the recent and batched historical samples. */
+internal fun yearReleaseVelocity(
+    tracker: VelocityTracker,
+    slotPx: Float,
+): Float {
+    val velocity = -tracker.calculateVelocity().x / slotPx
+    return if (velocity.isFinite()) velocity else 0f
 }
 
 /**
@@ -281,26 +255,23 @@ private suspend fun PointerInputScope.trackYearDrag(
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         val pointerId = down.id
-        val window = YearVelocityWindow()
-        var lastTime = down.uptimeMillis
+        val tracker = VelocityTracker()
+        tracker.addPointerInputChange(down)
         var dragging = true
         while (dragging) {
             val event = awaitPointerEvent()
             val change = event.changes.firstOrNull { it.id == pointerId }
             dragging = change != null && change.pressed
             if (change != null) {
-                lastTime = change.uptimeMillis
+                tracker.addPointerInputChange(change)
                 if (change.pressed) {
                     val dragX = change.positionChange().x
                     val indexDelta = -dragX / slotPx
-                    if (indexDelta != 0f) {
-                        window.add(lastTime, indexDelta)
-                        send(YearGesture.Move(indexDelta))
-                    }
+                    if (indexDelta != 0f) send(YearGesture.Move(indexDelta))
                     if (dragX != 0f) change.consume()
                 }
             }
         }
-        send(YearGesture.Release(window.velocityPerSecond(lastTime)))
+        send(YearGesture.Release(yearReleaseVelocity(tracker, slotPx)))
     }
 }
