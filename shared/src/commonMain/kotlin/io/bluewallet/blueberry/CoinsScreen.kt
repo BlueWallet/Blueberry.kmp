@@ -83,17 +83,6 @@ import io.bluewallet.blueberry.ui.platformBottomEdgeClearance
 import io.bluewallet.blueberry.ui.platformHeaderClearance
 import kotlinx.coroutines.launch
 
-private val SelectedRow = Color(0xFF1F2A35)
-private val PrivacyGreen = Color(0xFF7FC8A9)
-private val PrivacyAmber = Color(0xFFE0A24A)
-private val NoLabelAmber = Color(0xFFE0A24A)
-private val ChangeTagFg = Color(0xFF9CC8F0)
-private val ChangeTagBg = Color(0xFF1C2D3D)
-private val WarningTagBg = Color(0xFF3A2C17)
-private val NeutralControl = Color(0xFF6E757C)
-private val Divider = Color(0xFF262A2E)
-private val ListCard = Color(0xFF1B1E21)
-
 /** Breathing room under the inline nav title before the summary. */
 private val TitleBelowHeaderGap = 12.dp
 
@@ -419,11 +408,11 @@ private fun CoinFilterChips(
                     CoinControlFilter.Frozen -> "Frozen"
                 }
             val shape = RoundedCornerShape(18.dp)
-            val bg = if (active) BwColors.AccentSoft else ListCard
+            val bg = if (active) BwColors.AccentSoft else BwColors.Card
             val fg =
                 when {
                     active -> BwColors.Accent
-                    f == CoinControlFilter.NoLabel -> NoLabelAmber
+                    f == CoinControlFilter.NoLabel -> BwColors.Warning
                     else -> BwColors.InkSecondary
                 }
             Text(
@@ -491,7 +480,7 @@ private fun CoinGroupSection(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(22.dp))
-                    .background(ListCard),
+                    .background(BwColors.Card),
         ) {
             group.coins.forEachIndexed { index, coin ->
                 key(coin.key, coin.isFrozen, coin.label, coin.privacyState) {
@@ -500,7 +489,7 @@ private fun CoinGroupSection(
                             Modifier
                                 .fillMaxWidth()
                                 .height(1.dp)
-                                .background(Divider),
+                                .background(BwColors.InkMuted.copy(alpha = 0.22f)),
                         )
                     }
                     CoinControlRow(
@@ -549,7 +538,7 @@ private fun CoinControlRow(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .background(if (selected) SelectedRow else Color.Transparent)
+                .background(if (selected) BwColors.AccentSoft else Color.Transparent)
                 .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -609,8 +598,8 @@ private fun CoinControlRow(
                         val (fg, bg) =
                             when (tag) {
                                 "Frozen" -> BwColors.InkSecondary to BwColors.Section
-                                "Near dust" -> NoLabelAmber to WarningTagBg
-                                "Change" -> ChangeTagFg to ChangeTagBg
+                                "Near dust" -> BwColors.Warning to BwColors.Warning.copy(alpha = 0.16f)
+                                "Change" -> BwColors.Accent to BwColors.AccentSoft
                                 else -> BwColors.InkSecondary to BwColors.Section
                             }
                         Text(
@@ -629,7 +618,7 @@ private fun CoinControlRow(
                         text = subtitle,
                         color =
                             if (subtitle.startsWith("No label")) {
-                                NoLabelAmber
+                                BwColors.Warning
                             } else {
                                 BwColors.InkSecondary
                             },
@@ -664,7 +653,7 @@ private fun CoinSelector(
                     .background(BwColors.Section),
             contentAlignment = Alignment.Center,
         ) {
-            FrozenLockIcon(modifier = Modifier.size(12.dp))
+            FrozenLockIcon(modifier = Modifier.size(12.dp), color = BwColors.InkMuted)
         }
     } else {
         Box(
@@ -676,13 +665,13 @@ private fun CoinSelector(
                         if (selected) {
                             Modifier.background(BwColors.Accent, CircleShape)
                         } else {
-                            Modifier.border(2.dp, NeutralControl, CircleShape)
+                            Modifier.border(2.dp, BwColors.InkMuted, CircleShape)
                         },
                     ),
             contentAlignment = Alignment.Center,
         ) {
             if (selected) {
-                CheckmarkIcon(modifier = Modifier.size(12.dp), color = Color.White)
+                CheckmarkIcon(modifier = Modifier.size(12.dp), color = BwColors.OnAccent)
             }
         }
     }
@@ -711,7 +700,10 @@ private fun CheckmarkIcon(
 }
 
 @Composable
-private fun FrozenLockIcon(modifier: Modifier = Modifier) {
+private fun FrozenLockIcon(
+    modifier: Modifier = Modifier,
+    color: Color,
+) {
     Canvas(modifier = modifier) {
         val stroke = 1.4.dp.toPx()
         val w = size.width
@@ -724,7 +716,7 @@ private fun FrozenLockIcon(modifier: Modifier = Modifier) {
         val shackleR = bodyWidth * 0.32f
         val shackleTop = h * 0.08f
         drawArc(
-            color = NeutralControl,
+            color = color,
             startAngle = 180f,
             sweepAngle = 180f,
             useCenter = false,
@@ -733,7 +725,7 @@ private fun FrozenLockIcon(modifier: Modifier = Modifier) {
             style = Stroke(width = stroke),
         )
         drawRoundRect(
-            color = NeutralControl,
+            color = color,
             topLeft = Offset(bodyLeft, bodyTop),
             size = Size(bodyWidth, bodyHeight),
             cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
@@ -754,8 +746,8 @@ private fun CoinControlBottomBar(
     val noticeColor =
         when (notice.kind) {
             PrivacyNoticeKind.Hint -> BwColors.InkSecondary
-            PrivacyNoticeKind.Safe -> PrivacyGreen
-            PrivacyNoticeKind.Warning -> PrivacyAmber
+            PrivacyNoticeKind.Safe -> BwColors.Success
+            PrivacyNoticeKind.Warning -> BwColors.Warning
         }
     val word = if (k == 1) "coin" else "coins"
     val amount = formatBtc(total).removeSuffix(" BTC")
@@ -781,7 +773,7 @@ private fun CoinControlBottomBar(
         notice.costLine?.let { line ->
             Text(
                 text = line,
-                color = PrivacyAmber,
+                color = BwColors.Warning,
                 fontFamily = BwFontFamily,
                 fontSize = 13.sp,
             )

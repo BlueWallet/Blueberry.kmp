@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.LocalDarkPalette
 import io.bluewallet.blueberry.ui.Pressable
 import io.bluewallet.blueberry.ui.numberFontFamily
 
@@ -93,6 +94,14 @@ fun CoinsPanel(
                 else -> CoinsPanelBubbleStrip(bubbles = control.bubbles)
             }
             if (control.linkedGroupCount > 0 && !placeholder) {
+                val dark = LocalDarkPalette.current
+                val legendFill = BwColors.Ink.copy(alpha = if (dark) 0.06f else 0.05f)
+                val legendStroke =
+                    if (dark) {
+                        BwColors.Ink.copy(alpha = 0.28f)
+                    } else {
+                        BwColors.Border
+                    }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -102,11 +111,11 @@ fun CoinsPanel(
                             Modifier
                                 .size(width = 22.dp, height = 12.dp)
                                 .clip(RoundedCornerShape(50))
-                                .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(50)),
+                                .background(legendFill, RoundedCornerShape(50)),
                     ) {
                         Canvas(Modifier.fillMaxSize()) {
                             drawRoundRect(
-                                color = Color.White.copy(alpha = 0.28f),
+                                color = legendStroke,
                                 style = Stroke(width = 1.dp.toPx()),
                                 cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
                             )
@@ -203,6 +212,16 @@ private fun CoinsPanelBubbleStrip(bubbles: List<CoinControlBubble>) {
         val maxRadiusDp = layout.items.maxOfOrNull { it.radiusDp } ?: 10f
         val stripHeight =
             (maxRadiusDp.dp * 2 + BubbleStripGroupPad * 2).coerceAtMost(BubbleStripMaxHeight)
+        // Light card + Ink@18% reads as white; use the theme border for a visible outline.
+        val dark = LocalDarkPalette.current
+        val groupFill = BwColors.Ink.copy(alpha = if (dark) 0.06f else 0.05f)
+        val groupStroke =
+            if (dark) {
+                BwColors.Ink.copy(alpha = 0.18f)
+            } else {
+                BwColors.Border
+            }
+        val frozenStroke = BwColors.InkMuted
         Canvas(modifier = Modifier.fillMaxWidth().height(stripHeight)) {
             val cy = size.height / 2f
             var x = 0f
@@ -223,13 +242,13 @@ private fun CoinsPanelBubbleStrip(bubbles: List<CoinControlBubble>) {
                     val stadiumW = inner + pad * 2f
                     val stadiumH = (diameters.maxOrNull() ?: 0f) + pad * 2f
                     drawRoundRect(
-                        color = Color.White.copy(alpha = 0.06f),
+                        color = groupFill,
                         topLeft = Offset(x, cy - stadiumH / 2f),
                         size = Size(stadiumW, stadiumH),
                         cornerRadius = CornerRadius(stadiumH / 2f, stadiumH / 2f),
                     )
                     drawRoundRect(
-                        color = Color.White.copy(alpha = 0.28f),
+                        color = groupStroke,
                         topLeft = Offset(x, cy - stadiumH / 2f),
                         size = Size(stadiumW, stadiumH),
                         cornerRadius = CornerRadius(stadiumH / 2f, stadiumH / 2f),
@@ -239,7 +258,7 @@ private fun CoinsPanelBubbleStrip(bubbles: List<CoinControlBubble>) {
                     for ((idx, item) in group.withIndex()) {
                         val r = with(density) { item.radiusDp.dp.toPx() }
                         cx += r
-                        drawCoinCircle(Offset(cx, cy), r, item)
+                        drawCoinCircle(Offset(cx, cy), r, item, frozenStroke)
                         cx += r
                         if (idx < group.lastIndex) cx += gapInGroup
                     }
@@ -249,7 +268,7 @@ private fun CoinsPanelBubbleStrip(bubbles: List<CoinControlBubble>) {
                     val item = items[i]
                     val r = with(density) { item.radiusDp.dp.toPx() }
                     x += r
-                    drawCoinCircle(Offset(x, cy), r, item)
+                    drawCoinCircle(Offset(x, cy), r, item, frozenStroke)
                     x += r
                     i++
                     if (i < items.size) {
@@ -274,10 +293,11 @@ private fun DrawScope.drawCoinCircle(
     center: Offset,
     radius: Float,
     item: BubbleLayoutItem,
+    frozenStroke: Color,
 ) {
     if (item.isFrozen) {
         drawCircle(
-            color = Color(0xFF6E757C),
+            color = frozenStroke,
             radius = radius,
             center = center,
             style = Stroke(width = 1.2.dp.toPx()),
