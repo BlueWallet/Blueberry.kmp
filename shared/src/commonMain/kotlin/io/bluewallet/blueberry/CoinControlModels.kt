@@ -357,7 +357,7 @@ fun coinControlHeaderRight(
 ): String =
     when {
         linkedGroupCount == 0 && soloCount == 0 -> ""
-        linkedGroupCount == 0 -> "All coins independent"
+        linkedGroupCount == 0 -> "No on-chain links"
         else -> {
             val groups =
                 if (linkedGroupCount == 1) {
@@ -377,7 +377,7 @@ fun coinControlAccessibilityLabel(
 ): String {
     val coinsWord = if (coinCount == 1) "1 coin" else "$coinCount coins"
     if (linkedGroups.isEmpty()) {
-        return "$coinsWord. All independent. Opens coin control."
+        return "$coinsWord. No on-chain links. Opens coin control."
     }
     val parts =
         linkedGroups.joinToString(" and ") { g ->
