@@ -6,11 +6,15 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 
 @Composable
 internal actual fun ApplySystemBars(dark: Boolean) {
     val view = LocalView.current
+    // enableEdgeToEdge replays its first call's style (MainActivity's) on every configuration
+    // change. Reading the configuration re-runs this after each one so our style wins.
+    LocalConfiguration.current
     SideEffect {
         val activity = view.context as? ComponentActivity ?: return@SideEffect
         val style =
