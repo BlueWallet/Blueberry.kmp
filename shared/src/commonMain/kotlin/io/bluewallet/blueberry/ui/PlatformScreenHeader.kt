@@ -24,11 +24,20 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 @Composable
+@Suppress("LongParameterList")
 expect fun PlatformScreenHeader(
     title: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    /**
+     * When true, show [title] in the navigation bar (centered on iOS).
+     * When false, iOS leaves the bar empty so a scrolling [PlatformLargeTitle] can own the title.
+     */
+    showBarTitle: Boolean = false,
+    /** Trailing text action (e.g. Clear). Drawn in the header so it stays above edge overlays. */
+    trailingText: String? = null,
+    onTrailing: (() -> Unit)? = null,
 )
 
 /** Body copy at the platform default size: iOS 17pt, Material bodyLarge elsewhere. */
@@ -57,13 +66,12 @@ expect fun PlatformLargeTitle(
 )
 
 /**
- * iOS scroll-edge blur. [top] and [bottom] are the chrome that stays soft
- * (status bar, pinned bar, home indicator); the blur fades out just past it.
- * Compose scrolling is not a UIScrollView, so this overlays a system blur.
- * Other platforms draw the content unchanged.
+ * iOS scroll-edge blur. Softens content under the status / nav / home-indicator
+ * bands with a system [UIBlurEffect] mask. Other platforms draw content unchanged.
  *
- * iOS fades are UIKit overlays, drawn above every Compose sibling. Pass
- * [showEdges] = false while a Compose scrim or pushed screen covers the content.
+ * Pass [showEdges] = false while a full-screen scrim or pushed screen covers the
+ * content. Place [PlatformScreenHeader] as a Compose sibling after this so chrome
+ * paints above the blur.
  */
 @Composable
 expect fun PlatformScrollEdge(
@@ -76,11 +84,14 @@ expect fun PlatformScrollEdge(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("LongParameterList")
 internal fun MaterialScreenHeader(
     title: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    trailingText: String? = null,
+    onTrailing: (() -> Unit)? = null,
 ) {
     TopAppBar(
         modifier = modifier,
@@ -91,6 +102,7 @@ internal fun MaterialScreenHeader(
                 scrolledContainerColor = Color.Transparent,
                 titleContentColor = BwColors.Ink,
                 navigationIconContentColor = BwColors.Ink,
+                actionIconContentColor = BwColors.Action,
             ),
         navigationIcon = {
             HeaderBackButton(onClick = onBack, enabled = enabled)
@@ -100,6 +112,11 @@ internal fun MaterialScreenHeader(
                 text = title,
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
             )
+        },
+        actions = {
+            if (trailingText != null && onTrailing != null) {
+                TextAction(text = trailingText, onClick = onTrailing)
+            }
         },
     )
 }

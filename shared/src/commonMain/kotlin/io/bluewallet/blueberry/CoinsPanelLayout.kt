@@ -1,0 +1,123 @@
+package io.bluewallet.blueberry
+
+import kotlin.math.sqrt
+
+data class BubbleLayoutItem(
+    val key: String,
+    val radiusDp: Float,
+    val colorArgb: Long,
+    val isFrozen: Boolean,
+    val linkedGroupId: String?,
+)
+
+data class BubbleStripLayout(
+    val items: List<BubbleLayoutItem>,
+    val overflowCount: Int,
+    val scale: Float,
+)
+
+private data class BubbleGaps(
+    val inGroup: Float = 3f,
+    val betweenGroups: Float = 8f,
+    val independent: Float = 5f,
+    val groupPad: Float = 5f,
+)
+
+/**
+ * Layout the bubble strip: area-proportional radii, uniform scale to fit, then drop smallest
+ * independent coins and report +K overflow.
+ */
+@Suppress("LongParameterList", "CyclomaticComplexMethod", "NestedBlockDepth", "LoopWithTooManyJumpStatements")
+fun layoutBubbleStrip(
+    bubbles: List<CoinControlBubble>,
+    availableWidthDp: Float,
+    rMaxDp: Float = 28f,
+    rMinDp: Float = 2.5f,
+): BubbleStripLayout {
+    if (bubbles.isEmpty() || availableWidthDp <= 0f) {
+        return BubbleStripLayout(emptyList(), 0, 1f)
+    }
+    val gaps = BubbleGaps()
+    val largest = bubbles.maxOf { it.valueSats }.coerceAtLeast(1L)
+
+    fun radiiFor(
+        list: List<CoinControlBubble>,
+        scale: Float,
+    ): List<Float> =
+        list.map { b ->
+            val r = rMaxDp * sqrt(b.valueSats.toDouble() / largest).toFloat() * scale
+            r.coerceAtLeast(rMinDp)
+        }
+
+    fun widthOf(
+        list: List<CoinControlBubble>,
+        scale: Float,
+    ): Float = measureBubbleWidth(list, radiiFor(list, scale), gaps)
+
+    var scale = 1f
+    val natural = widthOf(bubbles, 1f)
+    if (natural > availableWidthDp) {
+        scale = (availableWidthDp / natural).coerceIn(0.05f, 1f)
+    }
+
+    var visible = bubbles
+    var overflow = 0
+    while (widthOf(visible, scale) > availableWidthDp + 0.5f && visible.isNotEmpty()) {
+        val dropIdx =
+            visible
+                .withIndex()
+                .filter { it.value.linkedGroupId == null }
+                .minByOrNull { it.value.valueSats }
+                ?.index ?: break
+        visible = visible.filterIndexed { i, _ -> i != dropIdx }
+        overflow++
+        if (widthOf(visible, scale) + 28f <= availableWidthDp) break
+    }
+
+    val after = widthOf(visible, scale)
+    if (after > availableWidthDp && after > 0f) {
+        scale = (scale * availableWidthDp / after).coerceIn(0.05f, 1f)
+    }
+
+    val rs = radiiFor(visible, scale)
+    val items =
+        visible.mapIndexed { i, b ->
+            BubbleLayoutItem(
+                key = b.key,
+                radiusDp = rs[i],
+                colorArgb = b.colorArgb,
+                isFrozen = b.isFrozen,
+                linkedGroupId = b.linkedGroupId,
+            )
+        }
+    return BubbleStripLayout(items, overflow, scale)
+}
+
+@Suppress("NestedBlockDepth")
+private fun measureBubbleWidth(
+    list: List<CoinControlBubble>,
+    rs: List<Float>,
+    gaps: BubbleGaps,
+): Float {
+    if (list.isEmpty()) return 0f
+    var w = 0f
+    var i = 0
+    while (i < list.size) {
+        val gid = list[i].linkedGroupId
+        if (gid != null) {
+            val start = i
+            while (i < list.size && list[i].linkedGroupId == gid) i++
+            val groupRadii = rs.subList(start, i)
+            val inner = groupRadii.sumOf { it.toDouble() }.toFloat() * 2f + gaps.inGroup * (groupRadii.size - 1)
+            w += inner + gaps.groupPad * 2f
+            if (i < list.size) w += gaps.betweenGroups
+        } else {
+            w += rs[i] * 2f
+            i++
+            if (i < list.size) {
+                w += if (list[i].linkedGroupId != null) gaps.betweenGroups else gaps.independent
+            }
+        }
+    }
+    return w
+}

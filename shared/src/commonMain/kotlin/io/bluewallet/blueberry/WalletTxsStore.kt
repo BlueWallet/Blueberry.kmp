@@ -5,6 +5,7 @@ import io.bluewallet.blueberry.bus.MessageBus
 import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.parse.TxFee
 import io.bluewallet.blueberry.parse.TxRow
+import io.bluewallet.blueberry.parse.computeCoinGroups
 import io.bluewallet.blueberry.parse.firstAddressLabel
 import io.bluewallet.blueberry.parse.firstUtxoLabelByTxid
 import io.bluewallet.blueberry.parse.formatBlockTimeLabel
@@ -56,6 +57,7 @@ data class WalletUtxoRow(
     val valueBar: String,
     val name: String?,
     val isChange: Boolean,
+    val isFrozen: Boolean = false,
 )
 
 data class WalletTxsSnapshot(
@@ -68,6 +70,8 @@ data class WalletTxsSnapshot(
     val txs: List<WalletTxRow> = emptyList(),
     val utxos: List<WalletUtxoRow> = emptyList(),
     val utxosReady: Boolean = false,
+    /** Unspent outpoint → linkage group id; empty until a wallet is present. */
+    val coinGroupIds: Map<String, String> = emptyMap(),
 )
 
 interface WalletTxsStore {
@@ -293,6 +297,7 @@ fun snapshotFromDb(
             .map { it.txid }
             .toSet()
     val nameByOutpoint = db.utxoNames.list().associate { it.outpoint to it.name }
+    val frozenOutpoints = db.utxoFrozen.list().toSet()
     val labels =
         TxRowLabels(
             noteByTxid = db.txPaymentLabels.list().associate { it.txid to it.label },
@@ -302,14 +307,14 @@ fun snapshotFromDb(
 
     var utxos = emptyList<WalletUtxoRow>()
     var fees = emptyMap<String, TxFee>()
+    var coinGroupIds = emptyMap<String, String>()
     if (wallet != null) {
         wallet.syncFromDb()
-        val scan =
-            scanWatchTxs(
-                stored.map { TxRow(it.txid, it.height, it.txIndex, it.tx) },
-                wallet.scripts(),
-            )
+        val txRows = stored.map { TxRow(it.txid, it.height, it.txIndex, it.tx) }
+        val scripts = wallet.scripts()
+        val scan = scanWatchTxs(txRows, scripts)
         fees = scan.fees
+        coinGroupIds = computeCoinGroups(txRows, scripts)
         val map = scan.utxos
         var maxValue = 0L
         for (u in map.values) {
@@ -324,6 +329,12 @@ fun snapshotFromDb(
                     val (txid, vout) = parseOutpointKey(key)
                     val height = u.height ?: 0
                     val watch = watchByScript[scriptHex(u.scriptPubKey)]
+                    val confirmedAt =
+                        if (height == 0) {
+                            null
+                        } else {
+                            timeLabelForHeight(db, height, nowMs, timeLabels).unixSeconds
+                        }
                     WalletUtxoRow(
                         key = key,
                         txid = txid,
@@ -335,10 +346,11 @@ fun snapshotFromDb(
                         path = watch?.path,
                         amountLabel = formatBtc(u.value),
                         height = height,
-                        ageLabel = timeLabelForHeight(db, height, nowMs, timeLabels).label,
+                        ageLabel = formatCoinAgeFromConfirmedAt(confirmedAt, nowMs / 1000),
                         valueBar = utxoValueBar(u.value, maxValue),
                         name = nameByOutpoint[key],
                         isChange = changeScripts.any { it.contentEquals(u.scriptPubKey) },
+                        isFrozen = key in frozenOutpoints,
                     )
                 }.sortedWith(
                     compareByDescending<WalletUtxoRow> { it.height }
@@ -387,6 +399,7 @@ fun snapshotFromDb(
         txs = pending + confirmedTxs,
         utxos = utxos,
         utxosReady = wallet != null,
+        coinGroupIds = coinGroupIds,
     )
 }
 

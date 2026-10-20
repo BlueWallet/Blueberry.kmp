@@ -71,3 +71,9 @@ fun parseFeeRateSatPerVb(input: String): Double? {
     val n = t.toDouble()
     return if (n.isFinite() && n > 0.0) n else null
 }
+
+/** True when build/send failed because the fixed coin set cannot cover amount + fee. */
+fun isInsufficientSelectionError(message: String?): Boolean {
+    if (message == null) return false
+    return message.contains("insufficient", ignoreCase = true)
+}

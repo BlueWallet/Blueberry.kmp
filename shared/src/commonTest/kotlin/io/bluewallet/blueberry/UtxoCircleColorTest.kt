@@ -2,6 +2,7 @@ package io.bluewallet.blueberry
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class UtxoCircleColorTest {
     @Test
@@ -9,13 +10,24 @@ class UtxoCircleColorTest {
         assertEquals("5f36ef", utxoCircleRgbHex("abc:0"))
         assertEquals("e3b0c4", utxoCircleRgbHex(""))
         assertEquals("b275cc", utxoCircleRgbHex("aa".repeat(32) + ":1"))
-        assertEquals(0xFF554C76L, utxoCircleArgb("abc:0"))
-        assertEquals(0xFF764C5CL, utxoCircleArgb(""))
     }
 
     @Test
-    fun different_outpoints_get_different_colors() {
+    fun argb_picks_spec_palette_by_hash_mod_11() {
+        assertEquals(11, UtxoCirclePaletteArgb.size)
+        assertEquals(0xFF7E4F8AL, UtxoCirclePaletteArgb[0])
+        assertEquals(0xFF7C4E8EL, UtxoCirclePaletteArgb[10])
+        assertEquals(3, utxoCirclePaletteIndex("abc:0"))
+        assertEquals(0xFF77723FL, utxoCircleArgb("abc:0"))
+        assertEquals(7, utxoCirclePaletteIndex(""))
+        assertEquals(0xFF8A5450L, utxoCircleArgb(""))
+        assertEquals(utxoCircleArgb("abc:0"), utxoCircleArgb("abc:0"))
+    }
+
+    @Test
+    fun different_outpoints_usually_get_different_palette_slots() {
         assertEquals(false, utxoCircleRgbHex("txid:0") == utxoCircleRgbHex("txid:1"))
+        assertTrue(utxoCirclePaletteIndex("txid:0") != utxoCirclePaletteIndex("txid:1"))
     }
 
     @Test

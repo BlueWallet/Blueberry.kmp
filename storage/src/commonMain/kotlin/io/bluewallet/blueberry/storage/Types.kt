@@ -241,6 +241,16 @@ interface UtxoNamesRepository {
     fun list(): List<UtxoNameRow>
 }
 
+interface UtxoFrozenRepository {
+    fun isFrozen(outpoint: String): Boolean
+
+    fun freeze(outpoint: String)
+
+    fun unfreeze(outpoint: String)
+
+    fun list(): List<String>
+}
+
 data class AddressLabelRow(
     val address: String,
     val label: String,
@@ -421,6 +431,7 @@ interface Database {
     val transactions: TransactionsRepository
     val keyValue: KeyValueRepository
     val utxoNames: UtxoNamesRepository
+    val utxoFrozen: UtxoFrozenRepository
     val txPaymentLabels: TxPaymentLabelsRepository
     val addressLabels: AddressLabelsRepository
     val privateSends: PrivateSendsRepository
