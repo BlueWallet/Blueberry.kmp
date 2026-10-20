@@ -136,6 +136,7 @@ fun OnboardingApp(
             OnboardingEffect.ForgetImportedSecret -> {
                 try {
                     persist.forgetSecret()
+                    state = reduceOnboarding(state, OnboardingEvent.ForgetSecretOk).state
                 } catch (err: Exception) {
                     state =
                         reduceOnboarding(
@@ -358,6 +359,7 @@ private fun SyncYearPage(
     onSelectYear: (Int) -> Unit,
     onContinue: () -> Unit,
 ) {
+    var dialSettling by remember { mutableStateOf(false) }
     val saving = if (busy) "Saving…" else null
     val message = if (busy) null else error
     val safe = WindowInsets.safeDrawing.asPaddingValues()
@@ -387,6 +389,7 @@ private fun SyncYearPage(
                 selected = selectedYear,
                 enabled = !busy,
                 onSelect = onSelectYear,
+                onSettlingChange = { dialSettling = it },
             )
         }
         if (saving != null) {
@@ -399,7 +402,7 @@ private fun SyncYearPage(
             text = "Continue",
             onClick = onContinue,
             modifier = Modifier.fillMaxWidth(),
-            enabled = !busy,
+            enabled = !busy && !dialSettling,
             height = ProminentButtonHeight,
             pressable = true,
         )

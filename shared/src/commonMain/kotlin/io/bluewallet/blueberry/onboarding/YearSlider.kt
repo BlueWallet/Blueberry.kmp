@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
@@ -46,6 +47,9 @@ import kotlin.math.roundToInt
 /** How long a fling keeps coasting before the dial snaps to a year. */
 internal const val YEAR_FLING_COAST_SECONDS = 0.28f
 
+/** Samples older than this are dropped from the fling velocity window. */
+internal const val YEAR_VELOCITY_WINDOW_MS = 100L
+
 private val YearSlot = 108.dp
 private const val YEAR_SPRING_DAMPING = 0.72f
 private const val YEAR_SPRING_STIFFNESS = 380f
@@ -63,9 +67,48 @@ internal fun settledYearIndex(
 }
 
 /**
+ * Rolling window of index deltas. A stop empties recent motion so the coast is
+ * quiet; a fling keeps the last ~[YEAR_VELOCITY_WINDOW_MS] of travel.
+ */
+internal class YearVelocityWindow(
+    private val windowMs: Long = YEAR_VELOCITY_WINDOW_MS,
+) {
+    private val times = ArrayDeque<Long>()
+    private val deltas = ArrayDeque<Float>()
+
+    fun add(
+        timeMs: Long,
+        indexDelta: Float,
+    ) {
+        times.addLast(timeMs)
+        deltas.addLast(indexDelta)
+        trim(timeMs)
+    }
+
+    fun velocityPerSecond(nowMs: Long): Float {
+        trim(nowMs)
+        if (times.isEmpty()) return 0f
+        val oldest = times.first()
+        val newest = times.last()
+        val dt = (newest - oldest).coerceAtLeast(1L)
+        var travel = 0f
+        for (delta in deltas) travel += delta
+        return travel / dt * 1000f
+    }
+
+    private fun trim(nowMs: Long) {
+        while (times.isNotEmpty() && nowMs - times.first() > windowMs) {
+            times.removeFirst()
+            deltas.removeFirst()
+        }
+    }
+}
+
+/**
  * Horizontal year dial. The chosen year sits in a fixed frame; dragging
  * slides the years under it, and a fling coasts into the nearest year.
  */
+@Suppress("LongParameterList")
 @Composable
 internal fun YearSlider(
     years: List<Int>,
@@ -73,6 +116,7 @@ internal fun YearSlider(
     enabled: Boolean,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    onSettlingChange: (Boolean) -> Unit = {},
 ) {
     if (years.isEmpty()) return
     val startIndex = years.indexOf(selected).let { if (it < 0) 0 else it }
@@ -83,7 +127,7 @@ internal fun YearSlider(
         position = position,
         gestures = gestures,
         enabled = enabled,
-        onSelect = onSelect,
+        actions = YearDialActions(onSelect = onSelect, onSettlingChange = onSettlingChange),
     )
     Box(
         modifier
@@ -113,24 +157,36 @@ internal fun YearSlider(
     }
 }
 
+private class YearDialActions(
+    val onSelect: (Int) -> Unit,
+    val onSettlingChange: (Boolean) -> Unit,
+)
+
 @Composable
 private fun BindYearGestures(
     years: List<Int>,
     position: Animatable<Float, AnimationVector1D>,
     gestures: Channel<YearGesture>,
     enabled: Boolean,
-    onSelect: (Int) -> Unit,
+    actions: YearDialActions,
 ) {
     val haptic = rememberSoftHaptic()
-    val onSelectState by rememberUpdatedState(onSelect)
+    val actionsState by rememberUpdatedState(actions)
     val enabledState by rememberUpdatedState(enabled)
+    val settling = remember { mutableStateOf(false) }
     LaunchedEffect(years) {
         var settle: Job? = null
+
+        fun markSettling(value: Boolean) {
+            settling.value = value
+            actionsState.onSettlingChange(value)
+        }
         for (gesture in gestures) {
             when (gesture) {
                 is YearGesture.Move -> {
                     settle?.cancel()
                     settle?.join()
+                    markSettling(false)
                     position.snapTo(
                         (position.value + gesture.delta).coerceIn(0f, years.lastIndex.toFloat()),
                     )
@@ -142,12 +198,22 @@ private fun BindYearGestures(
                             velocityPerSecond = gesture.velocity,
                             lastIndex = years.lastIndex,
                         )
+                    // Commit before the spring so Continue cannot store a mid-flight year.
+                    actionsState.onSelect(years[snapped])
+                    markSettling(true)
                     settle =
                         launch {
-                            position.animateTo(
-                                snapped.toFloat(),
-                                spring(dampingRatio = YEAR_SPRING_DAMPING, stiffness = YEAR_SPRING_STIFFNESS),
-                            )
+                            try {
+                                position.animateTo(
+                                    snapped.toFloat(),
+                                    spring(
+                                        dampingRatio = YEAR_SPRING_DAMPING,
+                                        stiffness = YEAR_SPRING_STIFFNESS,
+                                    ),
+                                )
+                            } finally {
+                                markSettling(false)
+                            }
                         }
                 }
             }
@@ -158,9 +224,9 @@ private fun BindYearGestures(
             .distinctUntilChanged()
             .drop(1)
             .collect { index ->
-                if (!enabledState) return@collect
+                if (!enabledState || settling.value) return@collect
                 haptic.perform()
-                onSelectState(years[index])
+                actionsState.onSelect(years[index])
             }
     }
 }
@@ -215,24 +281,26 @@ private suspend fun PointerInputScope.trackYearDrag(
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         val pointerId = down.id
-        var velocity = 0f
+        val window = YearVelocityWindow()
         var lastTime = down.uptimeMillis
         var dragging = true
         while (dragging) {
             val event = awaitPointerEvent()
             val change = event.changes.firstOrNull { it.id == pointerId }
             dragging = change != null && change.pressed
-            if (change != null && change.pressed) {
-                val dragX = change.positionChange().x
-                val now = change.uptimeMillis
-                val dt = (now - lastTime).coerceAtLeast(1L)
-                val indexDelta = -dragX / slotPx
-                velocity = indexDelta / dt * 1000f
-                lastTime = now
-                if (indexDelta != 0f) send(YearGesture.Move(indexDelta))
-                if (dragX != 0f) change.consume()
+            if (change != null) {
+                lastTime = change.uptimeMillis
+                if (change.pressed) {
+                    val dragX = change.positionChange().x
+                    val indexDelta = -dragX / slotPx
+                    if (indexDelta != 0f) {
+                        window.add(lastTime, indexDelta)
+                        send(YearGesture.Move(indexDelta))
+                    }
+                    if (dragX != 0f) change.consume()
+                }
             }
         }
-        send(YearGesture.Release(velocity))
+        send(YearGesture.Release(window.velocityPerSecond(lastTime)))
     }
 }

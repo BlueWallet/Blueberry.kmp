@@ -131,7 +131,7 @@ class OnboardingFlowTest {
     }
 
     @Test
-    fun back_from_year_after_import_returns_to_import() {
+    fun back_from_year_after_import_deletes_secret_before_leaving() {
         var state =
             reduceOnboarding(
                 initialOnboardingState(false),
@@ -141,10 +141,38 @@ class OnboardingFlowTest {
         val submitted = reduceOnboarding(state, OnboardingEvent.SubmitImport)
         val year = reduceOnboarding(submitted.state, OnboardingEvent.PersistImportOk).state
         val back = reduceOnboarding(year, OnboardingEvent.Back)
-        assertEquals(OnboardingStep.Import, back.state.step)
+        assertEquals(OnboardingStep.Year, back.state.step)
         assertEquals(abandon, back.state.importValue)
-        assertFalse(back.state.busy)
+        assertTrue(back.state.busy)
         assertEquals(OnboardingEffect.ForgetImportedSecret, back.effect)
+
+        val forgotten = reduceOnboarding(back.state, OnboardingEvent.ForgetSecretOk)
+        assertEquals(OnboardingStep.Import, forgotten.state.step)
+        assertEquals(abandon, forgotten.state.importValue)
+        assertFalse(forgotten.state.busy)
+        assertNull(forgotten.effect)
+    }
+
+    @Test
+    fun failed_secret_delete_stays_on_year() {
+        var state =
+            reduceOnboarding(
+                initialOnboardingState(false),
+                OnboardingEvent.ChooseImport,
+            ).state
+        state = reduceOnboarding(state, OnboardingEvent.ImportChanged(abandon)).state
+        val submitted = reduceOnboarding(state, OnboardingEvent.SubmitImport)
+        val year = reduceOnboarding(submitted.state, OnboardingEvent.PersistImportOk).state
+        val back = reduceOnboarding(year, OnboardingEvent.Back).state
+        val failed =
+            reduceOnboarding(
+                back,
+                OnboardingEvent.PersistFailed("disk full"),
+            )
+        assertEquals(OnboardingStep.Year, failed.state.step)
+        assertFalse(failed.state.busy)
+        assertEquals("disk full", failed.state.error)
+        assertNull(failed.effect)
     }
 
     @Test
