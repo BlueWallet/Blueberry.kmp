@@ -21,5 +21,5 @@ fun setAddressLabel(
         }
     }
     val at = nowMillis()
-    walletTxsStore.apply(snapshotFromDb(db, at, at, wallet))
+    walletTxsStore.applyFromDb(db, snapshotFromDb(db, at, at, wallet))
 }

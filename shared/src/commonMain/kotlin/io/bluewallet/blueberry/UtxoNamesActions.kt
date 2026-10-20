@@ -3,7 +3,7 @@ package io.bluewallet.blueberry
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.wallet.Wallet
 
-/** Persist a UTXO label. Trim; empty clears. Patches the live snapshot. */
+/** Persist a UTXO label. Trim; empty clears. Refreshes coin names and tx captions on the live snapshot. */
 @Suppress("UnusedParameter")
 fun setUtxoName(
     db: Database,
@@ -20,5 +20,5 @@ fun setUtxoName(
             db.utxoNames.upsert(outpoint, trimmed)
         }
     }
-    patchUtxoRow(walletTxsStore, outpoint) { it.copy(name = trimmed.ifEmpty { null }) }
+    walletTxsStore.update { withStoredUtxoMeta(db, it) }
 }

@@ -121,7 +121,7 @@ fun App(databasePath: String) {
                                 restoreLabels = { restoreWalletLabelsOnColdStart(db) },
                                 onRestored = {
                                     val at = nowMillis()
-                                    peers.walletTxsStore.apply(snapshotFromDb(db, at, at, peers.wallet))
+                                    peers.walletTxsStore.applyFromDb(db, snapshotFromDb(db, at, at, peers.wallet))
                                 },
                             )
                         }

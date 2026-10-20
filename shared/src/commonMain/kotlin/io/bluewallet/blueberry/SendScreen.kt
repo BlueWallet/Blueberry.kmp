@@ -330,7 +330,7 @@ fun SendScreen(
                                                     feeError = "missing refund address"
                                                     return@handler
                                                 }
-                                                val pickedPrivate = pickSelected(snap.utxos, selectedKeys)
+                                                val pickedPrivate = pickSelected(db, snap.utxos, selectedKeys)
                                                 if (pickedPrivate is PickUtxos.Error) {
                                                     feeError = pickedPrivate.error
                                                     return@handler
@@ -358,7 +358,7 @@ fun SendScreen(
                                                 feeError = "missing send details"
                                                 return@handler
                                             }
-                                            val picked = pickSelected(snap.utxos, selectedKeys)
+                                            val picked = pickSelected(db, snap.utxos, selectedKeys)
                                             if (picked is PickUtxos.Error) {
                                                 feeError = picked.error
                                                 return@handler
@@ -496,17 +496,25 @@ fun SendScreen(
     }
 }
 
+/** [storedFrozen] is the persisted freeze list; it wins even if the snapshot row is stale. */
 internal fun spendableSelectedKeys(
     utxos: List<WalletUtxoRow>,
     keys: Set<String>,
-): List<String> = utxos.filter { it.key in keys && !it.isFrozen }.map { it.key }
+    storedFrozen: Set<String> = emptySet(),
+): List<String> = utxos.filter { it.key in keys && !it.isFrozen && it.key !in storedFrozen }.map { it.key }
 
 private fun pickSelected(
+    db: Database,
     utxos: List<WalletUtxoRow>,
     keys: Set<String>,
-): PickUtxos<WalletUtxoRow> =
-    io.bluewallet.blueberry.parse
-        .pickUtxosByKeys(utxos, spendableSelectedKeys(utxos, keys)) { it.key }
+): PickUtxos<WalletUtxoRow> {
+    val spendable = spendableSelectedKeys(utxos, keys, db.utxoFrozen.list().toSet())
+    if (spendable.size != keys.size) return PickUtxos.Error(FROZEN_OR_GONE_ERROR)
+    return io.bluewallet.blueberry.parse
+        .pickUtxosByKeys(utxos, spendable) { it.key }
+}
+
+private const val FROZEN_OR_GONE_ERROR = "Some selected coins are frozen or no longer available. Review the selection."
 
 private sealed class DetailsEvent {
     data class Address(

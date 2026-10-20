@@ -128,9 +128,18 @@ fun CoinsScreen(
     val filtered = remember(control, filter) { filterCoinControlGroups(control, filter) }
     val visibleKeys =
         remember(filtered) { filtered.flatMap { group -> group.coins.map { it.key } }.toSet() }
-    // Spend / Use only the selection still visible under the active filter.
-    val actionCoins =
-        control.coins.filter { it.key in selectedKeys && !it.isFrozen && it.key in visibleKeys }
+    // Narrowing the filter deselects hidden coins, so the weight bar, notice, and action share one set.
+    LaunchedEffect(control, visibleKeys) {
+        val frozen =
+            control.coins
+                .filter { it.isFrozen }
+                .map { it.key }
+                .toSet()
+        val shown = if (filter == CoinControlFilter.All) selectedKeys else selectedKeys.intersect(visibleKeys)
+        val next = shown - frozen
+        if (next != selectedKeys) selectedKeys = next
+    }
+    val actionCoins = control.coins.filter { it.key in selectedKeys && !it.isFrozen }
     val notice = remember(actionCoins) { privacyNoticeForSelection(actionCoins) }
     val rowsByKey = remember(snap.utxos) { coinsRows(snap.utxos).associateBy { it.key } }
     LaunchedEffect(editingKey) {

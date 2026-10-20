@@ -79,6 +79,9 @@ interface WalletTxsStore {
 
     fun apply(snapshot: WalletTxsSnapshot)
 
+    /** Install [transform] of the latest snapshot; re-run if another write lands first. */
+    fun update(transform: (WalletTxsSnapshot) -> WalletTxsSnapshot)
+
     fun setBlockCounts(
         parsed: Int,
         total: Int,
@@ -314,15 +317,15 @@ fun snapshotFromDb(
         val scripts = wallet.scripts()
         val scan = scanWatchTxs(txRows, scripts)
         fees = scan.fees
-        coinGroupIds = computeCoinGroups(txRows, scripts)
+        val watched = wallet.snapshot().addresses
+        val watchByScript = watched.associateBy { scriptHex(it.scriptPubKey) }
+        val changeScripts = watched.filter { it.change }.map { it.scriptPubKey }
+        coinGroupIds = computeCoinGroups(txRows, scripts, changeScripts)
         val map = scan.utxos
         var maxValue = 0L
         for (u in map.values) {
             if (u.value > maxValue) maxValue = u.value
         }
-        val watched = wallet.snapshot().addresses
-        val watchByScript = watched.associateBy { scriptHex(it.scriptPubKey) }
-        val changeScripts = watched.filter { it.change }.map { it.scriptPubKey }
         utxos =
             map.entries
                 .map { (key, u) ->
@@ -403,6 +406,30 @@ fun snapshotFromDb(
     )
 }
 
+/**
+ * Re-read freeze flags, UTXO names, and payment notes onto [snap]. Run inside
+ * [WalletTxsStore.update] so a rebuild that started before an edit cannot install stale values.
+ */
+internal fun withStoredUtxoMeta(
+    db: Database,
+    snap: WalletTxsSnapshot,
+): WalletTxsSnapshot {
+    val nameByOutpoint = db.utxoNames.list().associate { it.outpoint to it.name }
+    val frozen = db.utxoFrozen.list().toSet()
+    val utxoLabelByTxid = firstUtxoLabelByTxid(nameByOutpoint)
+    val noteByTxid = db.txPaymentLabels.list().associate { it.txid to it.label }
+    return snap.copy(
+        utxos = snap.utxos.map { it.copy(name = nameByOutpoint[it.key], isFrozen = it.key in frozen) },
+        txs = snap.txs.map { it.copy(utxoLabel = utxoLabelByTxid[it.txid], paymentLabel = noteByTxid[it.txid]) },
+    )
+}
+
+/** Install a freshly built [snapshot] with the latest stored UTXO metadata. */
+fun WalletTxsStore.applyFromDb(
+    db: Database,
+    snapshot: WalletTxsSnapshot,
+) = update { withStoredUtxoMeta(db, snapshot) }
+
 @OptIn(ExperimentalAtomicApi::class)
 private class WalletTxsStoreImpl : WalletTxsStore {
     private val state = AtomicReference(WalletTxsState())
@@ -477,46 +504,41 @@ private class WalletTxsStoreImpl : WalletTxsStore {
         }
     }
 
-    override fun apply(snapshot: WalletTxsSnapshot) {
+    override fun apply(snapshot: WalletTxsSnapshot) = update { snapshot }
+
+    override fun update(transform: (WalletTxsSnapshot) -> WalletTxsSnapshot) {
         while (true) {
             val cur = state.load()
-            if (!cur.parsingActive) {
-                val updated =
-                    WalletTxsState(
-                        snapshot = snapshot.copy(etaMs = null),
-                        parsingActive = false,
-                        samples = emptyList(),
-                    )
-                if (state.compareAndSet(cur, updated)) {
-                    emitChange()
-                    return
-                }
-                continue
-            }
-            val prev = cur.snapshot
-            if (snapshot.at == null) {
-                val updated = cur.copy(snapshot = snapshot.copy(etaMs = null), samples = emptyList())
-                if (state.compareAndSet(cur, updated)) {
-                    emitChange()
-                    return
-                }
-                continue
-            }
-            val nextSamples =
-                nextProgressSamples(
-                    cur.samples,
-                    prev.blocksParsed,
-                    prev.blocksTotal,
-                    snapshot.at,
-                    snapshot.blocksParsed,
-                    snapshot.blocksTotal,
-                )
-            val hasBacklog = snapshot.blocksTotal > snapshot.blocksParsed
-            val nextEta = if (hasBacklog) estimateEtaMs(nextSamples, snapshot.blocksTotal) else null
-            val updated = cur.copy(snapshot = snapshot.copy(etaMs = nextEta), samples = nextSamples)
-            if (state.compareAndSet(cur, updated)) {
+            if (state.compareAndSet(cur, nextState(cur, transform(cur.snapshot)))) {
                 emitChange()
                 return
+            }
+        }
+    }
+
+    private fun nextState(
+        cur: WalletTxsState,
+        snapshot: WalletTxsSnapshot,
+    ): WalletTxsState {
+        val at = snapshot.at
+        return when {
+            !cur.parsingActive ->
+                WalletTxsState(snapshot = snapshot.copy(etaMs = null), parsingActive = false, samples = emptyList())
+            at == null -> cur.copy(snapshot = snapshot.copy(etaMs = null), samples = emptyList())
+            else -> {
+                val prev = cur.snapshot
+                val nextSamples =
+                    nextProgressSamples(
+                        cur.samples,
+                        prev.blocksParsed,
+                        prev.blocksTotal,
+                        at,
+                        snapshot.blocksParsed,
+                        snapshot.blocksTotal,
+                    )
+                val hasBacklog = snapshot.blocksTotal > snapshot.blocksParsed
+                val nextEta = if (hasBacklog) estimateEtaMs(nextSamples, snapshot.blocksTotal) else null
+                cur.copy(snapshot = snapshot.copy(etaMs = nextEta), samples = nextSamples)
             }
         }
     }
@@ -587,7 +609,7 @@ fun hydrateWallet(
         store.setBlockCounts(parsed, total, at)
         return
     }
-    store.apply(snapshotFromDb(db, at, nowMillis(), wallet))
+    store.applyFromDb(db, snapshotFromDb(db, at, nowMillis(), wallet))
 }
 
 fun bindWalletTxsEvents(

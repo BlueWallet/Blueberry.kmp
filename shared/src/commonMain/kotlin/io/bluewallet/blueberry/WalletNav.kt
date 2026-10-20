@@ -3,6 +3,7 @@ package io.bluewallet.blueberry
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -11,6 +12,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -68,6 +71,7 @@ internal fun WalletNavHost(
     val scope = rememberCoroutineScope()
     var sendSelectedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
     var sendFeeRateSatPerVb by remember { mutableStateOf<Double?>(null) }
+    val liveSendEntries = remember { mutableSetOf<String>() }
     // Subscribe so recomposition runs when the stack changes (for LocalHomeVisible).
     val backStackEntry by navController.currentBackStackEntryAsState()
     // Any pushed destination means home is covered — drop home UIKit overlays / dock.
@@ -121,7 +125,22 @@ internal fun WalletNavHost(
                     onBack = goBack,
                 )
             }
-            composable<SendRoute> {
+            composable<SendRoute> { entry ->
+                // The entry outlives this composition while the coin picker covers it, and is
+                // destroyed only when Send is popped; that is when the draft selection and fee end.
+                LaunchedEffect(entry.id) {
+                    if (!liveSendEntries.add(entry.id)) return@LaunchedEffect
+                    entry.lifecycle.addObserver(
+                        LifecycleEventObserver { _, event ->
+                            if (event != Lifecycle.Event.ON_DESTROY) return@LifecycleEventObserver
+                            liveSendEntries.remove(entry.id)
+                            if (liveSendEntries.isEmpty()) {
+                                sendSelectedKeys = emptySet()
+                                sendFeeRateSatPerVb = null
+                            }
+                        },
+                    )
+                }
                 SendScreen(
                     runtime = runtime,
                     db = db,

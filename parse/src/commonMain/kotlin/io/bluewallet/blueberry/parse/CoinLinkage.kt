@@ -6,17 +6,21 @@ import fr.acinq.bitcoin.Transaction
  * Union-find linkage over the wallet's own history.
  *
  * Two coins are linked when an observer can already tell from the chain that the same wallet
- * owns both (common-input ownership, change, or address reuse).
+ * owns both (common-input ownership, change, or address reuse). Only outputs paying one of
+ * [changeScripts] join the cluster of the inputs that funded them; a wallet output on a receive
+ * script is not attributable to the spender, so it stays in its own group.
  *
  * @return map of **unspent** outpoint key → deterministic group id (union-find root key).
  */
 fun computeCoinGroups(
     txs: List<TxRow>,
     watchScripts: List<ByteArray>,
+    changeScripts: List<ByteArray>,
 ): Map<String, String> {
     val ctx =
         LinkageCtx(
             watch = watchScripts.map(::scriptHex).toSet(),
+            change = changeScripts.map(::scriptHex).toSet(),
             uf = UnionFind(),
             live = mutableMapOf(),
             ownedScriptByOutpoint = linkedMapOf(),
@@ -31,6 +35,7 @@ fun computeCoinGroups(
 
 private class LinkageCtx(
     val watch: Set<String>,
+    val change: Set<String>,
     val uf: UnionFind,
     val live: MutableMap<String, WatchUtxo>,
     val ownedScriptByOutpoint: MutableMap<String, String>,
@@ -39,13 +44,13 @@ private class LinkageCtx(
     fun applyTx(row: TxRow) {
         val tx = Transaction.read(row.tx)
         val ownedInputs = ownedInputKeys(tx)
-        val ownedOutputs = mutableListOf<String>()
+        val changeOutputs = mutableListOf<String>()
         tx.txOut.forEachIndexed { vout, o ->
             val script = o.publicKeyScript.toByteArray()
             val scriptH = scriptHex(script)
             if (scriptH !in watch) return@forEachIndexed
             val key = outpointKey(tx.txid.toString(), vout)
-            ownedOutputs.add(key)
+            if (scriptH in change) changeOutputs.add(key)
             uf.add(key)
             ownedScriptByOutpoint[key] = scriptH
             outpointsByScript.getOrPut(scriptH) { mutableListOf() }.add(key)
@@ -58,7 +63,7 @@ private class LinkageCtx(
             for (k in ownedInputs) uf.add(k)
             val anchor = ownedInputs.first()
             for (k in ownedInputs.drop(1)) uf.union(anchor, k)
-            for (k in ownedOutputs) uf.union(anchor, k)
+            for (k in changeOutputs) uf.union(anchor, k)
         }
     }
 
