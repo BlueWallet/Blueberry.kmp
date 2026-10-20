@@ -4,3 +4,6 @@ SELECT value FROM key_value WHERE key = ?;
 set:
 INSERT INTO key_value(key, value) VALUES (?, ?)
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+
+delete:
+DELETE FROM key_value WHERE key = ?;

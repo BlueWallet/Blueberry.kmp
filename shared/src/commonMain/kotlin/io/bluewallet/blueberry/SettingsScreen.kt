@@ -11,9 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +39,7 @@ import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.ui.ScreenPushOverlay
 import io.bluewallet.blueberry.ui.TextAction
+import io.bluewallet.blueberry.ui.alwaysBounceVerticalScroll
 import io.bluewallet.blueberry.wallet.WalletSecretKind
 import io.bluewallet.blueberry.wallet.parseWalletSecret
 
@@ -66,7 +65,7 @@ fun SettingsScreen(
                     .fillMaxSize()
                     .background(BwColors.Paper)
                     .safeDrawingPadding()
-                    .verticalScroll(rememberScrollState())
+                    .alwaysBounceVerticalScroll()
                     .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
             verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
         ) {

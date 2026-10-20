@@ -35,6 +35,8 @@ import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.onboarding.DatabaseOpenErrorScreen
 import io.bluewallet.blueberry.onboarding.InvalidSecretScreen
 import io.bluewallet.blueberry.onboarding.OnboardingApp
+import io.bluewallet.blueberry.onboarding.OnboardingPersist
+import io.bluewallet.blueberry.onboarding.forgetImportedSecret
 import io.bluewallet.blueberry.onboarding.persistCreatedWallet
 import io.bluewallet.blueberry.onboarding.persistImportedSecret
 import io.bluewallet.blueberry.onboarding.persistSyncYear
@@ -176,9 +178,13 @@ fun App(databasePath: String) {
                             OnboardingApp(
                                 startAtYearStep = current.startAtYearStep,
                                 onFinished = { refreshGate() },
-                                persistImportedSecret = { persistImportedSecret(db, it) },
-                                persistCreatedWallet = { persistCreatedWallet(db, it) },
-                                persistSyncYear = { persistSyncYear(db, it) },
+                                persist =
+                                    OnboardingPersist(
+                                        importedSecret = { persistImportedSecret(db, it) },
+                                        createdWallet = { persistCreatedWallet(db, it) },
+                                        syncYear = { persistSyncYear(db, it) },
+                                        forgetSecret = { forgetImportedSecret(db) },
+                                    ),
                             )
                     }
                     ScreenPushOverlay(

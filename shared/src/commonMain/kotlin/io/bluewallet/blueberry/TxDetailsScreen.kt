@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -25,6 +23,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.StoredTx
+import io.bluewallet.blueberry.ui.AlwaysBounceScroll
 import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
@@ -33,6 +32,7 @@ import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.ui.TextAction
+import io.bluewallet.blueberry.ui.alwaysBounceVerticalScroll
 import io.bluewallet.blueberry.wallet.hexToBytes
 import kotlinx.coroutines.launch
 
@@ -43,49 +43,45 @@ fun TxDetailsScreen(
     txid: String,
     onBack: () -> Unit,
 ) {
-    var snap by remember { mutableStateOf(runtime.walletTxsStore.get()) }
+    val snap = rememberWalletTxs(runtime)
     var editing by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
     var copiedLabel by remember { mutableStateOf<String?>(null) }
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
-    DisposableEffect(runtime.walletTxsStore) {
-        val off = runtime.walletTxsStore.subscribe { scope.launch { snap = runtime.walletTxsStore.get() } }
-        onDispose { off() }
-    }
     val row = snap.txs.find { it.txid == txid }
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(BwColors.Paper)
-                .safeDrawingPadding()
-                .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
-        verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-    ) {
-        ScreenHeader(title = "Transaction", onBack = onBack)
-        if (row == null) {
-            Text(
-                text = "Transaction not found",
-                color = BwColors.InkMuted,
-                fontFamily = BwFontFamily,
-                fontSize = BwType.BodySize,
-            )
-        } else {
-            Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                TxDetailsBody(
-                    sources = txDetailSources(db, runtime.wallet, txid),
-                    row = row,
-                    copiedLabel = copiedLabel,
-                    onCopy = { label, value ->
-                        clipboard.setText(AnnotatedString(value))
-                        copiedLabel = label
-                    },
-                    onEditNote = {
-                        draft = row.paymentLabel.orEmpty()
-                        editing = true
-                    },
+    AlwaysBounceScroll(Modifier.fillMaxSize().background(BwColors.Paper).safeDrawingPadding()) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
+            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+        ) {
+            ScreenHeader(title = "Transaction", onBack = onBack)
+            if (row == null) {
+                Text(
+                    text = "Transaction not found",
+                    color = BwColors.InkMuted,
+                    fontFamily = BwFontFamily,
+                    fontSize = BwType.BodySize,
                 )
+            } else {
+                Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    TxDetailsBody(
+                        sources = txDetailSources(db, runtime.wallet, txid),
+                        row = row,
+                        copiedLabel = copiedLabel,
+                        onCopy = { label, value ->
+                            clipboard.setText(AnnotatedString(value))
+                            copiedLabel = label
+                        },
+                        onEditNote = {
+                            draft = row.paymentLabel.orEmpty()
+                            editing = true
+                        },
+                    )
+                }
             }
         }
     }
@@ -100,6 +96,17 @@ fun TxDetailsScreen(
         },
         onCancel = { editing = false },
     )
+}
+
+@Composable
+private fun rememberWalletTxs(runtime: PeersRuntime): WalletTxsSnapshot {
+    var snap by remember { mutableStateOf(runtime.walletTxsStore.get()) }
+    val scope = rememberCoroutineScope()
+    DisposableEffect(runtime.walletTxsStore) {
+        val off = runtime.walletTxsStore.subscribe { scope.launch { snap = runtime.walletTxsStore.get() } }
+        onDispose { off() }
+    }
+    return snap
 }
 
 @Composable
@@ -163,7 +170,7 @@ private fun TxDetailsBody(
     val (stored, detailSources) = sources
     val fields = txDetailFields(row, stored, row.fee, detailSources)
     Column(
-        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        modifier = Modifier.fillMaxSize().alwaysBounceVerticalScroll(),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         for (field in fields) {

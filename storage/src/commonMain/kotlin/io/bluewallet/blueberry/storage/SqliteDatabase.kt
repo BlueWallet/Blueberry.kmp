@@ -36,6 +36,10 @@ internal class SqliteDatabase(
             ) {
                 storageDb.keyValueQueries.set(key, value)
             }
+
+            override fun delete(key: String) {
+                storageDb.keyValueQueries.delete(key)
+            }
         }
 
     override val utxoNames =

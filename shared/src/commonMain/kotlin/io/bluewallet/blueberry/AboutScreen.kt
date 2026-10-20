@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
@@ -21,33 +22,51 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
+import io.bluewallet.blueberry.ui.AlwaysBounceScroll
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.Chevron
 import io.bluewallet.blueberry.ui.ScreenHeader
+import io.bluewallet.blueberry.ui.alwaysBounceTail
 
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(BwColors.Paper)
-                .safeDrawingPadding()
-                .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
-        verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+    val listState = rememberLazyListState()
+    AlwaysBounceScroll(
+        Modifier
+            .fillMaxSize()
+            .background(BwColors.Paper)
+            .safeDrawingPadding(),
     ) {
-        ScreenHeader(title = "About", onBack = onBack)
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
-            item { LinkRow("GitHub", ABOUT_GITHUB_URL.removePrefix("https://"), ABOUT_GITHUB_URL) }
-            item { LinkRow("MIT License", "Blueberry is open source under the MIT License", ABOUT_LICENSE_URL) }
-            item { SectionLabel("Open-source libraries") }
-            items(aboutDependencies) { DependencyRow(it) }
-            item { HorizontalDivider(color = BwColors.InkMuted.copy(alpha = 0.4f), modifier = Modifier.padding(top = BwSpace.Gap)) }
-            item { SectionLabel("Transitive dependencies") }
-            items(transitiveDependencies) { DependencyRow(it) }
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
+            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+        ) {
+            ScreenHeader(title = "About", onBack = onBack)
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                state = listState,
+                verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+            ) {
+                item { LinkRow("GitHub", ABOUT_GITHUB_URL.removePrefix("https://"), ABOUT_GITHUB_URL) }
+                item { LinkRow("MIT License", "Blueberry is open source under the MIT License", ABOUT_LICENSE_URL) }
+                item { SectionLabel("Open-source libraries") }
+                items(aboutDependencies) { DependencyRow(it) }
+                item {
+                    HorizontalDivider(
+                        color = BwColors.InkMuted.copy(alpha = 0.4f),
+                        modifier = Modifier.padding(top = BwSpace.Gap),
+                    )
+                }
+                item { SectionLabel("Transitive dependencies") }
+                items(transitiveDependencies) { DependencyRow(it) }
+                alwaysBounceTail(listState)
+            }
         }
     }
 }

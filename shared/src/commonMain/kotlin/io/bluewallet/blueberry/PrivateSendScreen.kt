@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -25,11 +26,13 @@ import io.bluewallet.blueberry.parse.buildActiveSendTx
 import io.bluewallet.blueberry.parse.savePaymentLabel
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendRow
+import io.bluewallet.blueberry.ui.AlwaysBounceScroll
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.ProgressMetricCard
+import io.bluewallet.blueberry.ui.alwaysBounceTail
 import io.bluewallet.blueberry.wallet.SendAmount
 import io.bluewallet.blueberry.wallet.SignedSendResult
 import io.bluewallet.blueberry.wallet.Wallet
@@ -250,32 +253,34 @@ private fun PrivateSendBody(
     onQuote: (RocketxQuote) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        when (val state = ui) {
-            is PrivateSendUi.Loading ->
-                ProgressMetricCard(
-                    label = "Preparing private send...",
-                    value = "${state.percent}%",
-                    percent = state.percent,
-                    caption = "Tor: ${state.stage}",
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = BwSpace.Gap),
-                )
-            is PrivateSendUi.Error ->
-                Text(state.message, color = BwColors.Danger, fontFamily = BwFontFamily, fontSize = BwType.BodySize)
-            is PrivateSendUi.Deposit ->
-                PrivateSendDeposit(
-                    state = state,
-                    broadcast = host.broadcast,
-                    onBroadcast = {
-                        host.callbacks.onBroadcast(
-                            state.signed,
-                            privateSendRecord(session, state.swap, state.signed),
-                        )
-                    },
-                    finish = host.callbacks.finish,
-                )
-            is PrivateSendUi.Quotes ->
-                PrivateSendQuotes(state.quotes, onQuote)
+    AlwaysBounceScroll(modifier) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            when (val state = ui) {
+                is PrivateSendUi.Loading ->
+                    ProgressMetricCard(
+                        label = "Preparing private send...",
+                        value = "${state.percent}%",
+                        percent = state.percent,
+                        caption = "Tor: ${state.stage}",
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = BwSpace.Gap),
+                    )
+                is PrivateSendUi.Error ->
+                    Text(state.message, color = BwColors.Danger, fontFamily = BwFontFamily, fontSize = BwType.BodySize)
+                is PrivateSendUi.Deposit ->
+                    PrivateSendDeposit(
+                        state = state,
+                        broadcast = host.broadcast,
+                        onBroadcast = {
+                            host.callbacks.onBroadcast(
+                                state.signed,
+                                privateSendRecord(session, state.swap, state.signed),
+                            )
+                        },
+                        finish = host.callbacks.finish,
+                    )
+                is PrivateSendUi.Quotes ->
+                    PrivateSendQuotes(state.quotes, onQuote)
+            }
         }
     }
 }
@@ -285,8 +290,10 @@ private fun PrivateSendQuotes(
     quotes: List<RocketxQuote>,
     onQuote: (RocketxQuote) -> Unit,
 ) {
+    val listState = rememberLazyListState()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
+        state = listState,
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         items(quotes, key = { it.rateId }) { quote ->
@@ -302,5 +309,6 @@ private fun PrivateSendQuotes(
                 )
             }
         }
+        alwaysBounceTail(listState)
     }
 }

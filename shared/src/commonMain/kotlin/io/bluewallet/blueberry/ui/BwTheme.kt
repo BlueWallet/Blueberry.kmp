@@ -25,15 +25,15 @@ object BwPalette {
         val InkSecondary = Color(0xFF606C73)
         val InkMuted = Color(0xFF606C73)
         val Action = Color(0xFFC7C7CC)
-        val Link = Color(0xFF00AAE0)
-        val Accent = Color(0xFF00AAE0)
+        val Link = Color(0xFF3788E0)
+        val Accent = Color(0xFF3788E0)
         val AccentSoft = Color(0xFF012234)
         val BarTrack = Color(0xFF2A3033)
         val Success = Color(0xFF32D74B)
         val Danger = Color(0xFFFF453A)
         val Warning = Color(0xFFFF9F0A)
         val Border = Color(0xFF181B1D)
-        val OnAccent = Color(0xFF012234)
+        val OnAccent = Color(0xFFFFFFFF)
     }
 
     object Light {
@@ -45,13 +45,13 @@ object BwPalette {
         val InkMuted = Color(0xFF9AA0AA)
         val Action = Color(0xFF50555C)
         val Link = Color(0xFF0F5CC0)
-        val Accent = Color(0xFF007AFF)
+        val Accent = Color(0xFF3788E0)
         val AccentSoft = Color(0xFFCCDDF9)
         val BarTrack = Color(0xFFE4EEFB)
         val Success = Color(0xFF37C0A1)
         val Danger = Color(0xFFD0021B)
         val Warning = Color(0xFFF38C47)
-        val Border = Color(0xFFEDEDED)
+        val Border = Color(0xFFC5CAD3)
         val OnAccent = Color(0xFFFFFFFF)
     }
 }

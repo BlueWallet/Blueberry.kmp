@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.ui.AlwaysBounceScroll
 import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
@@ -48,6 +50,7 @@ import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.HorizontalProgressBar
 import io.bluewallet.blueberry.ui.ScreenHeader
+import io.bluewallet.blueberry.ui.alwaysBounceTail
 import kotlinx.coroutines.launch
 
 private val CircleSize = 22.dp
@@ -69,100 +72,108 @@ fun CoinsScreen(
         onDispose { off() }
     }
     val rows = coinsRows(snap.utxos)
+    val listState = rememberLazyListState()
     val editing = rows.firstOrNull { it.key == editingKey }
     LaunchedEffect(editing) {
         if (editing != null) sheetRow = editing
     }
     val sheetOpen = editingKey != null
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .background(BwColors.Paper)
-                    .safeDrawingPadding()
-                    .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
-            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+        AlwaysBounceScroll(
+            Modifier
+                .fillMaxSize()
+                .background(BwColors.Paper)
+                .safeDrawingPadding(),
         ) {
-            ScreenHeader(title = "Coins", subtitle = "UTXO List", onBack = onBack)
-            if (rows.isEmpty()) {
-                Text(
-                    text = "No UTXOs",
-                    color = BwColors.InkMuted,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.BodySize,
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(rows, key = { it.key }) { row ->
-                        Row(
-                            modifier =
-                                Modifier.listRowPanel(onClick = {
-                                    sheetRow = row
-                                    editingKey = row.key
-                                    draft = row.name.orEmpty()
-                                }),
-                            horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
+                verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+            ) {
+                ScreenHeader(title = "Coins", subtitle = "UTXO List", onBack = onBack)
+                if (rows.isEmpty()) {
+                    Text(
+                        text = "No UTXOs",
+                        color = BwColors.InkMuted,
+                        fontFamily = BwFontFamily,
+                        fontSize = BwType.BodySize,
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        state = listState,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(rows, key = { it.key }) { row ->
+                            Row(
                                 modifier =
-                                    Modifier
-                                        .size(CircleSize)
-                                        .clip(CircleShape)
-                                        .background(Color(row.circleArgb)),
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                val title = utxoRowTitle(row.name, row.address)
-                                if (title != null) {
-                                    Text(
-                                        text = title.text,
-                                        color = if (title.emphasized) BwColors.Ink else BwColors.InkMuted,
-                                        fontFamily = BwFontFamily,
-                                        fontSize = BwType.BodySize,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    BtcAmountText(
-                                        sats = row.valueSats,
-                                        color = BwColors.InkMuted,
-                                        trailingColor = BwColors.InkMuted,
-                                        fontSize = BwType.CaptionSize,
-                                    )
-                                    val age = utxoRowAge(row.ageLabel)
-                                    if (age != null) {
+                                    Modifier.listRowPanel(onClick = {
+                                        sheetRow = row
+                                        editingKey = row.key
+                                        draft = row.name.orEmpty()
+                                    }),
+                                horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(CircleSize)
+                                            .clip(CircleShape)
+                                            .background(Color(row.circleArgb)),
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    val title = utxoRowTitle(row.name, row.address)
+                                    if (title != null) {
                                         Text(
-                                            text = " · $age",
-                                            color = BwColors.InkMuted,
+                                            text = title.text,
+                                            color = if (title.emphasized) BwColors.Ink else BwColors.InkMuted,
                                             fontFamily = BwFontFamily,
-                                            fontSize = BwType.CaptionSize,
+                                            fontSize = BwType.BodySize,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         )
                                     }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        BtcAmountText(
+                                            sats = row.valueSats,
+                                            color = BwColors.InkMuted,
+                                            trailingColor = BwColors.InkMuted,
+                                            fontSize = BwType.CaptionSize,
+                                        )
+                                        val age = utxoRowAge(row.ageLabel)
+                                        if (age != null) {
+                                            Text(
+                                                text = " · $age",
+                                                color = BwColors.InkMuted,
+                                                fontFamily = BwFontFamily,
+                                                fontSize = BwType.CaptionSize,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                    HorizontalProgressBar(percent = row.barPercent)
                                 }
-                                HorizontalProgressBar(percent = row.barPercent)
-                            }
-                            if (row.isChange) {
-                                Text(
-                                    text = "change",
-                                    color = BwColors.InkSecondary,
-                                    fontFamily = BwFontFamily,
-                                    fontSize = BwType.CaptionSize,
-                                    modifier =
-                                        Modifier
-                                            .clip(RoundedCornerShape(50))
-                                            .background(BwColors.Card)
-                                            .border(BwSpace.Hairline, BwColors.Border, RoundedCornerShape(50))
-                                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                                )
+                                if (row.isChange) {
+                                    Text(
+                                        text = "change",
+                                        color = BwColors.InkSecondary,
+                                        fontFamily = BwFontFamily,
+                                        fontSize = BwType.CaptionSize,
+                                        modifier =
+                                            Modifier
+                                                .clip(RoundedCornerShape(50))
+                                                .background(BwColors.Card)
+                                                .border(BwSpace.Hairline, BwColors.Border, RoundedCornerShape(50))
+                                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                                    )
+                                }
                             }
                         }
+                        alwaysBounceTail(listState)
                     }
                 }
             }

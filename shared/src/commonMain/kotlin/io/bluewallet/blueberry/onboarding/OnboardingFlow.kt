@@ -51,6 +51,9 @@ sealed class OnboardingEvent {
     ) : OnboardingEvent()
 
     data object PersistImportOk : OnboardingEvent()
+
+    /** Secret delete finished; leave Year for Import. */
+    data object ForgetSecretOk : OnboardingEvent()
 }
 
 sealed class OnboardingEffect {
@@ -69,6 +72,8 @@ sealed class OnboardingEffect {
     data class PersistYear(
         val year: Int,
     ) : OnboardingEffect()
+
+    data object ForgetImportedSecret : OnboardingEffect()
 }
 
 data class OnboardingReduction(
@@ -83,11 +88,16 @@ fun initialOnboardingState(startAtYearStep: Boolean): OnboardingState =
         OnboardingState(step = OnboardingStep.Choose)
     }
 
+private fun onboardingAcceptsWhileBusy(event: OnboardingEvent): Boolean =
+    event is OnboardingEvent.PersistFailed ||
+        event is OnboardingEvent.PersistImportOk ||
+        event is OnboardingEvent.ForgetSecretOk
+
 fun reduceOnboarding(
     state: OnboardingState,
     event: OnboardingEvent,
 ): OnboardingReduction {
-    if (state.busy && event !is OnboardingEvent.PersistFailed && event !is OnboardingEvent.PersistImportOk) {
+    if (state.busy && !onboardingAcceptsWhileBusy(event)) {
         return OnboardingReduction(state)
     }
     return when (event) {
@@ -114,12 +124,22 @@ fun reduceOnboarding(
             )
         }
         OnboardingEvent.Back -> {
-            if (state.step != OnboardingStep.Create && state.step != OnboardingStep.Import) {
-                return OnboardingReduction(state)
+            when (state.step) {
+                OnboardingStep.Create, OnboardingStep.Import ->
+                    OnboardingReduction(OnboardingState(step = OnboardingStep.Choose))
+                OnboardingStep.Year ->
+                    if (state.importValue.isEmpty()) {
+                        OnboardingReduction(state)
+                    } else {
+                        // Stay on Year until the secret is gone. A failed delete must not
+                        // leave Import, or the next cold start hides Back.
+                        OnboardingReduction(
+                            state.copy(busy = true, error = null),
+                            OnboardingEffect.ForgetImportedSecret,
+                        )
+                    }
+                OnboardingStep.Choose -> OnboardingReduction(state)
             }
-            OnboardingReduction(
-                OnboardingState(step = OnboardingStep.Choose),
-            )
         }
         is OnboardingEvent.ImportChanged -> {
             if (state.step != OnboardingStep.Import) return OnboardingReduction(state)
@@ -173,6 +193,12 @@ fun reduceOnboarding(
                     error = null,
                     selectedYear = DEFAULT_CHECKPOINT_YEAR,
                 ),
+            )
+        }
+        OnboardingEvent.ForgetSecretOk -> {
+            if (state.step != OnboardingStep.Year) return OnboardingReduction(state)
+            OnboardingReduction(
+                state.copy(step = OnboardingStep.Import, busy = false, error = null),
             )
         }
     }

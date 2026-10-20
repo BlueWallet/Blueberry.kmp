@@ -219,6 +219,8 @@ interface KeyValueRepository {
         key: String,
         value: String,
     )
+
+    fun delete(key: String)
 }
 
 data class UtxoNameRow(

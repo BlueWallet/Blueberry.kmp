@@ -3,6 +3,7 @@ package io.bluewallet.blueberry.onboarding
 import io.bluewallet.blueberry.boot.latestCheckpointYear
 import io.bluewallet.blueberry.boot.saveSyncFromYear
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.wallet.WALLET_SECRET_KEY
 import io.bluewallet.blueberry.wallet.markWalletBirthdayPending
 import io.bluewallet.blueberry.wallet.saveWalletSecret
 
@@ -27,4 +28,8 @@ fun persistSyncYear(
     year: Int,
 ) {
     saveSyncFromYear(db, year)
+}
+
+fun forgetImportedSecret(db: Database) {
+    db.keyValue.delete(WALLET_SECRET_KEY)
 }
