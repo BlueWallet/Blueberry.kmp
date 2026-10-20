@@ -46,9 +46,8 @@ import androidx.compose.ui.unit.dp
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.FiltersProgressPayload
 import io.bluewallet.blueberry.headers.nowMillis
-import io.bluewallet.blueberry.parse.ReceiveChain
-import io.bluewallet.blueberry.parse.receiveChain
-import io.bluewallet.blueberry.parse.snapshotReceiveAddress
+import io.bluewallet.blueberry.parse.ReceiveSnapshot
+import io.bluewallet.blueberry.parse.snapshotReceive
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
@@ -58,7 +57,6 @@ import io.bluewallet.blueberry.ui.OverlayBackEffects
 import io.bluewallet.blueberry.ui.ScannableQr
 import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.wallet.HD_SCRIPT_TYPES
-import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.WalletSecretKind
 import io.bluewallet.blueberry.wallet.compactFilterFrom
 import io.bluewallet.blueberry.wallet.createWallet
@@ -77,10 +75,15 @@ internal const val PLACEHOLDER_ALPHA = 0.15f
 fun currentReceiveAddress(
     runtime: PeersRuntime,
     db: Database,
-): String? {
-    val wallet = receiveWallet(runtime, db) ?: return null
+): String? = currentReceive(runtime, db)?.address
+
+private fun currentReceive(
+    runtime: PeersRuntime,
+    db: Database,
+): ReceiveSnapshot? {
+    val wallet = runtime.wallet ?: runCatching { createWallet(db) }.getOrNull() ?: return null
     val before = wallet.gaps()
-    val address = snapshotReceiveAddress(db, wallet)
+    val snapshot = snapshotReceive(db, wallet)
     val after = wallet.gaps()
     if (after != before) {
         val downloaded = db.filters.count()
@@ -97,19 +100,8 @@ fun currentReceiveAddress(
             FiltersProgressPayload(nowMillis(), minOf(downloaded, total), total),
         )
     }
-    return address
+    return snapshot
 }
-
-private fun receiveWallet(
-    runtime: PeersRuntime,
-    db: Database,
-): Wallet? = runtime.wallet ?: runCatching { createWallet(db) }.getOrNull()
-
-private fun receiveChainFrom(
-    runtime: PeersRuntime,
-    db: Database,
-    start: String?,
-): ReceiveChain? = start?.let { address -> receiveWallet(runtime, db)?.let { receiveChain(db, it, address) } }
 
 fun showsAddressLabelSheet(
     address: String?,
@@ -130,11 +122,11 @@ fun ReceiveScreen(
     onBack: () -> Unit,
 ) {
     // Pinned: computed on open and on type switch only, so an incoming payment never swaps it mid-view.
-    var start by remember(runtime, db) { mutableStateOf(currentReceiveAddress(runtime, db)) }
+    var snapshot by remember(runtime, db) { mutableStateOf(currentReceive(runtime, db)) }
     var receiveType by remember(db) { mutableStateOf(loadReceiveScriptType(db)) }
-    val chain = remember(start, receiveType) { receiveChainFrom(runtime, db, start) }
+    val chain = snapshot?.chain
     var index by remember(chain) { mutableStateOf(chain?.start ?: 0) }
-    val address = chain?.addresses?.getOrNull(index)?.address ?: start
+    val address = chain?.addresses?.getOrNull(index)?.address ?: snapshot?.address
     val nav = receiveNav(chain, index) { index = it }
     var label by remember(address) { mutableStateOf(address?.let { db.addressLabels.get(it) }) }
     var editing by remember(address) { mutableStateOf(false) }
@@ -185,7 +177,7 @@ fun ReceiveScreen(
                                         saveReceiveScriptType(db, type)
                                         receiveType = type
                                         menuOpen = false
-                                        start = currentReceiveAddress(runtime, db)
+                                        snapshot = currentReceive(runtime, db)
                                     },
                                 )
                             }

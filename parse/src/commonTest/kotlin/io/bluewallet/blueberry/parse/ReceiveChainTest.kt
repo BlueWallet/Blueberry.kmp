@@ -9,10 +9,12 @@ import io.bluewallet.blueberry.wallet.CreateWalletOptions
 import io.bluewallet.blueberry.wallet.GAP_LIMIT
 import io.bluewallet.blueberry.wallet.createWallet
 import io.bluewallet.blueberry.wallet.hd
+import io.bluewallet.blueberry.wallet.resolvedScriptType
 import io.bluewallet.blueberry.wallet.saveReceiveScriptType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class ReceiveChainTest {
     @Test
@@ -26,9 +28,11 @@ class ReceiveChainTest {
         listOf(paysTwo, paysOne, knownOutpointSpend(paysOne.txid.toString()), spendsThree)
             .forEachIndexed { i, tx -> db.store(tx, 100 + i) }
 
-        val chain = receiveChain(db, wallet, snap.hd(AddressScriptType.P2WPKH, 0).address)!!
+        val snapshot = snapshotReceive(db, wallet)
+        val chain = snapshot.chain!!
 
         assertEquals(0, chain.start)
+        assertEquals(snapshot.address, chain.addresses[chain.start].address)
         assertEquals(setOf(1, 2, 3), chain.used)
         assertEquals(40, chain.addresses.size)
         assertEquals(snap.hd(AddressScriptType.P2WPKH, 7).address, chain.addresses[7].address)
@@ -41,13 +45,14 @@ class ReceiveChainTest {
         val db = createSqliteDatabase(":memory:")
         val wallet = createWallet(db, CreateWalletOptions(secret = ABANDON_MNEMONIC, addressGap = 40))
         saveReceiveScriptType(db, AddressScriptType.P2TR)
-        val taproot = wallet.snapshot().hd(AddressScriptType.P2TR, 3).address
-        assertEquals(3, receiveChain(db, wallet, taproot)!!.start)
+        val taproot = snapshotReceive(db, wallet)
+        assertEquals(wallet.snapshot().hd(AddressScriptType.P2TR, 0).address, taproot.address)
+        assertTrue(taproot.chain!!.addresses.all { it.resolvedScriptType() == AddressScriptType.P2TR && !it.change })
 
         val wif = createWallet(db, CreateWalletOptions(secret = "L4ccWrPMmFDZw4kzAKFqJNxgHANjdy6b7YKNXMwB4xac4FLF3Tov"))
-        val wifWatch = wif.snapshot()
-        val wifAddress = wifWatch.addresses.first().address
-        assertNull(receiveChain(db, wif, wifAddress))
+        val wifSnapshot = snapshotReceive(db, wif)
+        assertEquals(snapshotReceiveAddress(db, wif), wifSnapshot.address)
+        assertNull(wifSnapshot.chain)
         db.close()
     }
 
@@ -58,7 +63,7 @@ class ReceiveChainTest {
         val purposes = mapOf(AddressScriptType.P2PKH to 44, AddressScriptType.P2SH_P2WPKH to 49, AddressScriptType.P2WPKH to 84, AddressScriptType.P2TR to 86)
         for ((type, purpose) in purposes) {
             saveReceiveScriptType(db, type)
-            val chain = receiveChain(db, wallet, wallet.snapshot().hd(type, 0).address)!!
+            val chain = snapshotReceive(db, wallet).chain!!
             assertEquals("m/$purpose'/0'/0'/0/5", chain.addresses[5].path)
         }
         db.close()
@@ -68,7 +73,7 @@ class ReceiveChainTest {
     fun zpub_chain_paths_are_bip84_account_zero() {
         val db = createSqliteDatabase(":memory:")
         val wallet = createWallet(db, CreateWalletOptions(secret = ZPUB))
-        val chain = receiveChain(db, wallet, wallet.snapshot().hd(AddressScriptType.P2WPKH, 0).address)!!
+        val chain = snapshotReceive(db, wallet).chain!!
         assertEquals("m/84'/0'/0'/0/2", chain.addresses[2].path)
         db.close()
     }

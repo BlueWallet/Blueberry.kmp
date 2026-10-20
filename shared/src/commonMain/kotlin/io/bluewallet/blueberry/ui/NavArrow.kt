@@ -10,14 +10,18 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
 enum class NavArrowDirection { Left, Right }
 
-/** 36dp "<" or ">" tap target. Drawn muted and ignores taps when disabled. */
+/** 36dp "<" or ">" tap target, announced to screen readers as [label]. Drawn muted and ignores taps when disabled. */
 @Composable
 fun NavArrow(
     direction: NavArrowDirection,
+    label: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
 ) {
@@ -26,7 +30,8 @@ fun NavArrow(
         modifier =
             Modifier
                 .size(36.dp)
-                .clickable(enabled = enabled, onClick = onClick),
+                .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+                .semantics { contentDescription = label },
     ) {
         val path =
             Path().apply {

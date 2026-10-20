@@ -101,7 +101,7 @@ private fun CoinsUtxoSheetHeader(
     onDismiss: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        NavArrow(direction = NavArrowDirection.Left, onClick = onDismiss)
+        NavArrow(direction = NavArrowDirection.Left, label = "Back", onClick = onDismiss)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,

@@ -102,9 +102,9 @@ internal fun ReceiveQrRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (nav != null) NavArrow(NavArrowDirection.Left, onClick = { nav.step(-1) }, enabled = nav.canBack)
+        if (nav != null) NavArrow(NavArrowDirection.Left, "Previous address", onClick = { nav.step(-1) }, enabled = nav.canBack)
         qr()
-        if (nav != null) NavArrow(NavArrowDirection.Right, onClick = { nav.step(1) }, enabled = nav.canForward)
+        if (nav != null) NavArrow(NavArrowDirection.Right, "Next address", onClick = { nav.step(1) }, enabled = nav.canForward)
     }
     if (nav != null) {
         Text(
