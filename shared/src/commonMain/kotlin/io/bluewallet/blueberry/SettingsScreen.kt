@@ -7,10 +7,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
@@ -36,10 +41,14 @@ import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.Chevron
 import io.bluewallet.blueberry.ui.MetricCard
 import io.bluewallet.blueberry.ui.PillButton
-import io.bluewallet.blueberry.ui.ScreenHeader
+import io.bluewallet.blueberry.ui.PlatformLargeTitle
+import io.bluewallet.blueberry.ui.PlatformScreenHeader
+import io.bluewallet.blueberry.ui.PlatformScrollEdge
 import io.bluewallet.blueberry.ui.ScreenPushOverlay
 import io.bluewallet.blueberry.ui.TextAction
 import io.bluewallet.blueberry.ui.alwaysBounceVerticalScroll
+import io.bluewallet.blueberry.ui.platformBottomEdgeClearance
+import io.bluewallet.blueberry.ui.platformHeaderClearance
 import io.bluewallet.blueberry.wallet.WalletSecretKind
 import io.bluewallet.blueberry.wallet.parseWalletSecret
 
@@ -58,34 +67,67 @@ fun SettingsScreen(
     val onAlwaysShowSyncChange = LocalAlwaysShowSyncChange.current
     var appearance by remember(db) { mutableStateOf(loadAppearance(db)) }
     val onAppearanceChange = LocalAppearanceChange.current
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .background(BwColors.Paper)
-                    .safeDrawingPadding()
-                    .alwaysBounceVerticalScroll()
-                    .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
-            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+    val safe = WindowInsets.safeDrawing.asPaddingValues()
+    val topChrome = safe.calculateTopPadding() + platformHeaderClearance()
+    val childOpen = showSecret || showAbout
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(BwColors.Paper),
+    ) {
+        PlatformScrollEdge(
+            modifier = Modifier.fillMaxSize(),
+            top = topChrome,
+            bottom = safe.calculateBottomPadding(),
+            showEdges = !childOpen,
         ) {
-            ScreenHeader(title = "Settings", onBack = onBack)
-            ThemeCard(
-                appearance = appearance,
-                onCycle = {
-                    val next = cycleAppearance(appearance)
-                    appearance = next
-                    onAppearanceChange(next)
-                },
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .alwaysBounceVerticalScroll()
+                        .padding(top = topChrome)
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(
+                                WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                            ),
+                        ).padding(horizontal = BwSpace.ScreenX)
+                        .padding(bottom = platformBottomEdgeClearance()),
+                verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+            ) {
+                PlatformLargeTitle(title = "Settings")
+                ThemeCard(
+                    appearance = appearance,
+                    onCycle = {
+                        val next = cycleAppearance(appearance)
+                        appearance = next
+                        onAppearanceChange(next)
+                    },
+                )
+                AlwaysShowSyncCard(
+                    checked = alwaysShowSync,
+                    onCheckedChange = onAlwaysShowSyncChange,
+                )
+                SecretCard(secret = secret, onShow = { showSecret = true })
+                StorageCard(databaseSize = databaseSize, onClear = { confirmClear = true })
+                ClickMeContent()
+                AboutRow(onOpen = { showAbout = true })
+            }
+        }
+        if (!childOpen) {
+            PlatformScreenHeader(
+                title = "Settings",
+                onBack = onBack,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(
+                            top = safe.calculateTopPadding(),
+                            start = BwSpace.ScreenX,
+                            end = BwSpace.ScreenX,
+                        ),
             )
-            AlwaysShowSyncCard(
-                checked = alwaysShowSync,
-                onCheckedChange = onAlwaysShowSyncChange,
-            )
-            SecretCard(secret = secret, onShow = { showSecret = true })
-            StorageCard(databaseSize = databaseSize, onClear = { confirmClear = true })
-            ClickMeContent()
-            AboutRow(onOpen = { showAbout = true })
         }
         ScreenPushOverlay(visible = showSecret, onDismiss = { showSecret = false }) {
             SecretScreen(secret = secret, onBack = { showSecret = false })

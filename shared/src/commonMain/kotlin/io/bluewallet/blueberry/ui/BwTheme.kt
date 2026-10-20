@@ -3,6 +3,7 @@ package io.bluewallet.blueberry.ui
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -44,7 +45,7 @@ object BwPalette {
         val InkSecondary = Color(0xFF81868E)
         val InkMuted = Color(0xFF9AA0AA)
         val Action = Color(0xFF50555C)
-        val Link = Color(0xFF0F5CC0)
+        val Link = Color(0xFF3788E0)
         val Accent = Color(0xFF3788E0)
         val AccentSoft = Color(0xFFCCDDF9)
         val BarTrack = Color(0xFFE4EEFB)
@@ -133,7 +134,7 @@ object BwSpace {
     val Hairline = 1.dp
 }
 
-val BwFontFamily: FontFamily = FontFamily.SansSerif
+expect val BwFontFamily: FontFamily
 
 /** Weights from the sister dashboard: actions and labels sit above Regular. */
 object BwType {
@@ -188,6 +189,28 @@ private fun bwColorScheme(dark: Boolean) =
         )
     }
 
+private fun bwTypography(): Typography {
+    val base = Typography()
+    val family = BwFontFamily
+    return base.copy(
+        displayLarge = base.displayLarge.copy(fontFamily = family),
+        displayMedium = base.displayMedium.copy(fontFamily = family),
+        displaySmall = base.displaySmall.copy(fontFamily = family),
+        headlineLarge = base.headlineLarge.copy(fontFamily = family),
+        headlineMedium = base.headlineMedium.copy(fontFamily = family),
+        headlineSmall = base.headlineSmall.copy(fontFamily = family),
+        titleLarge = base.titleLarge.copy(fontFamily = family),
+        titleMedium = base.titleMedium.copy(fontFamily = family),
+        titleSmall = base.titleSmall.copy(fontFamily = family),
+        bodyLarge = base.bodyLarge.copy(fontFamily = family),
+        bodyMedium = base.bodyMedium.copy(fontFamily = family),
+        bodySmall = base.bodySmall.copy(fontFamily = family),
+        labelLarge = base.labelLarge.copy(fontFamily = family),
+        labelMedium = base.labelMedium.copy(fontFamily = family),
+        labelSmall = base.labelSmall.copy(fontFamily = family),
+    )
+}
+
 /**
  * Applies the selected palette and paints the window with Paper.
  */
@@ -198,7 +221,7 @@ fun BwTheme(
 ) {
     CompositionLocalProvider(LocalDarkPalette provides dark) {
         ApplySystemBars(dark)
-        MaterialTheme(colorScheme = bwColorScheme(dark)) {
+        MaterialTheme(colorScheme = bwColorScheme(dark), typography = bwTypography()) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background,

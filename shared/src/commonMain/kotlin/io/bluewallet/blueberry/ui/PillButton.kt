@@ -1,11 +1,15 @@
 package io.bluewallet.blueberry.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -14,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -80,6 +85,7 @@ private fun PressablePill(
     height: Dp,
     fill: Color = if (enabled) BwColors.Accent else BwColors.BarTrack,
     label: Color = if (enabled) BwColors.OnAccent else BwColors.InkSecondary,
+    icon: Painter? = null,
 ) {
     Pressable(
         onClick = onClick,
@@ -95,7 +101,19 @@ private fun PressablePill(
                     .padding(horizontal = 14.dp),
             contentAlignment = Alignment.Center,
         ) {
-            PillLabel(text = text, color = label)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (icon != null) {
+                    Image(
+                        painter = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                PillLabel(text = text, color = label)
+            }
         }
     }
 }
@@ -106,12 +124,14 @@ fun TintedPillButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    icon: Painter? = null,
 ) {
     WashPill(
         text = text,
         onClick = onClick,
         modifier = modifier,
         fill = if (LocalDarkPalette.current) TintedPillFillDark else BwPalette.Light.AccentSoft,
+        icon = icon,
     )
 }
 
@@ -131,6 +151,7 @@ private fun WashPill(
     onClick: () -> Unit,
     modifier: Modifier,
     fill: Color,
+    icon: Painter? = null,
 ) {
     PressablePill(
         text = text,
@@ -140,6 +161,7 @@ private fun WashPill(
         height = ProminentButtonHeight,
         fill = fill,
         label = BwColors.Accent,
+        icon = icon,
     )
 }
 

@@ -78,7 +78,7 @@ fun BlueberryLogo(
                 text = "Blueberry",
                 style =
                     TextStyle(
-                        fontFamily = FontFamily.SansSerif,
+                        fontFamily = BwFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 22.sp,
                         lineHeight = 24.sp,

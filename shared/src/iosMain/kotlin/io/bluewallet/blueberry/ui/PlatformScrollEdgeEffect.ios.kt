@@ -49,27 +49,30 @@ actual fun PlatformScrollEdge(
     modifier: Modifier,
     top: Dp,
     bottom: Dp,
+    showEdges: Boolean,
     content: @Composable () -> Unit,
 ) {
     Box(modifier) {
         content()
-        Box(Modifier.fillMaxSize()) {
-            FadeBlur(
-                fadeFromTop = true,
-                modifier =
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        .fillMaxWidth()
-                        .height(top + TopFeather),
-            )
-            FadeBlur(
-                fadeFromTop = false,
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(bottom + IosBottomEdgeFeather),
-            )
+        if (showEdges) {
+            Box(Modifier.fillMaxSize()) {
+                FadeBlur(
+                    fadeFromTop = true,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .height(top + TopFeather),
+                )
+                FadeBlur(
+                    fadeFromTop = false,
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .height(bottom + IosBottomEdgeFeather),
+                )
+            }
         }
     }
 }
@@ -166,7 +169,8 @@ private fun edgeFadeImage(
     height: Double,
     fadeFromTop: Boolean,
 ): UIImage? {
-    UIGraphicsBeginImageContextWithOptions(CGSizeMake(width, height), false, 1.0)
+    // 0.0 = device scale so the mask stays sharp on Retina.
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(width, height), false, 0.0)
     val context = UIGraphicsGetCurrentContext()
     if (context != null) {
         memScoped {

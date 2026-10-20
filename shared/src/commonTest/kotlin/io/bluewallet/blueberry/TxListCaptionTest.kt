@@ -42,4 +42,14 @@ class TxListCaptionTest {
         assertFalse(txListSecondaryMuted(null, null, "savings"))
         assertTrue(txListSecondaryMuted(null, null, "   "))
     }
+
+    @Test
+    fun absolute_block_time_drops_the_hour() {
+        assertEquals("2025-12-09", txListDateLabel("2025-12-09 18:20"))
+        assertEquals("2025-12-09", txListDateLabel("2025-12-09 18:20".padEnd(16)))
+        assertEquals("just now", txListDateLabel("just now"))
+        assertEquals("1h ago", txListDateLabel("1h ago".padEnd(16)))
+        assertEquals("pending", txListDateLabel("pending"))
+        assertEquals("#1", txListDateLabel("#1".padEnd(16)))
+    }
 }

@@ -49,6 +49,7 @@ import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.HorizontalProgressBar
+import io.bluewallet.blueberry.ui.Pressable
 import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.ui.alwaysBounceTail
 import kotlinx.coroutines.launch
@@ -107,69 +108,73 @@ fun CoinsScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         items(rows, key = { it.key }) { row ->
-                            Row(
-                                modifier =
-                                    Modifier.listRowPanel(onClick = {
-                                        sheetRow = row
-                                        editingKey = row.key
-                                        draft = row.name.orEmpty()
-                                    }),
-                                horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-                                verticalAlignment = Alignment.CenterVertically,
+                            Pressable(
+                                onClick = {
+                                    sheetRow = row
+                                    editingKey = row.key
+                                    draft = row.name.orEmpty()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Box(
-                                    modifier =
-                                        Modifier
-                                            .size(CircleSize)
-                                            .clip(CircleShape)
-                                            .background(Color(row.circleArgb)),
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    val title = utxoRowTitle(row.name, row.address)
-                                    if (title != null) {
-                                        Text(
-                                            text = title.text,
-                                            color = if (title.emphasized) BwColors.Ink else BwColors.InkMuted,
-                                            fontFamily = BwFontFamily,
-                                            fontSize = BwType.BodySize,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    }
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        BtcAmountText(
-                                            sats = row.valueSats,
-                                            color = BwColors.InkMuted,
-                                            trailingColor = BwColors.InkMuted,
-                                            fontSize = BwType.CaptionSize,
-                                        )
-                                        val age = utxoRowAge(row.ageLabel)
-                                        if (age != null) {
+                                Row(
+                                    modifier = Modifier.listRowPanel(),
+                                    horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .size(CircleSize)
+                                                .clip(CircleShape)
+                                                .background(Color(row.circleArgb)),
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        val title = utxoRowTitle(row.name, row.address)
+                                        if (title != null) {
                                             Text(
-                                                text = " · $age",
-                                                color = BwColors.InkMuted,
+                                                text = title.text,
+                                                color = if (title.emphasized) BwColors.Ink else BwColors.InkMuted,
                                                 fontFamily = BwFontFamily,
-                                                fontSize = BwType.CaptionSize,
+                                                fontSize = BwType.BodySize,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
                                             )
                                         }
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            BtcAmountText(
+                                                sats = row.valueSats,
+                                                color = BwColors.InkMuted,
+                                                trailingColor = BwColors.InkMuted,
+                                                fontSize = BwType.CaptionSize,
+                                            )
+                                            val age = utxoRowAge(row.ageLabel)
+                                            if (age != null) {
+                                                Text(
+                                                    text = " · $age",
+                                                    color = BwColors.InkMuted,
+                                                    fontFamily = BwFontFamily,
+                                                    fontSize = BwType.CaptionSize,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
+                                        }
+                                        HorizontalProgressBar(percent = row.barPercent)
                                     }
-                                    HorizontalProgressBar(percent = row.barPercent)
-                                }
-                                if (row.isChange) {
-                                    Text(
-                                        text = "change",
-                                        color = BwColors.InkSecondary,
-                                        fontFamily = BwFontFamily,
-                                        fontSize = BwType.CaptionSize,
-                                        modifier =
-                                            Modifier
-                                                .clip(RoundedCornerShape(50))
-                                                .background(BwColors.Card)
-                                                .border(BwSpace.Hairline, BwColors.Border, RoundedCornerShape(50))
-                                                .padding(horizontal = 8.dp, vertical = 2.dp),
-                                    )
+                                    if (row.isChange) {
+                                        Text(
+                                            text = "change",
+                                            color = BwColors.InkSecondary,
+                                            fontFamily = BwFontFamily,
+                                            fontSize = BwType.CaptionSize,
+                                            modifier =
+                                                Modifier
+                                                    .clip(RoundedCornerShape(50))
+                                                    .background(BwColors.Card)
+                                                    .border(BwSpace.Hairline, BwColors.Border, RoundedCornerShape(50))
+                                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                                        )
+                                    }
                                 }
                             }
                         }

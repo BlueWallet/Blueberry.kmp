@@ -10,7 +10,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -58,7 +57,7 @@ actual fun PlatformLargeTitle(
         text = title,
         modifier = modifier,
         color = BwColors.Ink,
-        fontFamily = FontFamily.Default,
+        fontFamily = BwFontFamily,
         fontSize = 34.sp,
         lineHeight = 41.sp,
         fontWeight = FontWeight.Bold,
@@ -68,7 +67,7 @@ actual fun PlatformLargeTitle(
 @Composable
 actual fun PlatformBodyStyle(): TextStyle =
     TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = BwFontFamily,
         fontSize = 17.sp,
         lineHeight = 22.sp,
         fontWeight = FontWeight.Normal,

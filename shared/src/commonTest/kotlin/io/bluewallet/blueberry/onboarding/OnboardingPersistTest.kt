@@ -3,6 +3,7 @@ package io.bluewallet.blueberry.onboarding
 import io.bluewallet.blueberry.boot.SYNC_FROM_YEAR_KEY
 import io.bluewallet.blueberry.boot.SyncFromYearInspection
 import io.bluewallet.blueberry.boot.inspectSyncFromYear
+import io.bluewallet.blueberry.boot.latestCheckpointYear
 import io.bluewallet.blueberry.boot.loadSyncFromYear
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.WalletBirthdayInspection
@@ -35,7 +36,7 @@ class OnboardingPersistTest {
         val db = createSqliteDatabase(":memory:")
         persistCreatedWallet(db, abandon)
         assertEquals(abandon, loadWalletSecret(db))
-        assertEquals(2026, loadSyncFromYear(db))
+        assertEquals(latestCheckpointYear(), loadSyncFromYear(db))
         assertEquals(WalletBirthdayInspection.Pending, inspectWalletBirthday(db))
         db.close()
     }

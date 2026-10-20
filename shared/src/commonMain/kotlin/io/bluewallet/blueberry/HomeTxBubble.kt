@@ -1,38 +1,59 @@
 package io.bluewallet.blueberry
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import blueberry.shared.generated.resources.Res
+import blueberry.shared.generated.resources.receive_icon
+import blueberry.shared.generated.resources.send_icon
 import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.Pressable
+import org.jetbrains.compose.resources.painterResource
 import kotlin.math.abs
 
+private val TxRowLetterSpacing = (-0.45).sp
+
+private val TxRowText =
+    TextStyle(
+        fontFamily = BwFontFamily,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = TxRowLetterSpacing,
+        lineHeightStyle =
+            LineHeightStyle(
+                alignment = LineHeightStyle.Alignment.Center,
+                trim = LineHeightStyle.Trim.Both,
+            ),
+    )
+
 @Composable
-fun Modifier.listRowPanel(onClick: () -> Unit): Modifier {
+fun Modifier.listRowPanel(): Modifier {
     val shape = RoundedCornerShape(BwSpace.Radius)
     val card = BwColors.Card
     return this
         .fillMaxWidth()
         .clip(shape)
         .background(card, shape)
-        .clickable(onClick = onClick)
         .padding(horizontal = 14.dp, vertical = 14.dp)
 }
 
@@ -43,40 +64,42 @@ fun HomeTxBubble(
 ) {
     val incoming = tx.netDeltaSats >= 0
     val muted = txListSecondaryMuted(tx.paymentLabel, tx.utxoLabel, tx.addressLabel)
-    Row(
-        modifier = Modifier.listRowPanel(onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    Pressable(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        role = Role.Button,
     ) {
-        Box(
-            modifier =
-                Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(BwColors.Accent),
-            contentAlignment = Alignment.Center,
+        Row(
+            modifier = Modifier.listRowPanel(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            DirectionGlyph(incoming = incoming, color = BwColors.AccentSoft)
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = rememberBlockTimeLabel(tx.blockTimeS)?.trim() ?: tx.timeLabel.trim(),
-                color = BwColors.Ink,
-                fontFamily = BwFontFamily,
-                fontSize = BwType.BodySize,
-                fontWeight = BwType.Body,
-                maxLines = 1,
+            Image(
+                painter = painterResource(if (incoming) Res.drawable.receive_icon else Res.drawable.send_icon),
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
             )
-            Text(
-                text = txListSecondary(tx.shortTxid, tx.paymentLabel, tx.utxoLabel, tx.addressLabel),
-                color = if (muted) BwColors.InkMuted else BwColors.Ink,
-                fontFamily = BwFontFamily,
-                fontSize = if (muted) BwType.CaptionSize else BwType.BodySize,
-                fontWeight = if (muted) BwType.Caption else BwType.Body,
-                maxLines = 1,
-            )
+            Column(
+                modifier = Modifier.weight(1f),
+                // Trimmed line boxes still include font leading. This leaves an 8dp gap.
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                val secondarySize = if (muted) BwType.CaptionSize else BwType.BodySize
+                Text(
+                    text = txListDateLabel(rememberBlockTimeLabel(tx.blockTimeS) ?: tx.timeLabel),
+                    color = BwColors.Ink,
+                    style = TxRowText.copy(fontSize = BwType.BodySize, lineHeight = BwType.BodySize),
+                    maxLines = 1,
+                )
+                Text(
+                    text = txListSecondary(tx.shortTxid, tx.paymentLabel, tx.utxoLabel, tx.addressLabel),
+                    color = if (muted) BwColors.InkMuted else BwColors.Ink,
+                    style = TxRowText.copy(fontSize = secondarySize, lineHeight = secondarySize),
+                    maxLines = 1,
+                )
+            }
+            PrivateSendAmount(tx = tx, incoming = incoming)
         }
-        PrivateSendAmount(tx = tx, incoming = incoming)
     }
 }
 
@@ -105,7 +128,9 @@ private fun PrivateSendAmount(
         }
         BtcAmountText(
             sats = abs(tx.netDeltaSats),
-            color = if (incoming) BwColors.Accent else BwColors.Danger.copy(alpha = 0.7f),
+            color = if (incoming) BwColors.Accent else BwColors.Ink,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = TxRowLetterSpacing,
         )
     }
 }

@@ -43,6 +43,7 @@ actual fun PlatformScrollEdge(
     modifier: Modifier,
     top: Dp,
     bottom: Dp,
+    showEdges: Boolean,
     content: @Composable () -> Unit,
 ) {
     Box(modifier) { content() }
