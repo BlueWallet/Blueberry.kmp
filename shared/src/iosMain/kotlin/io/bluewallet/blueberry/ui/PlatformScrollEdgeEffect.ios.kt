@@ -1,5 +1,6 @@
 package io.bluewallet.blueberry.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,6 +13,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -49,14 +52,13 @@ private val TopFeather = 20.dp
 internal val IosBottomEdgeFade = 40.dp
 
 /** Peak opacity at the bottom of [IosBottomEdgeFade], fading to 0 at the top of the band. */
-private const val BOTTOM_EDGE_FADE_PEAK_ALPHA = 0.60
+private const val BOTTOM_EDGE_FADE_PEAK_ALPHA = 0.60f
 
 /**
  * Top: system blur under status / nav chrome.
- * Bottom: always-on 40 dp scrim at 60% → 0% (no blur), so dither and dock stay readable.
+ * Bottom: Compose scrim (not a UIKit overlay) so docks and bottom bars paint above it.
  */
 @Composable
-@Suppress("UNUSED_PARAMETER")
 actual fun PlatformScrollEdge(
     modifier: Modifier,
     top: Dp,
@@ -64,10 +66,11 @@ actual fun PlatformScrollEdge(
     showEdges: Boolean,
     content: @Composable () -> Unit,
 ) {
+    val bottomFade = if (bottom > 0.dp) bottom else IosBottomEdgeFade
     Box(modifier) {
         content()
         if (showEdges) {
-            Box(Modifier.fillMaxSize()) {
+            Box(modifier.fillMaxSize()) {
                 if (top > 0.dp) {
                     FadeBlur(
                         fadeFromTop = true,
@@ -78,125 +81,36 @@ actual fun PlatformScrollEdge(
                                 .height(top + TopFeather),
                     )
                 }
-                EdgeFade(
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .height(IosBottomEdgeFade),
-                )
+                if (bottomFade > 0.dp) {
+                    EdgeFade(
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .height(bottomFade),
+                    )
+                }
             }
         }
     }
 }
 
 /**
- * Soft bottom scrim: black (dark) or white (light) from 60% opacity at the
- * bottom edge to 0% at the top of the band. No blur.
+ * Soft bottom scrim in Compose so sibling chrome (Send dock, coin-control bar) can
+ * stack above it. UIKit overlays paint over the whole window and covered those buttons.
  */
-@OptIn(ExperimentalForeignApi::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun EdgeFade(modifier: Modifier) {
-    val density = LocalDensity.current
-    val dark = LocalDarkPalette.current
-    var size by remember { mutableStateOf(IntSize.Zero) }
-    UIKitView(
-        factory = { EdgeFadeView() },
-        modifier = modifier.onSizeChanged { size = it },
-        update = { view ->
-            view.applyTone(dark)
-            view.place(
-                width = size.width / density.density.toDouble(),
-                height = size.height / density.density.toDouble(),
-            )
-        },
-        properties =
-            UIKitInteropProperties(
-                placedAsOverlay = true,
-                isNativeAccessibilityEnabled = false,
+    val ink = if (LocalDarkPalette.current) Color.Black else Color.White
+    Box(
+        modifier =
+            modifier.background(
+                Brush.verticalGradient(
+                    0f to ink.copy(alpha = 0f),
+                    1f to ink.copy(alpha = BOTTOM_EDGE_FADE_PEAK_ALPHA),
+                ),
             ),
     )
-}
-
-@OptIn(ExperimentalForeignApi::class)
-private class EdgeFadeView : UIView(CGRectMake(0.0, 0.0, 0.0, 0.0)) {
-    private val imageView = UIImageView()
-    private var placedWidth = -1.0
-    private var placedHeight = -1.0
-    private var darkTone: Boolean? = null
-
-    init {
-        userInteractionEnabled = false
-        backgroundColor = UIColor.clearColor
-        clipsToBounds = true
-        imageView.userInteractionEnabled = false
-        addSubview(imageView)
-    }
-
-    fun applyTone(dark: Boolean) {
-        if (darkTone == dark) return
-        darkTone = dark
-        placedWidth = -1.0
-        placedHeight = -1.0
-    }
-
-    fun place(
-        width: Double,
-        height: Double,
-    ) {
-        if (width <= 0.0 || height <= 0.0) return
-        val rect = CGRectMake(0.0, 0.0, width, height)
-        imageView.setFrame(rect)
-        if (width == placedWidth && height == placedHeight) return
-        placedWidth = width
-        placedHeight = height
-        imageView.image = edgeFadeGradientImage(width, height, dark = darkTone ?: true)
-    }
-}
-
-/** Bottom scrim: clear at the top of the band, [BOTTOM_EDGE_FADE_PEAK_ALPHA] at the bottom. */
-@OptIn(ExperimentalForeignApi::class)
-private fun edgeFadeGradientImage(
-    width: Double,
-    height: Double,
-    dark: Boolean,
-): UIImage? {
-    UIGraphicsBeginImageContextWithOptions(CGSizeMake(width, height), false, 0.0)
-    val context = UIGraphicsGetCurrentContext()
-    if (context != null) {
-        memScoped {
-            val channel = if (dark) 0.0 else 1.0
-            val components = allocArray<CGFloatVar>(8)
-            components[0] = channel
-            components[1] = channel
-            components[2] = channel
-            components[3] = 0.0
-            components[4] = channel
-            components[5] = channel
-            components[6] = channel
-            components[7] = BOTTOM_EDGE_FADE_PEAK_ALPHA
-            val locations = allocArray<CGFloatVar>(2)
-            locations[0] = 0.0
-            locations[1] = 1.0
-            val gradient =
-                CGGradientCreateWithColorComponents(
-                    CGColorSpaceCreateDeviceRGB(),
-                    components,
-                    locations,
-                    2u,
-                )
-            CGContextDrawLinearGradient(
-                context,
-                gradient,
-                CGPointMake(0.0, 0.0),
-                CGPointMake(0.0, height),
-                0u,
-            )
-        }
-    }
-    val image = UIGraphicsGetImageFromCurrentImageContext()
-    UIGraphicsEndImageContext()
-    return image
 }
 
 /**

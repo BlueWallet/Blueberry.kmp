@@ -229,12 +229,17 @@ fun buildCoinControlSnapshot(
 
 internal fun linkedGroupLetterNames(groupsNewestFirstByTotal: List<CoinControlGroup>): List<String> =
     groupsNewestFirstByTotal.mapIndexed { index, g ->
-        val letter = ('A' + index).coerceAtMost('Z')
         val labeled = g.coins.filter { !it.label.isNullOrBlank() }.maxByOrNull { it.valueSats }
         if (labeled != null) {
             "${labeled.label!!.trim()} group"
         } else {
-            "Linked group $letter"
+            val suffix =
+                if (index < 26) {
+                    ('A' + index).toString()
+                } else {
+                    (index + 1).toString()
+                }
+            "Linked group $suffix"
         }
     }
 

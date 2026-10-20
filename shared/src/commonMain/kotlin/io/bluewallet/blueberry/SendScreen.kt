@@ -26,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -67,17 +68,18 @@ fun SendScreen(
     db: Database,
     onBack: () -> Unit,
     initialSelectedKeys: Set<String> = emptySet(),
-    initialForm: SendFormDraft = SendFormDraft(),
     onChooseCoins: () -> Unit = {},
     onBroadcastSuccess: () -> Unit = {},
     onSelectedKeysChange: (Set<String>) -> Unit = {},
-    onFormChange: (SendFormDraft) -> Unit = {},
     onFeeRateChange: (Double?) -> Unit = {},
 ) {
     val wallet = runtime.wallet
-    var step by remember {
-        mutableStateOf(if (initialSelectedKeys.isNotEmpty()) SendStep.Details else SendStep.Utxos)
+    // Form fields use rememberSaveable so the Send back-stack entry keeps them across the
+    // coin picker; popping Send discards the draft for the next payment.
+    var stepName by rememberSaveable {
+        mutableStateOf(if (initialSelectedKeys.isNotEmpty()) SendStep.Details.name else SendStep.Utxos.name)
     }
+    val step = SendStep.entries.firstOrNull { it.name == stepName } ?: SendStep.Utxos
     var selectedKeys by remember { mutableStateOf(initialSelectedKeys) }
     var details by remember { mutableStateOf<SendDetails?>(null) }
     var preview by remember { mutableStateOf<BuildSendResult?>(null) }
@@ -85,15 +87,16 @@ fun SendScreen(
     var previewUtxos by remember { mutableStateOf<List<SendInputUtxo>>(emptyList()) }
     var snap by remember { mutableStateOf(runtime.walletTxsStore.get()) }
     var broadcast by remember { mutableStateOf(runtime.broadcastStore.get()) }
-    var address by remember { mutableStateOf(initialForm.address) }
-    var amount by remember { mutableStateOf(initialForm.amount) }
-    var label by remember { mutableStateOf(initialForm.label) }
+    var address by rememberSaveable { mutableStateOf("") }
+    var amount by rememberSaveable { mutableStateOf("") }
+    var label by rememberSaveable { mutableStateOf("") }
     var invalidField by remember { mutableStateOf<SendField?>(null) }
-    var feeRate by remember { mutableStateOf(initialForm.feeRateText) }
+    var feeRate by rememberSaveable { mutableStateOf("") }
     var feeError by remember { mutableStateOf<String?>(null) }
+    var selectionNeedsAck by remember { mutableStateOf(false) }
     var cancelArmedForId by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
-    var privateSend by remember { mutableStateOf(initialForm.privateSend) }
+    var privateSend by rememberSaveable { mutableStateOf(false) }
     var privateSession by remember { mutableStateOf<PrivateSendSession?>(null) }
     var privateSigned by remember { mutableStateOf<SignedSendResult?>(null) }
     val scope = rememberCoroutineScope()
@@ -112,30 +115,24 @@ fun SendScreen(
         if (isInsufficientSelectionError(feeError)) feeError = null
     }
     LaunchedEffect(snap.utxos) {
+        val live = snap.utxos.map { it.key }.toSet()
         val frozen =
             snap.utxos
                 .filter { it.isFrozen }
                 .map { it.key }
                 .toSet()
-        val cleaned = selectedKeys - frozen
-        if (cleaned != selectedKeys) selectedKeys = cleaned
-    }
-    LaunchedEffect(address, amount, label, feeRate, privateSend) {
-        onFormChange(
-            SendFormDraft(
-                address = address,
-                amount = amount,
-                label = label,
-                feeRateText = feeRate,
-                privateSend = privateSend,
-            ),
-        )
+        val cleaned = selectedKeys.intersect(live) - frozen
+        if (cleaned != selectedKeys) {
+            val vanished = selectedKeys - live
+            if (vanished.isNotEmpty()) selectionNeedsAck = true
+            selectedKeys = cleaned
+        }
     }
     LaunchedEffect(feeRate) { onFeeRateChange(parseFeeRateSatPerVb(feeRate)) }
     LaunchedEffect(initialSelectedKeys) {
         if (initialSelectedKeys.isNotEmpty() && selectedKeys != initialSelectedKeys) {
             selectedKeys = initialSelectedKeys
-            if (step == SendStep.Utxos) step = SendStep.Details
+            if (step == SendStep.Utxos) stepName = SendStep.Details.name
         }
     }
     LaunchedEffect(broadcast.phase, broadcast.txHex) {
@@ -186,14 +183,14 @@ fun SendScreen(
         }
         when (step) {
             SendStep.Utxos -> onBack()
-            SendStep.Details -> step = SendStep.Utxos
+            SendStep.Details -> stepName = SendStep.Utxos.name
             SendStep.PrivateSend -> {
                 privateSigned = null
-                step = SendStep.Details
+                stepName = SendStep.Details.name
             }
             SendStep.Preview -> {
                 preview = null
-                step = SendStep.Details
+                stepName = SendStep.Details.name
             }
         }
     }
@@ -237,6 +234,14 @@ fun SendScreen(
                             fontSize = BwType.BodySize,
                         )
                     }
+                    if (selectionNeedsAck) {
+                        Text(
+                            text = "Some selected coins are no longer available. Review the selection, then continue.",
+                            color = BwColors.Warning,
+                            fontFamily = BwFontFamily,
+                            fontSize = BwType.BodySize,
+                        )
+                    }
                     PillButton(
                         text = "Choose coins",
                         onClick = onChooseCoins,
@@ -244,7 +249,13 @@ fun SendScreen(
                     )
                     PillButton(
                         text = "Continue",
-                        onClick = { if (selectedKeys.isNotEmpty()) step = SendStep.Details },
+                        onClick = {
+                            if (selectionNeedsAck) {
+                                selectionNeedsAck = false
+                                return@PillButton
+                            }
+                            if (selectedKeys.isNotEmpty()) stepName = SendStep.Details.name
+                        },
                         enabled = selectedKeys.isNotEmpty(),
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -296,6 +307,11 @@ fun SendScreen(
                                     if (invalidField == SendField.Amount) invalidField = null
                                 }
                                 DetailsEvent.Continue -> {
+                                    if (selectionNeedsAck) {
+                                        selectionNeedsAck = false
+                                        feeError = "Selection changed — some coins are gone. Continue again to proceed."
+                                        return@handler
+                                    }
                                     when (val result = validateSendDetails(address, amount, label, selectedSum, feeRate)) {
                                         is SendDetailsValidation.Ok -> {
                                             details = result.details
@@ -334,7 +350,7 @@ fun SendScreen(
                                                     )
                                                 feeError = null
                                                 privateSigned = null
-                                                step = SendStep.PrivateSend
+                                                stepName = SendStep.PrivateSend.name
                                                 return@handler
                                             }
                                             val w = wallet
@@ -386,7 +402,7 @@ fun SendScreen(
                                                 previewInputSum = selected.sumOf { it.valueSats }
                                                 feeError = null
                                                 cancelArmedForId = null
-                                                step = SendStep.Preview
+                                                stepName = SendStep.Preview.name
                                             } catch (err: Throwable) {
                                                 feeError = err.message ?: err.toString()
                                             }

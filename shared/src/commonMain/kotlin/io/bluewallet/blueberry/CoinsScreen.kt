@@ -55,7 +55,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -85,9 +87,6 @@ import kotlinx.coroutines.launch
 
 /** Breathing room under the inline nav title before the summary. */
 private val TitleBelowHeaderGap = 12.dp
-
-/** Approximate bottom-bar body height (notice + pill + padding), excluding home indicator. */
-private val BottomBarClearance = 140.dp
 
 enum class CoinControlMode {
     /** Home entry: Send opens the send flow with the selection. */
@@ -127,8 +126,12 @@ fun CoinsScreen(
             coinControlSnapshotFrom(snap, feeRateSatPerVb)
         }
     val filtered = remember(control, filter) { filterCoinControlGroups(control, filter) }
-    val selectedCoins = control.coins.filter { it.key in selectedKeys && !it.isFrozen }
-    val notice = remember(selectedCoins) { privacyNoticeForSelection(selectedCoins) }
+    val visibleKeys =
+        remember(filtered) { filtered.flatMap { group -> group.coins.map { it.key } }.toSet() }
+    // Spend / Use only the selection still visible under the active filter.
+    val actionCoins =
+        control.coins.filter { it.key in selectedKeys && !it.isFrozen && it.key in visibleKeys }
+    val notice = remember(actionCoins) { privacyNoticeForSelection(actionCoins) }
     val rowsByKey = remember(snap.utxos) { coinsRows(snap.utxos).associateBy { it.key } }
     LaunchedEffect(editingKey) {
         val row = editingKey?.let { rowsByKey[it] }
@@ -139,11 +142,17 @@ fun CoinsScreen(
     }
     val sheetOpen = editingKey != null
     val listState = rememberLazyListState()
+    val density = LocalDensity.current
     val safe = WindowInsets.safeDrawing.asPaddingValues()
     val topChrome = safe.calculateTopPadding() + platformHeaderClearance()
-    val hasSelection = selectedCoins.isNotEmpty()
+    val hasSelection = actionCoins.isNotEmpty()
+    var bottomBarHeight by remember { mutableStateOf(0.dp) }
     val listBottomPad =
-        safe.calculateBottomPadding() + if (hasSelection) BottomBarClearance else 0.dp
+        if (hasSelection) {
+            bottomBarHeight
+        } else {
+            safe.calculateBottomPadding()
+        }
 
     OverlayBackEffects(
         enabled = sheetOpen,
@@ -253,12 +262,17 @@ fun CoinsScreen(
                     ) + fadeOut(animationSpec = tween(140)),
             ) {
                 CoinControlBottomBar(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .onSizeChanged { size ->
+                                bottomBarHeight = with(density) { size.height.toDp() }
+                            },
                     notice = notice,
-                    selectedCoins = selectedCoins,
+                    selectedCoins = actionCoins,
                     mode = mode,
                     onPrimary = {
-                        val keys = selectedCoins.map { it.key }.toSet()
+                        val keys = actionCoins.map { it.key }.toSet()
                         when (mode) {
                             CoinControlMode.Standalone -> onSendWithCoins(keys)
                             CoinControlMode.Picker -> onConfirmSelection(keys)
@@ -310,6 +324,10 @@ fun CoinsScreen(
                     },
                     onToggleFrozen = { frozen ->
                         val wallet = runtime.wallet ?: return@CoinsUtxoSheet
+                        if (draft.trim() != row.name.orEmpty()) {
+                            setUtxoName(db, wallet, runtime.walletTxsStore, row.key, draft)
+                            uploadLabels(scope, db)
+                        }
                         setUtxoFrozen(db, wallet, runtime.walletTxsStore, row.key, frozen)
                         snap = runtime.walletTxsStore.get()
                         if (frozen) {

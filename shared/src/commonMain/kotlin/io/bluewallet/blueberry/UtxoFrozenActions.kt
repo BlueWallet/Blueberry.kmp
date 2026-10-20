@@ -1,10 +1,10 @@
 package io.bluewallet.blueberry
 
-import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.wallet.Wallet
 
-/** Persist whether a UTXO is frozen. Refreshes wallet txs snapshot. */
+/** Persist whether a UTXO is frozen. Patches the live snapshot; linkage is unchanged. */
+@Suppress("UnusedParameter")
 fun setUtxoFrozen(
     db: Database,
     wallet: Wallet,
@@ -17,6 +17,5 @@ fun setUtxoFrozen(
     } else {
         db.utxoFrozen.unfreeze(outpoint)
     }
-    val at = nowMillis()
-    walletTxsStore.apply(snapshotFromDb(db, at, at, wallet))
+    patchUtxoRow(walletTxsStore, outpoint) { it.copy(isFrozen = frozen) }
 }

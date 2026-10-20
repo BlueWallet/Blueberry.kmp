@@ -109,6 +109,41 @@ class CoinLinkageTest {
     }
 
     @Test
+    fun common_spend_links_live_outputs_with_different_scripts() {
+        val scriptA = p2wpkhScript(watchKey0("m/84'/0'/0'/0/0"))
+        val scriptB = p2wpkhScript(watchKey0("m/84'/0'/0'/0/1"))
+        val a = coinbaseLikeReceive(scriptA, 8_000, prevSalt = 13)
+        val b = coinbaseLikeReceive(scriptB, 7_000, prevSalt = 14)
+        val merge =
+            spendOwned(
+                inputs =
+                    listOf(
+                        a.txid.toString() to 0,
+                        b.txid.toString() to 0,
+                    ),
+                outputs =
+                    listOf(
+                        unrelatedScript() to 1_000L,
+                        scriptA to 4_000L,
+                        scriptB to 5_000L,
+                    ),
+            )
+        val liveA = outpointKey(merge.txid.toString(), 1)
+        val liveB = outpointKey(merge.txid.toString(), 2)
+        val groups =
+            computeCoinGroups(
+                listOf(
+                    TxRow(a.txid.toString(), 100, 0, Transaction.write(a)),
+                    TxRow(b.txid.toString(), 100, 1, Transaction.write(b)),
+                    TxRow(merge.txid.toString(), 101, 0, Transaction.write(merge)),
+                ),
+                listOf(scriptA, scriptB),
+            )
+        assertEquals(setOf(liveA, liveB), groups.keys)
+        assertEquals(groups[liveA], groups[liveB])
+    }
+
+    @Test
     fun spent_coins_absent_from_result_but_still_connect_groups() {
         val scriptExt = p2wpkhScript(watchKey0("m/84'/0'/0'/0/0"))
         val scriptChange = p2wpkhScript(watchKey0("m/84'/0'/0'/1/0"))

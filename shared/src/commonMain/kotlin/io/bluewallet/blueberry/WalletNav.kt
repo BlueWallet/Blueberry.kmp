@@ -67,13 +67,20 @@ internal fun WalletNavHost(
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     var sendSelectedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var sendForm by remember { mutableStateOf(SendFormDraft()) }
     var sendFeeRateSatPerVb by remember { mutableStateOf<Double?>(null) }
     // Subscribe so recomposition runs when the stack changes (for LocalHomeVisible).
     val backStackEntry by navController.currentBackStackEntryAsState()
     // Any pushed destination means home is covered — drop home UIKit overlays / dock.
     val homeVisible = backStackEntry != null && navController.previousBackStackEntry == null
     val goBack: () -> Unit = remember(navController) { { navController.popBackStack() } }
+    val openSendFresh: () -> Unit =
+        remember(navController) {
+            {
+                sendSelectedKeys = emptySet()
+                sendFeeRateSatPerVb = null
+                navController.navigate(SendRoute) { launchSingleTop = true }
+            }
+        }
 
     CompositionLocalProvider(LocalHomeVisible provides homeVisible) {
         // Only swallow back on home so NavHost can pop pushed screens.
@@ -93,11 +100,15 @@ internal fun WalletNavHost(
                     matchingStore = runtime.matchingStore,
                     blocksStore = runtime.blocksStore,
                     walletTxsStore = runtime.walletTxsStore,
-                    onOpenSettings = { navController.navigate(SettingsRoute) },
-                    onOpenReceive = { navController.navigate(ReceiveRoute) },
-                    onOpenSend = { navController.navigate(SendRoute) },
-                    onOpenCoins = { navController.navigate(CoinsRoute(picker = false)) },
-                    onOpenTx = { navController.navigate(TxDetailsRoute(txid = it)) },
+                    onOpenSettings = { navController.navigate(SettingsRoute) { launchSingleTop = true } },
+                    onOpenReceive = { navController.navigate(ReceiveRoute) { launchSingleTop = true } },
+                    onOpenSend = openSendFresh,
+                    onOpenCoins = {
+                        navController.navigate(CoinsRoute(picker = false)) { launchSingleTop = true }
+                    },
+                    onOpenTx = {
+                        navController.navigate(TxDetailsRoute(txid = it)) { launchSingleTop = true }
+                    },
                     onDetailedSyncChange = { value ->
                         scope.launch(Dispatchers.Default) { saveHomeDetailedSync(db, value) }
                     },
@@ -116,14 +127,12 @@ internal fun WalletNavHost(
                     db = db,
                     onBack = goBack,
                     initialSelectedKeys = sendSelectedKeys,
-                    initialForm = sendForm,
                     onChooseCoins = { navController.navigate(CoinsRoute(picker = true)) },
                     onBroadcastSuccess = {
                         sendSelectedKeys = emptySet()
-                        sendForm = SendFormDraft()
+                        sendFeeRateSatPerVb = null
                     },
                     onSelectedKeysChange = { sendSelectedKeys = it },
-                    onFormChange = { sendForm = it },
                     onFeeRateChange = { sendFeeRateSatPerVb = it },
                 )
             }
@@ -143,6 +152,7 @@ internal fun WalletNavHost(
                     feeRateSatPerVb = sendFeeRateSatPerVb,
                     onSendWithCoins = { keys ->
                         sendSelectedKeys = keys
+                        sendFeeRateSatPerVb = null
                         navController.navigate(SendRoute) {
                             popUpTo(HomeRoute) { inclusive = false }
                             launchSingleTop = true
@@ -177,8 +187,8 @@ internal fun WalletNavHost(
                     db = db,
                     onClearStorage = onClearStorage,
                     onBack = goBack,
-                    onOpenSecret = { navController.navigate(SecretRoute) },
-                    onOpenAbout = { navController.navigate(AboutRoute) },
+                    onOpenSecret = { navController.navigate(SecretRoute) { launchSingleTop = true } },
+                    onOpenAbout = { navController.navigate(AboutRoute) { launchSingleTop = true } },
                 )
             }
             composable<SecretRoute> {
