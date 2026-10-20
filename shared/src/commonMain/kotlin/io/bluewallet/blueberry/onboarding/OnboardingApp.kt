@@ -150,25 +150,21 @@ fun OnboardingApp(
         }
     }
 
-    BackHandler(
-        enabled =
+    val showsHeader =
+        state.step == OnboardingStep.Create ||
             state.step == OnboardingStep.Import ||
-                state.step == OnboardingStep.Create ||
-                (state.step == OnboardingStep.Year && !startAtYearStep),
-    ) {
+            (state.step == OnboardingStep.Year && !startAtYearStep)
+    val goBack = {
         if (scanning) {
             scanning = false
         } else {
             dispatch(OnboardingEvent.Back)
         }
     }
+    BackHandler(enabled = showsHeader, onBack = goBack)
 
     Box(Modifier.fillMaxSize()) {
         val safe = WindowInsets.safeDrawing.asPaddingValues()
-        val showsHeader =
-            state.step == OnboardingStep.Create ||
-                state.step == OnboardingStep.Import ||
-                (state.step == OnboardingStep.Year && !startAtYearStep)
         val topChrome =
             safe.calculateTopPadding() +
                 if (showsHeader) platformHeaderClearance() else 0.dp
@@ -238,19 +234,13 @@ fun OnboardingApp(
                         OnboardingStep.Import -> "Import"
                         else -> "Sync from"
                     },
-                onBack = {
-                    if (state.step == OnboardingStep.Import && scanning) {
-                        scanning = false
-                    } else {
-                        dispatch(OnboardingEvent.Back)
-                    }
-                },
+                onBack = goBack,
                 enabled = !state.busy,
                 modifier =
                     Modifier
                         .align(Alignment.TopCenter)
                         .padding(
-                            top = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding(),
+                            top = safe.calculateTopPadding(),
                             start = 16.dp,
                             end = 16.dp,
                         ),

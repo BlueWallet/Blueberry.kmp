@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.dp
 val ProminentButtonHeight = 50.dp
 
 private val TintedPillFillDark = Color(0xFF0F2E44)
-private val PlainPillFill = Color.Transparent
 
 /** Solid blue pill — sister-project "+ add". */
 @Suppress("LongParameterList")
@@ -71,6 +70,7 @@ fun PillButton(
     }
 }
 
+@Suppress("LongParameterList")
 @Composable
 private fun PressablePill(
     text: String,
@@ -78,9 +78,9 @@ private fun PressablePill(
     modifier: Modifier,
     enabled: Boolean,
     height: Dp,
+    fill: Color = if (enabled) BwColors.Accent else BwColors.BarTrack,
+    label: Color = if (enabled) BwColors.OnAccent else BwColors.InkSecondary,
 ) {
-    val container = if (enabled) BwColors.Accent else BwColors.BarTrack
-    val label = if (enabled) BwColors.OnAccent else BwColors.InkSecondary
     Pressable(
         onClick = onClick,
         modifier = modifier.height(height),
@@ -91,7 +91,7 @@ private fun PressablePill(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .background(container, RoundedCornerShape(50))
+                    .background(fill, RoundedCornerShape(50))
                     .padding(horizontal = 14.dp),
             contentAlignment = Alignment.Center,
         ) {
@@ -106,13 +106,11 @@ fun TintedPillButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    height: Dp = ProminentButtonHeight,
 ) {
     WashPill(
         text = text,
         onClick = onClick,
         modifier = modifier,
-        height = height,
         fill = if (LocalDarkPalette.current) TintedPillFillDark else BwPalette.Light.AccentSoft,
     )
 }
@@ -123,15 +121,8 @@ fun PlainPillButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    height: Dp = ProminentButtonHeight,
 ) {
-    WashPill(
-        text = text,
-        onClick = onClick,
-        modifier = modifier,
-        height = height,
-        fill = PlainPillFill,
-    )
+    WashPill(text = text, onClick = onClick, modifier = modifier, fill = Color.Transparent)
 }
 
 @Composable
@@ -139,29 +130,17 @@ private fun WashPill(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier,
-    height: Dp,
     fill: Color,
 ) {
-    val label = BwColors.Accent
-    Pressable(
+    PressablePill(
+        text = text,
         onClick = onClick,
-        modifier =
-            modifier
-                .height(height)
-                .semantics { contentDescription = text },
-        role = Role.Button,
-    ) {
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .background(fill, RoundedCornerShape(50))
-                    .padding(horizontal = 14.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            PillLabel(text = text, color = label)
-        }
-    }
+        modifier = modifier.semantics { contentDescription = text },
+        enabled = true,
+        height = ProminentButtonHeight,
+        fill = fill,
+        label = BwColors.Accent,
+    )
 }
 
 @Composable
