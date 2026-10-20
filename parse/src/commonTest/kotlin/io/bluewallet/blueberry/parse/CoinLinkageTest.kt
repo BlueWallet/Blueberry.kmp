@@ -18,13 +18,12 @@ class CoinLinkageTest {
     private val ext1 = p2wpkhScript(watchKey0("m/84'/0'/0'/0/1"))
     private val ext2 = p2wpkhScript(watchKey0("m/84'/0'/0'/0/2"))
     private val chg0 = p2wpkhScript(watchKey0("m/84'/0'/0'/1/0"))
-    private val chg1 = p2wpkhScript(watchKey0("m/84'/0'/0'/1/1"))
-    private val chg2 = p2wpkhScript(watchKey0("m/84'/0'/0'/1/2"))
     private val receiveScripts = listOf(ext0, ext1, ext2)
-    private val changeScripts = listOf(chg0, chg1, chg2)
+    private val changeScripts = listOf(chg0)
+    private val taprootPayee = byteArrayOf(0x51, 0x20) + ByteArray(32) { 7 }
 
-    private fun groupsOf(vararg txs: Transaction): Map<String, String> =
-        computeCoinGroups(
+    private fun linkageOf(vararg txs: Transaction): CoinLinkage =
+        computeCoinLinkage(
             txs.mapIndexed { i, tx -> TxRow(tx.txid.toString(), 100 + i, 0, Transaction.write(tx)) },
             receiveScripts + changeScripts,
             changeScripts,
@@ -38,26 +37,20 @@ class CoinLinkageTest {
     @Test
     fun external_receive_never_spent_with_others_is_independent() {
         val receive = coinbaseLikeReceive(ext0, 1000, prevSalt = 1)
-        assertEquals(mapOf(key(receive, 0) to key(receive, 0)), groupsOf(receive))
+        val k = key(receive, 0)
+        assertEquals(CoinLinkage(mapOf(k to k), mapOf(k to k)), linkageOf(receive))
     }
 
     @Test
-    fun change_joins_cluster_of_the_input_that_funded_it() {
-        val spent = coinbaseLikeReceive(ext0, 10_000, prevSalt = 2)
-        // Reuses the spent coin's address, so it already shares its cluster.
-        val sibling = coinbaseLikeReceive(ext0, 3_000, prevSalt = 3)
-        val spend =
-            spendOwned(
-                inputs = listOf(spent.txid.toString() to 0),
-                outputs = listOf(unrelatedScript() to 5_000L, chg0 to 4_500L),
-            )
-        val groups = groupsOf(spent, sibling, spend)
-        assertEquals(setOf(key(sibling, 0), key(spend, 1)), groups.keys)
-        assertEquals(groups[key(sibling, 0)], groups[key(spend, 1)])
+    fun same_address_outputs_are_certainly_linked() {
+        val first = coinbaseLikeReceive(ext0, 1_000, prevSalt = 2)
+        val second = coinbaseLikeReceive(ext0, 2_000, prevSalt = 3)
+        val l = linkageOf(first, second)
+        assertEquals(l.certain[key(first, 0)], l.certain[key(second, 0)])
     }
 
     @Test
-    fun spending_two_groups_merges_them_including_later_change() {
+    fun common_inputs_certainly_link_coins_reusing_their_addresses() {
         val a = coinbaseLikeReceive(ext0, 8_000, prevSalt = 4)
         val b = coinbaseLikeReceive(ext1, 7_000, prevSalt = 5)
         val liveA = coinbaseLikeReceive(ext0, 1_000, prevSalt = 6)
@@ -65,91 +58,120 @@ class CoinLinkageTest {
         val merge =
             spendOwned(
                 inputs = listOf(a.txid.toString() to 0, b.txid.toString() to 0),
-                outputs = listOf(unrelatedScript() to 10_000L, chg0 to 4_500L),
+                outputs = listOf(unrelatedScript() to 10_000L),
             )
-        val groups = groupsOf(a, b, liveA, liveB, merge)
-        assertEquals(setOf(key(liveA, 0), key(liveB, 0), key(merge, 1)), groups.keys)
-        assertEquals(1, groups.values.toSet().size)
+        val l = linkageOf(a, b, liveA, liveB, merge)
+        assertEquals(l.certain[key(liveA, 0)], l.certain[key(liveB, 0)])
     }
 
     @Test
-    fun same_address_outputs_linked_even_if_never_spent() {
-        val first = coinbaseLikeReceive(ext0, 1_000, prevSalt = 8)
-        val second = coinbaseLikeReceive(ext0, 2_000, prevSalt = 9)
-        val groups = groupsOf(first, second)
-        assertEquals(2, groups.size)
-        assertEquals(groups[key(first, 0)], groups[key(second, 0)])
-    }
-
-    @Test
-    fun change_outputs_of_one_spend_share_a_group_through_spent_inputs() {
-        val a = coinbaseLikeReceive(ext0, 8_000, prevSalt = 10)
-        val b = coinbaseLikeReceive(ext1, 7_000, prevSalt = 11)
-        val merge =
-            spendOwned(
-                inputs = listOf(a.txid.toString() to 0, b.txid.toString() to 0),
-                outputs = listOf(unrelatedScript() to 1_000L, chg0 to 4_000L, chg1 to 5_000L),
-            )
-        val groups = groupsOf(a, b, merge)
-        assertEquals(setOf(key(merge, 1), key(merge, 2)), groups.keys)
-        assertEquals(groups[key(merge, 1)], groups[key(merge, 2)])
-    }
-
-    @Test
-    fun wallet_output_on_receive_script_is_not_linked_to_the_spend() {
-        val a = coinbaseLikeReceive(ext0, 8_000, prevSalt = 12)
+    fun round_payment_marks_the_other_output_as_likely_change() {
+        val spent = coinbaseLikeReceive(ext0, 60_000, prevSalt = 8)
+        val sibling = coinbaseLikeReceive(ext0, 3_000, prevSalt = 9)
         val spend =
             spendOwned(
-                inputs = listOf(a.txid.toString() to 0),
-                outputs = listOf(ext2 to 3_000L, chg0 to 4_000L),
+                inputs = listOf(spent.txid.toString() to 0),
+                outputs = listOf(unrelatedScript() to 50_000L, chg0 to 9_321L),
             )
-        val groups = groupsOf(a, spend)
-        assertEquals(setOf(key(spend, 0), key(spend, 1)), groups.keys)
-        assertNotEquals(groups[key(spend, 0)], groups[key(spend, 1)])
+        val l = linkageOf(spent, sibling, spend)
+        assertEquals(l.likely[key(sibling, 0)], l.likely[key(spend, 1)])
+        assertNotEquals(l.certain[key(sibling, 0)], l.certain[key(spend, 1)])
     }
 
     @Test
-    fun live_coins_on_fresh_scripts_link_only_through_spent_parents() {
-        val r1 = coinbaseLikeReceive(ext0, 5_000, prevSalt = 13)
-        val r2 = coinbaseLikeReceive(ext1, 6_000, prevSalt = 14)
-        val s1 =
+    fun round_wallet_change_reads_as_the_payment_so_it_stays_unlinked() {
+        val spent = coinbaseLikeReceive(ext0, 100_000, prevSalt = 10)
+        val sibling = coinbaseLikeReceive(ext0, 3_000, prevSalt = 11)
+        val spend =
             spendOwned(
-                inputs = listOf(r1.txid.toString() to 0),
-                outputs = listOf(unrelatedScript() to 1_000L, chg0 to 1_500L, chg1 to 2_000L),
+                inputs = listOf(spent.txid.toString() to 0),
+                outputs = listOf(chg0 to 50_000L, unrelatedScript() to 43_210L),
             )
-        // r2 comes first, so the spent change reaches r2 only through the common-input union.
-        val merge =
+        val l = linkageOf(spent, sibling, spend)
+        assertNotEquals(l.likely[key(sibling, 0)], l.likely[key(spend, 0)])
+    }
+
+    @Test
+    fun output_matching_the_input_script_type_is_likely_change() {
+        val spent = coinbaseLikeReceive(ext0, 50_000, prevSalt = 12)
+        val sibling = coinbaseLikeReceive(ext0, 3_000, prevSalt = 13)
+        val spend =
             spendOwned(
-                inputs = listOf(r2.txid.toString() to 0, s1.txid.toString() to 2),
-                outputs = listOf(unrelatedScript() to 6_000L, chg2 to 1_500L),
+                inputs = listOf(spent.txid.toString() to 0),
+                outputs = listOf(taprootPayee to 31_234L, ext2 to 12_345L),
             )
-        val groups = groupsOf(r1, r2, s1, merge)
-        assertEquals(setOf(key(s1, 1), key(merge, 1)), groups.keys)
-        assertEquals(groups[key(s1, 1)], groups[key(merge, 1)])
+        val l = linkageOf(spent, sibling, spend)
+        assertEquals(l.likely[key(sibling, 0)], l.likely[key(spend, 1)])
+    }
+
+    @Test
+    fun output_larger_than_an_input_is_the_payment_not_change() {
+        val a = coinbaseLikeReceive(ext0, 8_000, prevSalt = 14)
+        val b = coinbaseLikeReceive(ext1, 7_000, prevSalt = 15)
+        val liveA = coinbaseLikeReceive(ext0, 1_000, prevSalt = 16)
+        val spend =
+            spendOwned(
+                inputs = listOf(a.txid.toString() to 0, b.txid.toString() to 0),
+                outputs = listOf(chg0 to 9_000L, unrelatedScript() to 5_123L),
+            )
+        val l = linkageOf(a, b, liveA, spend)
+        assertNotEquals(l.likely[key(liveA, 0)], l.likely[key(spend, 0)])
+    }
+
+    @Test
+    fun output_to_a_previously_seen_address_is_the_payment() {
+        val spent = coinbaseLikeReceive(ext0, 50_000, prevSalt = 17)
+        val sibling = coinbaseLikeReceive(ext0, 3_000, prevSalt = 18)
+        // The wallet once paid this external address, so paying it again reads as a payment.
+        val earlier =
+            spendOwned(
+                inputs = listOf(sibling.txid.toString() to 0),
+                outputs = listOf(unrelatedScript() to 2_500L),
+            )
+        val liveSibling = coinbaseLikeReceive(ext0, 4_000, prevSalt = 19)
+        val spend =
+            spendOwned(
+                inputs = listOf(spent.txid.toString() to 0),
+                outputs = listOf(unrelatedScript() to 12_345L, ext2 to 31_234L),
+            )
+        val l = linkageOf(spent, sibling, earlier, liveSibling, spend)
+        assertEquals(l.likely[key(liveSibling, 0)], l.likely[key(spend, 1)])
+    }
+
+    @Test
+    fun ambiguous_spend_falls_back_to_the_wallet_change_output() {
+        val spent = coinbaseLikeReceive(ext0, 50_000, prevSalt = 20)
+        val sibling = coinbaseLikeReceive(ext0, 3_000, prevSalt = 21)
+        val spend =
+            spendOwned(
+                inputs = listOf(spent.txid.toString() to 0),
+                outputs = listOf(ext2 to 12_345L, chg0 to 31_234L),
+            )
+        val l = linkageOf(spent, sibling, spend)
+        assertEquals(l.likely[key(sibling, 0)], l.likely[key(spend, 1)])
+        assertNotEquals(l.likely[key(sibling, 0)], l.likely[key(spend, 0)])
     }
 
     @Test
     fun groups_are_deterministic_for_same_history() {
-        val a = coinbaseLikeReceive(ext0, 1_000, prevSalt = 15)
-        val b = coinbaseLikeReceive(ext0, 2_000, prevSalt = 16)
+        val a = coinbaseLikeReceive(ext0, 1_000, prevSalt = 22)
+        val b = coinbaseLikeReceive(ext0, 2_000, prevSalt = 23)
         val rows =
             listOf(
                 TxRow(a.txid.toString(), 100, 0, Transaction.write(a)),
                 TxRow(b.txid.toString(), 101, 0, Transaction.write(b)),
             )
-        val g1 = computeCoinGroups(rows, listOf(ext0), emptyList())
-        val g2 = computeCoinGroups(rows, listOf(ext0), emptyList())
-        assertEquals(g1, g2)
-        val g3 = computeCoinGroups(rows.reversed(), listOf(ext0), emptyList())
-        assertEquals(g1, g3)
+        val l1 = computeCoinLinkage(rows, listOf(ext0), emptyList())
+        assertEquals(l1, computeCoinLinkage(rows, listOf(ext0), emptyList()))
+        assertEquals(l1, computeCoinLinkage(rows.reversed(), listOf(ext0), emptyList()))
     }
 
     @Test
     fun different_scripts_without_shared_spend_stay_separate() {
-        val a = coinbaseLikeReceive(ext0, 1_000, prevSalt = 17)
-        val b = coinbaseLikeReceive(ext1, 2_000, prevSalt = 18)
-        val groups = groupsOf(a, b)
-        assertNotEquals(groups[key(a, 0)], groups[key(b, 0)])
+        val a = coinbaseLikeReceive(ext0, 1_000, prevSalt = 24)
+        val b = coinbaseLikeReceive(ext1, 2_000, prevSalt = 25)
+        val l = linkageOf(a, b)
+        assertNotEquals(l.likely[key(a, 0)], l.likely[key(b, 0)])
     }
 }
 

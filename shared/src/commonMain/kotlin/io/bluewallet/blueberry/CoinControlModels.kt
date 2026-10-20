@@ -2,6 +2,7 @@
 
 package io.bluewallet.blueberry
 
+import io.bluewallet.blueberry.parse.CoinLinkage
 import io.bluewallet.blueberry.wallet.AddressScriptType
 import io.bluewallet.blueberry.wallet.scriptTypeOfScriptPubKey
 import kotlin.math.ceil
@@ -28,7 +29,10 @@ data class CoinControlCoin(
     val label: String?,
     val isChange: Boolean,
     val isFrozen: Boolean,
+    /** Likely group: provable links plus guessed change. */
     val groupId: String,
+    /** Group from provable links only. */
+    val certainGroupId: String,
     val privacyState: CoinPrivacyState,
     val colorArgb: Long,
     val spendCostSat: Long?,
@@ -43,6 +47,8 @@ data class CoinControlGroup(
     val groupId: String,
     val title: String,
     val linked: Boolean,
+    /** True when every coin shares one provable group, false when change guesses join them. */
+    val provable: Boolean,
     val totalSats: Long,
     val coins: List<CoinControlCoin>,
 )
@@ -130,7 +136,7 @@ fun formatCoinAgeFromConfirmedAt(
 @Suppress("LongMethod")
 fun buildCoinControlSnapshot(
     utxos: List<WalletUtxoRow>,
-    groupIds: Map<String, String>,
+    linkage: CoinLinkage,
     frozen: Set<String>,
     feeRateSatPerVb: Double? = null,
     ageOverride: Map<String, String> = emptyMap(),
@@ -147,7 +153,8 @@ fun buildCoinControlSnapshot(
                 label = u.name,
                 isChange = u.isChange,
                 isFrozen = isFrozen,
-                groupId = groupIds[u.key] ?: u.key,
+                groupId = linkage.likely[u.key] ?: u.key,
+                certainGroupId = linkage.certain[u.key] ?: u.key,
                 privacyState = coinPrivacyState(isFrozen, u.isChange, u.name),
                 colorArgb = utxoCircleArgb(u.key),
                 spendCostSat = cost,
@@ -170,6 +177,7 @@ fun buildCoinControlSnapshot(
                         groupId = id,
                         title = "", // filled after naming pass
                         linked = true,
+                        provable = members.map { it.certainGroupId }.toSet().size == 1,
                         totalSats = total,
                         coins = members.sortedByDescending { it.valueSats },
                     )
@@ -195,6 +203,7 @@ fun buildCoinControlSnapshot(
                 groupId = "independent",
                 title = "Independent",
                 linked = false,
+                provable = true,
                 totalSats = independentCoins.sumOf { it.valueSats },
                 coins = independentCoins,
             )
@@ -317,13 +326,19 @@ fun privacyNoticeForSelection(
                 costLine = nearDustCostLine(selected),
             )
         else -> {
-            val n = selected.map { it.groupId }.toSet().size
-            val kind = if (n == 1) PrivacyNoticeKind.Safe else PrivacyNoticeKind.Warning
-            val message =
-                if (n == 1) {
-                    "These coins already share history, so spending them together reveals nothing new."
-                } else {
-                    "Joins $n unlinked histories. Anyone watching the chain will learn these coins share an owner."
+            val likely = selected.map { it.groupId }.toSet().size
+            val certain = selected.map { it.certainGroupId }.toSet().size
+            val (kind, message) =
+                when {
+                    certain == 1 ->
+                        PrivacyNoticeKind.Safe to
+                            "These coins already share history on-chain, so spending them together reveals nothing new."
+                    likely == 1 ->
+                        PrivacyNoticeKind.Warning to
+                            "These coins are probably linked through change. Spending them together confirms it."
+                    else ->
+                        PrivacyNoticeKind.Warning to
+                            "Joins $likely unlinked histories. Anyone watching the chain will learn these coins share an owner."
                 }
             PrivacyNotice(kind, message, nearDustCostLine(selected))
         }

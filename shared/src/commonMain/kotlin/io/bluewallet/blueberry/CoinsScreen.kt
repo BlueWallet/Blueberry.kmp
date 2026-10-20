@@ -482,10 +482,10 @@ private fun CoinGroupSection(
             ) {
                 Text(
                     text =
-                        if (group.linked) {
-                            "Already linked on-chain"
-                        } else {
-                            "No shared history, keep them apart"
+                        when {
+                            !group.linked -> "No shared history, keep them apart"
+                            group.provable -> "Already linked on-chain"
+                            else -> "Probably linked through change"
                         },
                     color = BwColors.InkSecondary,
                     fontFamily = BwFontFamily,

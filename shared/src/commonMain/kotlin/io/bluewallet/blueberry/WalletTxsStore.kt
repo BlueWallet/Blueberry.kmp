@@ -3,9 +3,10 @@ package io.bluewallet.blueberry
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.MessageBus
 import io.bluewallet.blueberry.headers.nowMillis
+import io.bluewallet.blueberry.parse.CoinLinkage
 import io.bluewallet.blueberry.parse.TxFee
 import io.bluewallet.blueberry.parse.TxRow
-import io.bluewallet.blueberry.parse.computeCoinGroups
+import io.bluewallet.blueberry.parse.computeCoinLinkage
 import io.bluewallet.blueberry.parse.firstAddressLabel
 import io.bluewallet.blueberry.parse.firstUtxoLabelByTxid
 import io.bluewallet.blueberry.parse.formatBlockTimeLabel
@@ -70,8 +71,10 @@ data class WalletTxsSnapshot(
     val txs: List<WalletTxRow> = emptyList(),
     val utxos: List<WalletUtxoRow> = emptyList(),
     val utxosReady: Boolean = false,
-    /** Unspent outpoint → linkage group id; empty until a wallet is present. */
+    /** Unspent outpoint → likely linkage group id (includes guessed change); empty until a wallet is present. */
     val coinGroupIds: Map<String, String> = emptyMap(),
+    /** Unspent outpoint → group id from provable links only (common inputs, address reuse). */
+    val coinCertainGroupIds: Map<String, String> = emptyMap(),
 )
 
 interface WalletTxsStore {
@@ -310,7 +313,7 @@ fun snapshotFromDb(
 
     var utxos = emptyList<WalletUtxoRow>()
     var fees = emptyMap<String, TxFee>()
-    var coinGroupIds = emptyMap<String, String>()
+    var linkage = CoinLinkage(emptyMap(), emptyMap())
     if (wallet != null) {
         wallet.syncFromDb()
         val txRows = stored.map { TxRow(it.txid, it.height, it.txIndex, it.tx) }
@@ -320,7 +323,7 @@ fun snapshotFromDb(
         val watched = wallet.snapshot().addresses
         val watchByScript = watched.associateBy { scriptHex(it.scriptPubKey) }
         val changeScripts = watched.filter { it.change }.map { it.scriptPubKey }
-        coinGroupIds = computeCoinGroups(txRows, scripts, changeScripts)
+        linkage = computeCoinLinkage(txRows, scripts, changeScripts)
         val map = scan.utxos
         var maxValue = 0L
         for (u in map.values) {
@@ -402,7 +405,8 @@ fun snapshotFromDb(
         txs = pending + confirmedTxs,
         utxos = utxos,
         utxosReady = wallet != null,
-        coinGroupIds = coinGroupIds,
+        coinGroupIds = linkage.likely,
+        coinCertainGroupIds = linkage.certain,
     )
 }
 

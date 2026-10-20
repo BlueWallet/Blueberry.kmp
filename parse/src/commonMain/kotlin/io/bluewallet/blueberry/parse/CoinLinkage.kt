@@ -3,83 +3,179 @@ package io.bluewallet.blueberry.parse
 import fr.acinq.bitcoin.Transaction
 
 /**
- * Union-find linkage over the wallet's own history.
+ * Linkage of **unspent** outpoints, as union-find roots (deterministic group ids).
  *
- * Two coins are linked when an observer can already tell from the chain that the same wallet
- * owns both (common-input ownership, change, or address reuse). Only outputs paying one of
- * [changeScripts] join the cluster of the inputs that funded them; a wallet output on a receive
- * script is not attributable to the spender, so it stays in its own group.
- *
- * @return map of **unspent** outpoint key → deterministic group id (union-find root key).
+ * [certain] holds links anyone can prove from the chain: inputs spent together and outputs that
+ * reuse an address. [likely] adds, per spend, the output a chain observer would pick as change
+ * (see [guessChangeVout]); it is always a coarsening of [certain].
  */
-fun computeCoinGroups(
+data class CoinLinkage(
+    val certain: Map<String, String>,
+    val likely: Map<String, String>,
+)
+
+/**
+ * @param changeScripts the wallet's own change chain; used only when an observer's heuristics
+ *   cannot tell the outputs apart, so the ambiguous case errs toward warning.
+ */
+fun computeCoinLinkage(
     txs: List<TxRow>,
     watchScripts: List<ByteArray>,
     changeScripts: List<ByteArray>,
-): Map<String, String> {
+): CoinLinkage {
     val ctx =
         LinkageCtx(
             watch = watchScripts.map(::scriptHex).toSet(),
             change = changeScripts.map(::scriptHex).toSet(),
-            uf = UnionFind(),
-            live = mutableMapOf(),
-            ownedScriptByOutpoint = linkedMapOf(),
-            outpointsByScript = mutableMapOf(),
         )
     for (row in txs.sortedWith(compareBy({ it.height }, { it.txIndex }))) {
         ctx.applyTx(row)
     }
     ctx.unionAddressReuse()
-    return ctx.live.keys.associateWith { ctx.uf.find(it) }
+    return CoinLinkage(
+        certain = ctx.live.keys.associateWith { ctx.certain.find(it) },
+        likely = ctx.live.keys.associateWith { ctx.likely.find(it) },
+    )
 }
+
+/** Output an observer sees in a spend; [owned] and [walletChange] are wallet-only knowledge. */
+internal data class SpendOutput(
+    val valueSats: Long,
+    val scriptHex: String,
+    val owned: Boolean,
+    val walletChange: Boolean,
+)
+
+/** Wallet input of a spend, with the value and script of the coin it consumes. */
+internal data class SpendInput(
+    val valueSats: Long,
+    val scriptHex: String,
+)
+
+/** A payment amount picked by a person: a multiple of 0.0001 BTC. */
+private const val ROUND_SATS = 10_000L
+
+/**
+ * Vout a chain observer would call change, or null when the spend has none or nothing narrows it.
+ *
+ * Candidates are narrowed in order, and a step that would leave none is skipped:
+ * an output paying an input's own address is change outright; outputs to addresses seen before
+ * are payments; with every input known, an output at least as large as the smallest input is a
+ * payment (that input would have been unnecessary); outputs whose script type differs from the
+ * inputs' are payments; round amounts are payments.
+ */
+internal fun guessChangeVout(
+    inputs: List<SpendInput>,
+    allInputsOwned: Boolean,
+    outputs: List<SpendOutput>,
+    seenScripts: Set<String>,
+): Int? {
+    if (outputs.size < 2) return null
+    val inputScripts = inputs.map { it.scriptHex }.toSet()
+    val toInputAddress = outputs.indexOfFirst { it.scriptHex in inputScripts }
+    val candidates =
+        if (toInputAddress >= 0) {
+            listOf(toInputAddress)
+        } else {
+            narrowChangeCandidates(inputs, allInputsOwned, outputs, seenScripts)
+        }
+    return candidates.singleOrNull() ?: candidates.firstOrNull { outputs[it].walletChange }
+}
+
+private fun narrowChangeCandidates(
+    inputs: List<SpendInput>,
+    allInputsOwned: Boolean,
+    outputs: List<SpendOutput>,
+    seenScripts: Set<String>,
+): List<Int> {
+    val inputTypes = inputs.map { scriptKind(it.scriptHex) }.toSet()
+    val minInput = inputs.minOfOrNull { it.valueSats }
+    val steps: List<(SpendOutput) -> Boolean> =
+        listOf(
+            { it.scriptHex !in seenScripts },
+            { !allInputsOwned || inputs.size < 2 || minInput == null || it.valueSats < minInput },
+            { inputTypes.size != 1 || scriptKind(it.scriptHex) in inputTypes },
+            { it.valueSats % ROUND_SATS != 0L },
+        )
+    var candidates = outputs.indices.toList()
+    for (keep in steps) {
+        if (candidates.size == 1) break
+        val next = candidates.filter { keep(outputs[it]) }
+        if (next.isNotEmpty()) candidates = next
+    }
+    return candidates
+}
+
+private fun scriptKind(scriptHex: String): String =
+    when {
+        scriptHex.length == 44 && scriptHex.startsWith("0014") -> "p2wpkh"
+        scriptHex.length == 68 && scriptHex.startsWith("0020") -> "p2wsh"
+        scriptHex.length == 68 && scriptHex.startsWith("5120") -> "p2tr"
+        scriptHex.length == 46 && scriptHex.startsWith("a914") -> "p2sh"
+        scriptHex.length == 50 && scriptHex.startsWith("76a914") -> "p2pkh"
+        else -> "other"
+    }
 
 private class LinkageCtx(
     val watch: Set<String>,
     val change: Set<String>,
-    val uf: UnionFind,
-    val live: MutableMap<String, WatchUtxo>,
-    val ownedScriptByOutpoint: MutableMap<String, String>,
-    val outpointsByScript: MutableMap<String, MutableList<String>>,
 ) {
+    val certain = UnionFind()
+    val likely = UnionFind()
+    val live = mutableMapOf<String, WatchUtxo>()
+    private val ownedOutpoints = mutableMapOf<String, SpendInput>()
+    private val outpointsByScript = mutableMapOf<String, MutableList<String>>()
+    private val seenScripts = mutableSetOf<String>()
+
     fun applyTx(row: TxRow) {
         val tx = Transaction.read(row.tx)
-        val ownedInputs = ownedInputKeys(tx)
-        val changeOutputs = mutableListOf<String>()
-        tx.txOut.forEachIndexed { vout, o ->
-            val script = o.publicKeyScript.toByteArray()
-            val scriptH = scriptHex(script)
-            if (scriptH !in watch) return@forEachIndexed
-            val key = outpointKey(tx.txid.toString(), vout)
-            if (scriptH in change) changeOutputs.add(key)
-            uf.add(key)
-            ownedScriptByOutpoint[key] = scriptH
-            outpointsByScript.getOrPut(scriptH) { mutableListOf() }.add(key)
-            live[key] = WatchUtxo(o.amount.toLong(), script, row.height)
+        val txid = tx.txid.toString()
+        val ownedInputs = if (tx.isCoinbase()) emptyList() else tx.txIn.map(::prevoutKey).filter { it in ownedOutpoints }
+        val outputs =
+            tx.txOut.mapIndexed { vout, o ->
+                val script = o.publicKeyScript.toByteArray()
+                val h = scriptHex(script)
+                val owned = h in watch
+                if (owned) {
+                    val key = outpointKey(txid, vout)
+                    certain.add(key)
+                    likely.add(key)
+                    ownedOutpoints[key] = SpendInput(o.amount.toLong(), h)
+                    outpointsByScript.getOrPut(h) { mutableListOf() }.add(key)
+                    live[key] = WatchUtxo(o.amount.toLong(), script, row.height)
+                }
+                SpendOutput(o.amount.toLong(), h, owned, owned && h in change)
+            }
+        if (ownedInputs.isNotEmpty()) {
+            val anchor = ownedInputs.first()
+            for (k in ownedInputs) {
+                certain.union(anchor, k)
+                likely.union(anchor, k)
+            }
+            val changeVout =
+                guessChangeVout(
+                    inputs = ownedInputs.map { ownedOutpoints.getValue(it) },
+                    allInputsOwned = ownedInputs.size == tx.txIn.size,
+                    outputs = outputs,
+                    seenScripts = seenScripts,
+                )
+            if (changeVout != null && outputs[changeVout].owned) likely.union(anchor, outpointKey(txid, changeVout))
         }
         if (!tx.isCoinbase()) {
             for (inn in tx.txIn) live.remove(prevoutKey(inn))
         }
-        if (ownedInputs.isNotEmpty()) {
-            for (k in ownedInputs) uf.add(k)
-            val anchor = ownedInputs.first()
-            for (k in ownedInputs.drop(1)) uf.union(anchor, k)
-            for (k in changeOutputs) uf.union(anchor, k)
-        }
-    }
-
-    private fun ownedInputKeys(tx: Transaction): List<String> {
-        if (tx.isCoinbase()) return emptyList()
-        return tx.txIn.mapNotNull { inn ->
-            val key = prevoutKey(inn)
-            key.takeIf { live.containsKey(it) || ownedScriptByOutpoint.containsKey(it) }
-        }
+        for (o in outputs) seenScripts.add(o.scriptHex)
+        for (k in ownedInputs) seenScripts.add(ownedOutpoints.getValue(k).scriptHex)
     }
 
     fun unionAddressReuse() {
         for (keys in outpointsByScript.values) {
             if (keys.size < 2) continue
             val anchor = keys.first()
-            for (k in keys.drop(1)) uf.union(anchor, k)
+            for (k in keys.drop(1)) {
+                certain.union(anchor, k)
+                likely.union(anchor, k)
+            }
         }
     }
 }

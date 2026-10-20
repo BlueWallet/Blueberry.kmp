@@ -1,5 +1,6 @@
 package io.bluewallet.blueberry
 
+import io.bluewallet.blueberry.parse.CoinLinkage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -62,6 +63,17 @@ class CoinControlModelsTest {
         assertTrue(notice.message.contains("reveals nothing new"))
         assertNull(notice.costLine)
         assertEquals(170_610L, c1.valueSats + c2.valueSats)
+    }
+
+    @Test
+    fun privacy_same_group_by_change_guess_is_amber_not_green() {
+        val snap = fixtureSnapshot(provableLinks = false)
+        assertFalse(snap.groups[0].provable)
+        val c1 = snap.coins.first { it.key == "c1:0" }
+        val c2 = snap.coins.first { it.key == "c2:0" }
+        val notice = privacyNoticeForSelection(listOf(c1, c2))
+        assertEquals(PrivacyNoticeKind.Warning, notice.kind)
+        assertTrue(notice.message.contains("probably linked through change"))
     }
 
     @Test
@@ -212,7 +224,11 @@ private val FIXTURE =
         FixtureCoin("c11", 292, "Unsolicited", false, "", 40, true, "c11"),
     )
 
-private fun fixtureSnapshot(feeRate: Double? = 10.0): CoinControlSnapshot {
+/** [provableLinks] false keeps the fixture groups but makes every link a change guess. */
+private fun fixtureSnapshot(
+    feeRate: Double? = 10.0,
+    provableLinks: Boolean = true,
+): CoinControlSnapshot {
     val p2wpkh =
         ByteArray(22) {
             if (it == 0) {
@@ -254,5 +270,6 @@ private fun fixtureSnapshot(feeRate: Double? = 10.0): CoinControlSnapshot {
         }
     val frozen = FIXTURE.filter { it.isFrozen }.map { "${it.id}:0" }.toSet()
     val ages = FIXTURE.associate { "${it.id}:0" to formatCoinAgeDays(it.ageDays) }
-    return buildCoinControlSnapshot(utxos, groupIds, frozen, feeRate, ages)
+    val certain = if (provableLinks) groupIds else groupIds.keys.associateWith { it }
+    return buildCoinControlSnapshot(utxos, CoinLinkage(certain = certain, likely = groupIds), frozen, feeRate, ages)
 }
