@@ -28,23 +28,12 @@ class DitherPalette(
                 0xFF0C2550,
                 lightBackdrop = true,
             )
-        val Dusk = ramp(0xFF07060E, 0xFF17123A, 0xFF3A2F8F, 0xFF6E6BE0, 0xFFC9C3FA)
-        val Ink = ramp(0xFF06070A, 0xFF141820, 0xFF2C3442, 0xFF6B7A92, 0xFFD9E1EE)
 
         private fun ramp(
             vararg argb: Long,
             lightBackdrop: Boolean = false,
         ) = DitherPalette(IntArray(argb.size) { argb[it].toInt() }, lightBackdrop)
     }
-}
-
-/** Where the tree stands and which side of the frame is darkened for text. */
-enum class TreePlacement {
-    /** Phone screens: tree at the bottom centre, top darkened. */
-    BottomCenter,
-
-    /** Wide screens: tree on the right, left side darkened. */
-    BottomRight,
 }
 
 /**
@@ -81,22 +70,18 @@ class DitherTreeRenderer(
     private var leafLen = 0
     private var berryLen = 0
 
-    private var vertical = true
     private var treeX = 0f
     private var baseY = 0f
     private var unit = 1f
 
-    private var lightX = -0.55f
-    private var lightY = -0.83f
+    private val lightX = -0.55f / hypot(0.55f, 0.83f)
+    private val lightY = -0.83f / hypot(0.55f, 0.83f)
     private var paint = 0f
     private var segX0 = 0f
     private var segY0 = 0f
     private var segX1 = 0f
     private var segY1 = 0f
     private var segAngle = 0f
-
-    private var pointerX = Float.NaN
-    private var pointerY = Float.NaN
 
     init {
         val rng = Mulberry32(seed)
@@ -111,7 +96,6 @@ class DitherTreeRenderer(
     fun resize(
         width: Int,
         height: Int,
-        placement: TreePlacement,
         lightBackdrop: Boolean = false,
     ) {
         require(width > 0 && height > 0) { "size must be positive" }
@@ -123,47 +107,21 @@ class DitherTreeRenderer(
         waveCos = FloatArray(width)
         leafBuf = FloatArray(leafCount * LEAF_STRIDE)
         berryBuf = FloatArray(berryCount * BERRY_STRIDE)
-        vertical = placement == TreePlacement.BottomCenter
-        if (vertical) {
-            treeX = width * 0.5f
-            // Portrait: lift the trunk, canopy, and moon so they clear bottom chrome.
-            val trunk = 0.82f
-            baseY = height * trunk - 2f
-            unit = min(height * 0.62f, width * 1.15f)
-            // The darkening was tuned for a trunk at the bottom. Shift it with the
-            // trunk so the moon stays in the bright part of the ramp.
-            val scrimLift = 1f - trunk
-            scrim =
-                FloatArray(height) { y ->
-                    val band = smooth((y.toFloat() / height - (0.3f - scrimLift)) / 0.38f)
-                    // Light paper keeps the top bright for navy type; dark still
-                    // darkens that band for the pale lockup.
-                    if (lightBackdrop) 0.82f + 0.18f * band else 0.3f + 0.7f * band
-                }
-        } else {
-            treeX = width * 0.73f
-            baseY = height * 0.94f
-            unit = height * 0.92f
-            scrim =
-                FloatArray(width) { x ->
-                    val band = smooth((x.toFloat() / width - 0.26f) / 0.36f)
-                    if (lightBackdrop) 0.82f + 0.18f * band else 0.26f + 0.74f * band
-                }
-        }
-    }
-
-    /** Makes the light lean toward a point given as fractions of the frame. */
-    fun setPointer(
-        fx: Float,
-        fy: Float,
-    ) {
-        pointerX = fx
-        pointerY = fy
-    }
-
-    fun clearPointer() {
-        pointerX = Float.NaN
-        pointerY = Float.NaN
+        treeX = width * 0.5f
+        // Lift the trunk, canopy, and moon so they clear bottom chrome.
+        val trunk = 0.82f
+        baseY = height * trunk - 2f
+        unit = min(height * 0.62f, width * 1.15f)
+        // The darkening was tuned for a trunk at the bottom. Shift it with the
+        // trunk so the moon stays in the bright part of the ramp.
+        val scrimLift = 1f - trunk
+        scrim =
+            FloatArray(height) { y ->
+                val band = smooth((y.toFloat() / height - (0.3f - scrimLift)) / 0.38f)
+                // Light paper keeps the top bright for navy type; dark still
+                // darkens that band for the pale lockup.
+                if (lightBackdrop) 0.82f + 0.18f * band else 0.3f + 0.7f * band
+            }
     }
 
     /**
@@ -181,7 +139,6 @@ class DitherTreeRenderer(
         palette: DitherPalette,
     ): IntArray {
         check(width > 0) { "call resize() first" }
-        updateLight(motion)
         drawBackdrop(time)
         leafLen = 0
         berryLen = 0
@@ -204,24 +161,6 @@ class DitherTreeRenderer(
     )
 
     private fun canopyY() = baseY - 0.52f * unit
-
-    private fun updateLight(motion: Float) {
-        var tx = -0.55f
-        var ty = -0.83f
-        if (!pointerX.isNaN()) {
-            val px = pointerX * width - treeX
-            val py = pointerY * height - canopyY()
-            val m = hypot(px, py).takeIf { it > 0f } ?: 1f
-            tx = px / m
-            ty = py / m
-        }
-        val ease = if (motion > 0f) 0.05f else 1f
-        lightX += (tx - lightX) * ease
-        lightY += (ty - lightY) * ease
-        val m = hypot(lightX, lightY).takeIf { it > 0f } ?: 1f
-        lightX /= m
-        lightY /= m
-    }
 
     private fun drawBackdrop(time: Float) {
         for (y in 0 until height) {
@@ -376,10 +315,10 @@ class DitherTreeRenderer(
             val row = (y and 7) shl 3
             val sb = sin(y * 0.05f)
             val cb = cos(y * 0.05f)
-            val rowScrim = if (vertical) scrim[y] else 1f
+            val rowScrim = scrim[y]
             var i = y * width
             for (x in 0 until width) {
-                val v = lum[i] * rowScrim * (if (vertical) 1f else scrim[x])
+                val v = lum[i] * rowScrim
                 val threshold = BAYER[row or (x and 7)] + amp * (waveSin[x] * cb + waveCos[x] * sb)
                 val p = v * top
                 var level = p.toInt()

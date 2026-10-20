@@ -369,7 +369,6 @@ private fun SyncYearPage(
     onSelectYear: (Int) -> Unit,
     onContinue: () -> Unit,
 ) {
-    var dialSettling by remember { mutableStateOf(false) }
     val saving = if (busy) "Saving…" else null
     val message = if (busy) null else error
     val safe = WindowInsets.safeDrawing.asPaddingValues()
@@ -399,7 +398,6 @@ private fun SyncYearPage(
                 selected = selectedYear,
                 enabled = !busy,
                 onSelect = onSelectYear,
-                onSettlingChange = { dialSettling = it },
             )
         }
         if (saving != null) {
@@ -412,7 +410,7 @@ private fun SyncYearPage(
             text = "Continue",
             onClick = onContinue,
             modifier = Modifier.fillMaxWidth(),
-            enabled = !busy && !dialSettling,
+            enabled = !busy,
             height = ProminentButtonHeight,
             pressable = true,
         )

@@ -84,7 +84,6 @@ internal fun yearReleaseVelocity(
  * Horizontal year dial. The chosen year sits in a fixed frame; dragging
  * slides the years under it, and a fling coasts into the nearest year.
  */
-@Suppress("LongParameterList")
 @Composable
 internal fun YearSlider(
     years: List<Int>,
@@ -92,7 +91,6 @@ internal fun YearSlider(
     enabled: Boolean,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    onSettlingChange: (Boolean) -> Unit = {},
 ) {
     if (years.isEmpty()) return
     val startIndex = years.indexOf(selected).let { if (it < 0) 0 else it }
@@ -103,7 +101,7 @@ internal fun YearSlider(
         position = position,
         gestures = gestures,
         enabled = enabled,
-        actions = YearDialActions(onSelect = onSelect, onSettlingChange = onSettlingChange),
+        onSelect = onSelect,
     )
     Box(
         modifier
@@ -133,36 +131,26 @@ internal fun YearSlider(
     }
 }
 
-private class YearDialActions(
-    val onSelect: (Int) -> Unit,
-    val onSettlingChange: (Boolean) -> Unit,
-)
-
 @Composable
 private fun BindYearGestures(
     years: List<Int>,
     position: Animatable<Float, AnimationVector1D>,
     gestures: Channel<YearGesture>,
     enabled: Boolean,
-    actions: YearDialActions,
+    onSelect: (Int) -> Unit,
 ) {
     val haptic = rememberSoftHaptic()
-    val actionsState by rememberUpdatedState(actions)
+    val onSelectState by rememberUpdatedState(onSelect)
     val enabledState by rememberUpdatedState(enabled)
     val settling = remember { mutableStateOf(false) }
     LaunchedEffect(years) {
         var settle: Job? = null
-
-        fun markSettling(value: Boolean) {
-            settling.value = value
-            actionsState.onSettlingChange(value)
-        }
         for (gesture in gestures) {
             when (gesture) {
                 is YearGesture.Move -> {
                     settle?.cancel()
                     settle?.join()
-                    markSettling(false)
+                    settling.value = false
                     position.snapTo(
                         (position.value + gesture.delta).coerceIn(0f, years.lastIndex.toFloat()),
                     )
@@ -175,8 +163,8 @@ private fun BindYearGestures(
                             lastIndex = years.lastIndex,
                         )
                     // Commit before the spring so Continue cannot store a mid-flight year.
-                    actionsState.onSelect(years[snapped])
-                    markSettling(true)
+                    onSelectState(years[snapped])
+                    settling.value = true
                     settle =
                         launch {
                             try {
@@ -188,7 +176,7 @@ private fun BindYearGestures(
                                     ),
                                 )
                             } finally {
-                                markSettling(false)
+                                settling.value = false
                             }
                         }
                 }
@@ -202,7 +190,7 @@ private fun BindYearGestures(
             .collect { index ->
                 if (!enabledState || settling.value) return@collect
                 haptic.perform()
-                actionsState.onSelect(years[index])
+                onSelectState(years[index])
             }
     }
 }

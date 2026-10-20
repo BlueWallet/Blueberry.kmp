@@ -52,7 +52,6 @@ private object TreeClock {
 fun DitherTreeBackground(
     modifier: Modifier = Modifier,
     palette: DitherPalette = DitherPalette.Blueberry,
-    placement: TreePlacement = TreePlacement.BottomCenter,
     pixelSize: Dp = 3.dp,
     animate: Boolean = true,
 ) {
@@ -63,7 +62,7 @@ fun DitherTreeBackground(
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val running = animate && lifecycle.isAtLeast(Lifecycle.State.RESUMED)
 
-    LaunchedEffect(viewSize, cell, palette, placement, running) {
+    LaunchedEffect(viewSize, cell, palette, running) {
         if (viewSize == IntSize.Zero) return@LaunchedEffect
         val w = ceil(viewSize.width / cell).toInt().coerceAtLeast(1)
         val h = ceil(viewSize.height / cell).toInt().coerceAtLeast(1)
@@ -71,7 +70,7 @@ fun DitherTreeBackground(
         // Each effect owns its renderer. A cancelled frame keeps drawing on
         // Dispatchers.Default, and resize() would replace the buffers under it.
         val renderer = DitherTreeRenderer()
-        renderer.resize(w, h, placement, lightBackdrop = palette.lightBackdrop)
+        renderer.resize(w, h, lightBackdrop = palette.lightBackdrop)
         if (!running) {
             val pixels = withContext(Dispatchers.Default) { renderer.render(STILL_TIME, 1f, 0f, palette) }
             image = surface.update(pixels)

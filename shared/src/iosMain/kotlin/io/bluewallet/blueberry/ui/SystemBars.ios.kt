@@ -8,7 +8,7 @@ import platform.UIKit.UIStatusBarStyleDarkContent
 import platform.UIKit.UIStatusBarStyleLightContent
 
 /**
- * Dark artwork uses light status-bar glyphs. [MainViewController] reads this from
+ * A dark palette uses light status-bar glyphs. [MainViewController] reads this from
  * [androidx.compose.ui.uikit.ComposeUIViewControllerDelegate.preferredStatusBarStyle].
  */
 internal object IosStatusBar {
