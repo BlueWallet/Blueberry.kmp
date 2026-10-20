@@ -1,7 +1,6 @@
 package io.bluewallet.blueberry.onboarding
 
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.VelocityTracker1D
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -40,21 +39,36 @@ class YearSliderTest {
     @Test
     fun small_drag_with_batched_samples_stays_near_its_year() {
         // A few pixels whose last two samples share a timestamp, as a touch batch can.
-        val tracker = VelocityTracker()
-        tracker.addPosition(0L, Offset(100f, 0f))
-        tracker.addPosition(16L, Offset(97f, 0f))
-        tracker.addPosition(16L, Offset(94f, 0f))
-        val velocity = yearReleaseVelocity(tracker, slotPx = 300f)
+        val velocity = releaseVelocity(0L to 100f, 16L to 97f, 16L to 94f)
         assertTrue(abs(velocity) < 3f, "velocity $velocity")
         assertEquals(8, settledYearIndex(position = 8.02f, velocityPerSecond = velocity, lastIndex = 17))
     }
 
     @Test
+    fun short_flick_reads_its_real_speed() {
+        // 6 px in 16 ms over a 300 px slot is 1.25 years per second. Compose's iOS
+        // 2D tracker reads this as about 3.1 and coasts to the next year.
+        val velocity = releaseVelocity(0L to 100f, 16L to 94f)
+        assertTrue(velocity > 1.1f && velocity < 1.4f, "velocity $velocity")
+        assertEquals(8, settledYearIndex(position = 8.02f, velocityPerSecond = velocity, lastIndex = 17))
+    }
+
+    @Test
     fun steady_swipe_flings_forward() {
-        val tracker = VelocityTracker()
-        for (i in 0..6) tracker.addPosition(i * 16L, Offset(600f - i * 60f, 0f))
         // 60 px every 16 ms over a 300 px slot is about 12.5 years per second, forwards.
-        val velocity = yearReleaseVelocity(tracker, slotPx = 300f)
+        val velocity = releaseVelocity(*Array(7) { i -> i * 16L to 600f - i * 60f })
         assertTrue(velocity > 10f && velocity < 15f, "velocity $velocity")
+    }
+
+    @Test
+    fun holding_still_before_release_does_not_fling() {
+        val velocity = releaseVelocity(0L to 600f, 16L to 540f, 32L to 480f, 300L to 480f)
+        assertTrue(velocity == 0f, "velocity $velocity")
+    }
+
+    private fun releaseVelocity(vararg samples: Pair<Long, Float>): Float {
+        val tracker = VelocityTracker1D(isDataDifferential = false)
+        samples.forEach { (time, x) -> tracker.addDataPoint(time, x) }
+        return yearReleaseVelocity(tracker, slotPx = 300f)
     }
 }

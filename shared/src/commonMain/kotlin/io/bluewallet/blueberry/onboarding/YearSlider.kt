@@ -26,8 +26,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.input.pointer.util.addPointerInputChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker1D
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -69,12 +68,15 @@ internal fun settledYearIndex(
     return projected.roundToInt().coerceIn(0, lastIndex)
 }
 
-/** Index velocity at release. Compose's tracker fits the recent and batched historical samples. */
+/**
+ * Index velocity at release. A common-code 1D tracker, because Compose's 2D tracker
+ * runs a different strategy on iOS that reads short flicks about 2.5x faster.
+ */
 internal fun yearReleaseVelocity(
-    tracker: VelocityTracker,
+    tracker: VelocityTracker1D,
     slotPx: Float,
 ): Float {
-    val velocity = -tracker.calculateVelocity().x / slotPx
+    val velocity = -tracker.calculateVelocity() / slotPx
     return if (velocity.isFinite()) velocity else 0f
 }
 
@@ -255,15 +257,17 @@ private suspend fun PointerInputScope.trackYearDrag(
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         val pointerId = down.id
-        val tracker = VelocityTracker()
-        tracker.addPointerInputChange(down)
+        val tracker = VelocityTracker1D(isDataDifferential = false)
+        tracker.addDataPoint(down.uptimeMillis, down.position.x)
         var dragging = true
         while (dragging) {
             val event = awaitPointerEvent()
             val change = event.changes.firstOrNull { it.id == pointerId }
             dragging = change != null && change.pressed
             if (change != null) {
-                tracker.addPointerInputChange(change)
+                // The release sample too, so a hold before lifting ends the motion window.
+                change.historical.forEach { tracker.addDataPoint(it.uptimeMillis, it.position.x) }
+                tracker.addDataPoint(change.uptimeMillis, change.position.x)
                 if (change.pressed) {
                     val dragX = change.positionChange().x
                     val indexDelta = -dragX / slotPx
