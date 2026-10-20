@@ -12,7 +12,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import io.bluewallet.blueberry.parse.styleBtc
 
-/** Significant digits in [color]; trailing zeros muted. Prefix is the Bitcoin sign ₿. */
+/** Significant digits in [color]; trailing zeros muted. Prefix is a plain B. */
+@Suppress("LongParameterList")
 @Composable
 fun BtcAmountText(
     sats: Long,
@@ -22,6 +23,8 @@ fun BtcAmountText(
     trailingColor: Color = BwColors.InkMuted,
     fontSize: TextUnit = BwType.BodySize,
     fontWeight: FontWeight = BwType.Value,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
+    roundedDigits: Boolean = false,
     maxLines: Int = 1,
 ) {
     val parts = styleBtc(sats, plus)
@@ -29,7 +32,7 @@ fun BtcAmountText(
         text =
             buildAnnotatedString {
                 withStyle(SpanStyle(color = trailingColor, fontWeight = fontWeight)) {
-                    append("₿")
+                    append("B")
                 }
                 withStyle(SpanStyle(color = color, fontWeight = fontWeight)) {
                     append(parts.significant)
@@ -39,8 +42,9 @@ fun BtcAmountText(
                 }
             },
         modifier = modifier,
-        fontFamily = BwFontFamily,
+        fontFamily = if (roundedDigits) numberFontFamily(fontWeight) else BwFontFamily,
         fontSize = fontSize,
+        letterSpacing = letterSpacing,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
     )

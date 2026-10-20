@@ -5,6 +5,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
@@ -20,33 +22,48 @@ import platform.UIKit.UIImage
  * iOS back control for [PlatformScreenHeader]. iOS 26 and later use a liquid-glass button.
  * Earlier systems use [HeaderBackButton], the same control as Android and desktop.
  */
-@OptIn(ExperimentalForeignApi::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun IosGlassBackButton(
     onBack: () -> Unit,
     enabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val glass = remember { supportsIosLiquidGlass(UIDevice.currentDevice.systemVersion) }
-    if (glass) {
-        LiquidGlassBackButton(onBack = onBack, enabled = enabled, modifier = modifier)
+    if (rememberSupportsIosLiquidGlass()) {
+        IosGlassSymbolButton(
+            symbol = "chevron.backward",
+            accessibilityLabel = "Back",
+            onClick = onBack,
+            enabled = enabled,
+            modifier = modifier,
+        )
     } else {
         HeaderBackButton(onClick = onBack, enabled = enabled, modifier = modifier)
     }
 }
 
+/** True on iOS 26 and later, where `glassButtonConfiguration` exists. */
+@Composable
+internal fun rememberSupportsIosLiquidGlass(): Boolean = remember { supportsIosLiquidGlass(UIDevice.currentDevice.systemVersion) }
+
+/**
+ * Symbol-only liquid-glass button. iOS 26 and later only: check
+ * [rememberSupportsIosLiquidGlass] first. [placedAsOverlay] lets the material sample Compose
+ * content drawn behind it.
+ */
 @OptIn(ExperimentalForeignApi::class, ExperimentalComposeUiApi::class)
 @Composable
-private fun LiquidGlassBackButton(
-    onBack: () -> Unit,
-    enabled: Boolean,
-    modifier: Modifier,
+internal fun IosGlassSymbolButton(
+    symbol: String,
+    accessibilityLabel: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     val action = remember { BackAction() }
     UIKitView(
         factory = {
             val configuration = UIButtonConfiguration.glassButtonConfiguration()
-            configuration.image = UIImage.systemImageNamed("chevron.backward")
+            configuration.image = UIImage.systemImageNamed(symbol)
             val button =
                 UIButton.buttonWithConfiguration(
                     configuration,
@@ -55,9 +72,12 @@ private fun LiquidGlassBackButton(
             button.backgroundColor = UIColor.clearColor
             button
         },
-        modifier = modifier.size(44.dp),
+        modifier =
+            modifier
+                .size(44.dp)
+                .semantics { contentDescription = accessibilityLabel },
         update = { button ->
-            action.onClick = onBack
+            action.onClick = onClick
             button.enabled = enabled
         },
         properties = UIKitInteropProperties(placedAsOverlay = true),

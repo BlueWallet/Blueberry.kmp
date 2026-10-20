@@ -29,6 +29,15 @@ class DitherPalette(
                 lightBackdrop = true,
             )
 
+        /** Loading glow on dark screens. Level 0 is transparent so the screen shows through. */
+        val GlowDark = ramp(0x00000000, 0xFF132550, 0xFF1D3C80, 0xFF3F79CF, 0xFFA9C6F5)
+
+        /** Loading glow on light screens. */
+        val GlowLight = ramp(0x00000000, 0xFFDCE8FA, 0xFFC2D7F6, 0xFF8FB4EE, 0xFF3F79CF)
+
+        /** Teal variant, closest to the first app mock. */
+        val GlowTeal = ramp(0x00000000, 0xFF10222B, 0xFF1B3A48, 0xFF2E5D70, 0xFF7FB2C4)
+
         private fun ramp(
             vararg argb: Long,
             lightBackdrop: Boolean = false,

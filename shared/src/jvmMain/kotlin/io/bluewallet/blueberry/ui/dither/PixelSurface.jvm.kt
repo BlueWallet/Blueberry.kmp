@@ -11,7 +11,8 @@ internal actual class PixelSurface actual constructor(
     private val width: Int,
     height: Int,
 ) {
-    private val info = ImageInfo(width, height, ColorType.RGBA_8888, ColorAlphaType.PREMUL)
+    // UNPREMUL: bytes are straight RGBA (matches the ARGB channel extract below).
+    private val info = ImageInfo(width, height, ColorType.RGBA_8888, ColorAlphaType.UNPREMUL)
     private val bytes = ByteArray(width * height * 4)
 
     actual fun update(argb: IntArray): ImageBitmap {

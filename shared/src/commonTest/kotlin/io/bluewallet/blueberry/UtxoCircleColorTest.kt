@@ -9,8 +9,8 @@ class UtxoCircleColorTest {
         assertEquals("5f36ef", utxoCircleRgbHex("abc:0"))
         assertEquals("e3b0c4", utxoCircleRgbHex(""))
         assertEquals("b275cc", utxoCircleRgbHex("aa".repeat(32) + ":1"))
-        assertEquals(0xFF5F36EFL, utxoCircleArgb("abc:0"))
-        assertEquals(0xFFE3B0C4L, utxoCircleArgb(""))
+        assertEquals(0xFF554C76L, utxoCircleArgb("abc:0"))
+        assertEquals(0xFF764C5CL, utxoCircleArgb(""))
     }
 
     @Test

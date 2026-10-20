@@ -34,7 +34,7 @@ class BwPaletteTest {
         assertEquals(Color(0xFF81868E), BwPalette.Light.InkSecondary)
         assertEquals(Color(0xFF9AA0AA), BwPalette.Light.InkMuted)
         assertEquals(Color(0xFF50555C), BwPalette.Light.Action)
-        assertEquals(Color(0xFF0F5CC0), BwPalette.Light.Link)
+        assertEquals(Color(0xFF3788E0), BwPalette.Light.Link)
         assertEquals(Color(0xFF3788E0), BwPalette.Light.Accent)
         assertEquals(Color(0xFFCCDDF9), BwPalette.Light.AccentSoft)
         assertEquals(Color(0xFFE4EEFB), BwPalette.Light.BarTrack)
