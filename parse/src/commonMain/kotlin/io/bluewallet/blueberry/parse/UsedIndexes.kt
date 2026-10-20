@@ -121,7 +121,13 @@ fun receiveAddressFromWallet(
 fun snapshotReceiveAddress(
     db: Database,
     wallet: Wallet,
-): String? {
+): String? = snapshotReceive(db, wallet).address
+
+/** First unused receive address (growing the watch window if needed) and, for HD wallets, its [ReceiveChain]. */
+fun snapshotReceive(
+    db: Database,
+    wallet: Wallet,
+): ReceiveSnapshot {
     var watch = wallet.refresh()
     val txs = db.transactions.list()
     val receiveType =
@@ -131,7 +137,7 @@ fun snapshotReceiveAddress(
             AddressScriptType.P2WPKH
         }
     if (watch.kind != WatchWalletKind.BIP84) {
-        return receiveAddressFromWallet(watch, txs, receiveType)
+        return ReceiveSnapshot(receiveAddressFromWallet(watch, txs, receiveType), chain = null)
     }
     val decoded = txs.map { Transaction.read(it.tx) }
     var current = loadHdWatchGaps(db)[receiveType]
@@ -141,17 +147,19 @@ fun snapshotReceiveAddress(
         val unused = firstUnusedExternalAddress(watch, used.external, receiveType)
         if (unused != null) {
             if (grew) queueReceiveRescan(db)
-            return unused.address
+            return ReceiveSnapshot(unused.address, receiveChain(watch, receiveType, used.external, unused.address))
         }
         val gapGrown = growWatchGapsIfNeeded(current, used.external, used.internal)
         val nextExternal =
             minOf(maxOf(current.external, firstUnusedIndex(used.external) + 1, gapGrown.gaps.external), MAX_WATCH_COUNT)
         if (nextExternal <= current.external) {
             if (grew) queueReceiveRescan(db)
-            return watch.addresses
-                .filter { !it.change && it.resolvedScriptType() == receiveType }
-                .maxByOrNull { it.index }
-                ?.address
+            val last =
+                watch.addresses
+                    .filter { !it.change && it.resolvedScriptType() == receiveType }
+                    .maxByOrNull { it.index }
+                    ?.address
+            return ReceiveSnapshot(last, receiveChain(watch, receiveType, used.external, last))
         }
         db.transaction {
             val latest = loadHdWatchGaps(db)[receiveType]

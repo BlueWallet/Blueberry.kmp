@@ -21,7 +21,7 @@
     <ID>ReturnCount:ParseBlocks.kt$suspend fun parseBatch()</ID>
     <ID>ReturnCount:ParseBlocks.kt$suspend fun waitForKick(ms: Long? = null)</ID>
     <ID>ReturnCount:SendContext.kt$fun &lt;T&gt; pickUtxosByKeys( utxos: List&lt;T&gt;, keys: List&lt;String&gt;, keyOf: (T) -&gt; String, ): PickUtxos&lt;T&gt;</ID>
-    <ID>ReturnCount:UsedIndexes.kt$fun snapshotReceiveAddress( db: Database, wallet: Wallet, ): String?</ID>
+    <ID>ReturnCount:UsedIndexes.kt$fun snapshotReceive( db: Database, wallet: Wallet, ): ReceiveSnapshot</ID>
     <ID>ThrowsCount:Extract.kt$fun decodeBlockTxs(blockBytes: ByteArray): List&lt;Transaction&gt;</ID>
     <ID>TooGenericExceptionCaught:ParseBlocks.kt$err: Throwable</ID>
     <ID>TooManyFunctions:Extract.kt$io.bluewallet.blueberry.parse.Extract.kt</ID>

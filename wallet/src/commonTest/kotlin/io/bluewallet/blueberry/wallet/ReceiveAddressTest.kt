@@ -14,6 +14,14 @@ import kotlin.test.assertNull
 
 class ReceiveAddressTest {
     @Test
+    fun last_receive_index_is_gap_limit_past_highest_used_inside_window() {
+        assertEquals(GAP_LIMIT - 1, lastReceiveIndex(emptyList(), 40))
+        assertEquals(5 + GAP_LIMIT, lastReceiveIndex(listOf(0, 1, 5), 40))
+        assertEquals(39, lastReceiveIndex(listOf(30), 40))
+        assertEquals(lastReceiveIndex(listOf(5), 40), lastReceiveIndex(listOf(0, 5), 40))
+    }
+
+    @Test
     fun first_unused_external_and_internal() {
         val w = deriveWatchWallet(ABANDON, WatchGaps(3, 1))
         val ext0 = firstUnusedExternalAddress(w, emptyList())

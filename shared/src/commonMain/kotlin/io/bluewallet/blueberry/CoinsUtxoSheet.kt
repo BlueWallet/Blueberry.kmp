@@ -1,6 +1,5 @@
 package io.bluewallet.blueberry
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,15 +26,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.NavArrow
+import io.bluewallet.blueberry.ui.NavArrowDirection
 import io.bluewallet.blueberry.ui.PillButton
 
 @Composable
@@ -104,7 +101,7 @@ private fun CoinsUtxoSheetHeader(
     onDismiss: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SheetBackArrow(onClick = onDismiss)
+        NavArrow(direction = NavArrowDirection.Left, label = "Back", onClick = onDismiss)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -187,31 +184,5 @@ private fun CoinsSheetFact(
                 fontWeight = BwType.Caption,
             )
         }
-    }
-}
-
-@Composable
-private fun SheetBackArrow(onClick: () -> Unit) {
-    val ink = BwColors.Ink
-    Canvas(
-        modifier =
-            Modifier
-                .size(36.dp)
-                .clickable(onClick = onClick),
-    ) {
-        val path = Path()
-        path.moveTo(size.width * 0.58f, size.height * 0.28f)
-        path.lineTo(size.width * 0.38f, size.height * 0.50f)
-        path.lineTo(size.width * 0.58f, size.height * 0.72f)
-        drawPath(
-            path,
-            ink,
-            style =
-                Stroke(
-                    width = 2.dp.toPx(),
-                    cap = StrokeCap.Round,
-                    join = StrokeJoin.Round,
-                ),
-        )
     }
 }
