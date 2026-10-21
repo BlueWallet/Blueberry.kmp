@@ -18,6 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          fetch-depth: 50
           submodules: recursive
 
       - name: Validate Gradle Wrapper
@@ -83,6 +84,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          fetch-depth: 50
           submodules: recursive
 
       - name: Validate Gradle Wrapper
@@ -151,6 +153,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          fetch-depth: 50
           submodules: recursive
 
       - name: Validate Gradle Wrapper
