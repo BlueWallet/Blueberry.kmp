@@ -1,4 +1,8 @@
+import org.gradle.process.ExecOperations
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.ByteArrayOutputStream
+import java.io.OutputStream
+import javax.inject.Inject
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -124,16 +128,64 @@ kotlin {
     }
 }
 
-val generateBuildSecrets =
-    tasks.register("generateBuildSecrets") {
+/** Runs git with [Params.args] in [Params.repoDir]; empty when git is missing, fails, or there is no repo. */
+abstract class GitOutput : ValueSource<String, GitOutput.Params> {
+    interface Params : ValueSourceParameters {
+        val repoDir: DirectoryProperty
+        val args: ListProperty<String>
+    }
+
+    @get:Inject
+    abstract val exec: ExecOperations
+
+    override fun obtain(): String =
+        try {
+            val out = ByteArrayOutputStream()
+            val result =
+                exec.exec {
+                    workingDir = parameters.repoDir.get().asFile
+                    commandLine(listOf("git") + parameters.args.get())
+                    standardOutput = out
+                    errorOutput = OutputStream.nullOutputStream()
+                    isIgnoreExitValue = true
+                }
+            if (result.exitValue == 0) out.toString(Charsets.UTF_8) else ""
+        } catch (_: Exception) {
+            ""
+        }
+}
+
+// The changelog starts at GIT_COMMIT when set, else HEAD. A value starting with '-' would be read as a git option.
+val gitRev =
+    providers
+        .environmentVariable("GIT_COMMIT")
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.startsWith("-") }
+        .orElse("HEAD")
+
+val generateBuildSources =
+    tasks.register("generateBuildSources") {
         val outDir = layout.buildDirectory.dir("generated/buildSecrets/kotlin")
         outputs.dir(outDir)
         val envKey = providers.environmentVariable("ROCKETX_API_KEY").orElse("")
         val envFileText =
             providers.fileContents(rootProject.layout.projectDirectory.file(".env")).asText.orElse("")
+        // NUL-separated "<sha>\n<subject>" records; parsed by parseGitLog in commonMain.
+        val gitLog =
+            providers.of(GitOutput::class) {
+                parameters.repoDir.set(rootProject.layout.projectDirectory)
+                parameters.args.addAll("log", "-z", "--no-merges", "-20", "--format=%H%n%s")
+                parameters.args.add(gitRev)
+            }
         inputs.property("rocketxEnvKey", envKey)
         inputs.property("rocketxEnvFile", envFileText)
+        inputs.property("gitLog", gitLog)
         doLast {
+            // Every char outside printable ASCII, and " \ $, becomes \uXXXX: no templates, any Unicode.
+            fun kotlinString(value: String) =
+                value.asIterable().joinToString("", "\"", "\"") { c ->
+                    if (c in ' '..'~' && c !in "\"\\$") "$c" else "\\u%04x".format(c.code)
+                }
             var key = envKey.get().trim()
             if (key.isEmpty()) {
                 envFileText.get().lineSequence().forEach { line ->
@@ -152,21 +204,24 @@ val generateBuildSecrets =
                     }
                 }
             }
-            val escaped =
-                key
-                    .replace("\\", "\\\\")
-                    .replace("\"", "\\\"")
-                    .replace("$", "\\${'$'}")
-                    .replace("\n", "")
-                    .replace("\r", "")
-            val dest = outDir.get().asFile.resolve("io/bluewallet/blueberry/BuildSecrets.kt")
-            dest.parentFile.mkdirs()
-            dest.writeText(
+            val pkg = outDir.get().asFile.resolve("io/bluewallet/blueberry")
+            pkg.mkdirs()
+            pkg.resolve("BuildSecrets.kt").writeText(
                 """
                 package io.bluewallet.blueberry
 
                 object BuildSecrets {
-                    const val ROCKETX_API_KEY = "$escaped"
+                    const val ROCKETX_API_KEY = ${kotlinString(key)}
+                }
+
+                """.trimIndent() + "\n",
+            )
+            pkg.resolve("BuildInfo.kt").writeText(
+                """
+                package io.bluewallet.blueberry
+
+                internal object BuildInfo {
+                    val GIT_LOG = ${kotlinString(gitLog.get())}
                 }
 
                 """.trimIndent() + "\n",
@@ -179,7 +234,7 @@ tasks
         it.name.startsWith("compile") ||
             it.name.contains("Ktlint", ignoreCase = true)
     }.configureEach {
-        dependsOn(generateBuildSecrets)
+        dependsOn(generateBuildSources)
     }
 
 dependencies {
