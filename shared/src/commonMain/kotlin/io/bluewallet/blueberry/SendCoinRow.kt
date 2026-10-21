@@ -41,7 +41,7 @@ internal fun SendCard(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(BwSpace.Radius))
                 .background(BwColors.Card)
-                .padding(BwSpace.Card),
+                .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
         content = content,
     )
