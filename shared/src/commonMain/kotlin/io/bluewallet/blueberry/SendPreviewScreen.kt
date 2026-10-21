@@ -244,7 +244,7 @@ private fun SendPreviewFieldRow(field: SendPreviewField) {
 }
 
 @Composable
-private fun UrQr(psbtHex: String) {
+internal fun UrQr(psbtHex: String) {
     val parts =
         remember(psbtHex) {
             try {
