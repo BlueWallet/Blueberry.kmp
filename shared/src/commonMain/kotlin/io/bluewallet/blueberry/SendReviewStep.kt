@@ -243,7 +243,7 @@ private fun PrivateSendRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 CardTitle("Send privately with RocketX")
-                HelperText(block ?: "RocketX pays the recipient from its own coins. Costs a service fee.")
+                HelperText(block ?: "Pays the recipient from its own coins.")
             }
             Chevron(modifier = Modifier.padding(start = 6.dp))
         }
