@@ -14,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -63,6 +65,8 @@ fun HomeTxBubble(
     onClick: () -> Unit,
 ) {
     val incoming = tx.netDeltaSats >= 0
+    // The arrow and the amount share one colour: accent for incoming, ink for outgoing.
+    val directionColor = if (incoming) BwColors.Accent else BwColors.Ink
     val muted = txListSecondaryMuted(tx.paymentLabel, tx.utxoLabel, tx.addressLabel)
     Pressable(
         onClick = onClick,
@@ -78,6 +82,7 @@ fun HomeTxBubble(
                 painter = painterResource(if (incoming) Res.drawable.receive_icon else Res.drawable.send_icon),
                 contentDescription = null,
                 modifier = Modifier.size(22.dp),
+                colorFilter = ColorFilter.tint(directionColor),
             )
             Column(
                 modifier = Modifier.weight(1f),
@@ -98,7 +103,7 @@ fun HomeTxBubble(
                     maxLines = 1,
                 )
             }
-            PrivateSendAmount(tx = tx, incoming = incoming)
+            PrivateSendAmount(tx = tx, amountColor = directionColor)
         }
     }
 }
@@ -106,7 +111,7 @@ fun HomeTxBubble(
 @Composable
 private fun PrivateSendAmount(
     tx: WalletTxRow,
-    incoming: Boolean,
+    amountColor: Color,
 ) {
     Column(
         horizontalAlignment = Alignment.End,
@@ -128,7 +133,7 @@ private fun PrivateSendAmount(
         }
         BtcAmountText(
             sats = abs(tx.netDeltaSats),
-            color = if (incoming) BwColors.Accent else BwColors.Ink,
+            color = amountColor,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = TxRowLetterSpacing,
         )
