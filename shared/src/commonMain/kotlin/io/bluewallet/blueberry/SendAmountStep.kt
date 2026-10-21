@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -16,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -29,6 +31,7 @@ import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.Pressable
 import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.ToPill
 import io.bluewallet.blueberry.ui.numberFontFamily
@@ -161,22 +164,25 @@ private fun NumberKey(
     modifier: Modifier = Modifier,
 ) {
     val label = if (key == NUMBER_PAD_BACKSPACE) "⌫" else key.toString()
-    Box(
+    Pressable(
+        onClick = { onKey(key) },
         modifier =
             modifier
                 .height(56.dp)
-                .clip(CircleShape)
-                .background(BwColors.Card)
-                .clickable { onKey(key) }
                 .semantics { contentDescription = if (key == NUMBER_PAD_BACKSPACE) "Delete" else label },
-        contentAlignment = Alignment.Center,
+        role = Role.Button,
     ) {
-        Text(
-            text = label,
-            color = BwColors.Ink,
-            fontFamily = numberFontFamily(BwType.Value),
-            fontWeight = BwType.Value,
-            fontSize = BwType.ValueSize,
-        )
+        Box(
+            modifier = Modifier.fillMaxSize().clip(CircleShape).background(BwColors.Card),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = label,
+                color = BwColors.Ink,
+                fontFamily = numberFontFamily(BwType.Value),
+                fontWeight = BwType.Value,
+                fontSize = BwType.ValueSize,
+            )
+        }
     }
 }

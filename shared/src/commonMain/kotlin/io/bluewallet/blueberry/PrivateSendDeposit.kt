@@ -86,8 +86,10 @@ internal fun PrivateSendDeposit(
         Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
             BroadcastStatusCard(status)
             when (status.tone) {
-                BroadcastTone.Sent -> PillButton(text = "Done", onClick = finish.onDone, modifier = Modifier.fillMaxWidth())
-                BroadcastTone.Failed -> PillButton(text = "Retry", onClick = finish.onRetry, modifier = Modifier.fillMaxWidth())
+                BroadcastTone.Sent ->
+                    PillButton(text = "Done", onClick = finish.onDone, modifier = Modifier.fillMaxWidth(), pressable = true)
+                BroadcastTone.Failed ->
+                    PillButton(text = "Retry", onClick = finish.onRetry, modifier = Modifier.fillMaxWidth(), pressable = true)
                 BroadcastTone.Working -> {}
             }
         }
@@ -125,6 +127,7 @@ internal fun PrivateSendDeposit(
             onClick = onBroadcast,
             modifier = Modifier.fillMaxWidth(),
             enabled = privateBroadcastEnabled(agreed),
+            pressable = true,
         )
     }
 }

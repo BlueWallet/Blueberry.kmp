@@ -90,6 +90,7 @@ internal fun SendFeeSheet(
             modifier = Modifier.fillMaxWidth(),
             enabled = check is FeeDraftCheck.Ok,
             height = ProminentButtonHeight,
+            pressable = true,
         )
         TextAction(text = "Cancel", onClick = actions.onDismiss, modifier = Modifier.align(Alignment.CenterHorizontally))
     }
