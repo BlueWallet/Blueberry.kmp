@@ -179,7 +179,10 @@ private fun enableSocketOptions(fd: Int) =
         val yes = alloc<IntVar>()
         yes.value = 1
         setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, yes.ptr, sizeOf<IntVar>().convert())
-        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, yes.ptr, sizeOf<IntVar>().convert())
+        // Broken peer sockets must return EPIPE from write(), not kill the process.
+        check(
+            setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, yes.ptr, sizeOf<IntVar>().convert()) == 0,
+        ) { posixError("SO_NOSIGPIPE") }
     }
 
 @OptIn(ExperimentalForeignApi::class)

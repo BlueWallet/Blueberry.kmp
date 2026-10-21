@@ -1,12 +1,12 @@
 package io.bluewallet.blueberry.peers
 
 object Config {
-    const val peerProbeTimeoutMs: Long = 3_000
-    const val peerRetryProbeTimeoutMs: Long = 15_000
-    const val peerAddrTimeoutMs: Long = 3_000
+    const val peerProbeTimeoutMs: Long = 12_000
+    const val peerRetryProbeTimeoutMs: Long = 30_000
+    const val peerAddrTimeoutMs: Long = 8_000
     const val peerCrawlIntervalMs: Long = 15_000
     const val peerDnsReseedWhenBlocksMs: Long = 15_000
-    const val peerConcurrency: Int = 30
+    const val peerConcurrency: Int = 12
     const val headerSyncTimeoutMs: Long = 30_000
     const val headerRacePeers: Int = 10
 
