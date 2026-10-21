@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -19,6 +20,11 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
+import dev.chrisbanes.haze.HazeProgressive
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.allocArray
 import kotlinx.cinterop.memScoped
@@ -48,7 +54,7 @@ private val TopFeather = 20.dp
 actual fun PlatformScrollEdge(
     modifier: Modifier,
     top: Dp,
-    bottom: Dp,
+    bottom: Dp?,
     showEdges: Boolean,
     content: @Composable () -> Unit,
 ) {
@@ -64,17 +70,42 @@ actual fun PlatformScrollEdge(
                             .fillMaxWidth()
                             .height(top + TopFeather),
                 )
-                FadeBlur(
-                    fadeFromTop = false,
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .height(bottom + IosBottomEdgeFeather),
-                )
+                if (bottom != null) {
+                    FadeBlur(
+                        fadeFromTop = false,
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .height(bottom + IosBottomEdgeFeather),
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+actual fun PlatformBottomEdgeBlur(
+    hazeState: HazeState,
+    modifier: Modifier,
+) {
+    val tint = if (LocalDarkPalette.current) Color.Black else Color.White
+    val style =
+        remember(tint) {
+            HazeStyle(
+                backgroundColor = Color.Transparent,
+                tint = HazeTint(tint.copy(alpha = 0.82f)),
+                blurRadius = 20.dp,
+                noiseFactor = 0f,
+                fallbackTint = HazeTint(tint.copy(alpha = 0.92f)),
+            )
+        }
+    Box(
+        modifier.hazeEffect(state = hazeState, style = style) {
+            progressive = HazeProgressive.verticalGradient(startIntensity = 0f, endIntensity = 1f)
+        },
+    )
 }
 
 /**

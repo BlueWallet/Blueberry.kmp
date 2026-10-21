@@ -64,12 +64,14 @@ expect fun PlatformLargeTitle(
  *
  * iOS fades are UIKit overlays, drawn above every Compose sibling. Pass
  * [showEdges] = false while a Compose scrim or pushed screen covers the content.
+ * Pass [bottom] = null when Compose controls sit on the bottom edge and use
+ * [PlatformBottomEdgeBlur] instead.
  */
 @Composable
 expect fun PlatformScrollEdge(
     modifier: Modifier = Modifier,
     top: Dp = 0.dp,
-    bottom: Dp = 0.dp,
+    bottom: Dp? = 0.dp,
     showEdges: Boolean = true,
     content: @Composable () -> Unit,
 )
