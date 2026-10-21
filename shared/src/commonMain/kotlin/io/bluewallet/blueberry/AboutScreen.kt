@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import io.bluewallet.blueberry.ui.AlwaysBounceScroll
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
@@ -41,8 +42,13 @@ import io.bluewallet.blueberry.ui.alwaysBounceTail
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
     var showChangelog by remember { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
+    val build = remember { buildInfoCard(BuildInfo.VERSION, BuildInfo.GIT_SHA) }
     Box(Modifier.fillMaxSize()) {
         CardListScreen(title = "About", onBack = onBack) {
+            item {
+                LinkRow(build.title, build.subtitle, onClick = build.url?.let { url -> { runCatching { uriHandler.openUri(url) } } })
+            }
             item { LinkRow("Changelog", "Recent changes in this build", onClick = { showChangelog = true }) }
             item { LinkRow("GitHub", ABOUT_GITHUB_URL.removePrefix("https://"), ABOUT_GITHUB_URL) }
             item { LinkRow("MIT License", "Blueberry is open source under the MIT License", ABOUT_LICENSE_URL) }
@@ -124,12 +130,12 @@ private fun LinkRow(
     LinkRow(title, subtitle, onClick = { runCatching { uriHandler.openUri(url) } })
 }
 
-/** A tappable card: blue [title], muted [subtitle] (hidden when empty) and a chevron. */
+/** A card: blue [title], muted [subtitle] (hidden when empty) and, when [onClick] is set, tappable with a chevron. */
 @Composable
 internal fun LinkRow(
     title: String,
     subtitle: String,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
 ) {
     val shape = RoundedCornerShape(BwSpace.Radius)
     Row(
@@ -139,8 +145,14 @@ internal fun LinkRow(
                 .clip(shape)
                 .background(BwColors.Card, shape)
                 .border(BwSpace.Hairline, BwColors.Border, shape)
-                .clickable(role = Role.Button, onClick = onClick)
-                .padding(BwSpace.Card),
+                // clickable merges the texts for screen readers; an inert card has to ask for it.
+                .then(
+                    if (onClick != null) {
+                        Modifier.clickable(role = Role.Button, onClick = onClick)
+                    } else {
+                        Modifier.semantics(mergeDescendants = true) {}
+                    },
+                ).padding(BwSpace.Card),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
@@ -150,6 +162,6 @@ internal fun LinkRow(
                 Text(subtitle, color = BwColors.InkMuted, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
             }
         }
-        Chevron()
+        if (onClick != null) Chevron()
     }
 }
