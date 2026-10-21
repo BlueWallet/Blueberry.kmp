@@ -177,9 +177,30 @@ val generateBuildSources =
                 parameters.args.addAll("log", "-z", "--no-merges", "-20", "--format=%H%n%s")
                 parameters.args.add(gitRev)
             }
+        // The exact commit built, merge commits included; "" when git fails.
+        val gitSha =
+            providers.of(GitOutput::class) {
+                parameters.repoDir.set(rootProject.layout.projectDirectory)
+                parameters.args.addAll("rev-parse", "--verify")
+                parameters.args.add(gitRev.map { "$it^{commit}" })
+            }
+        // -PversionName (Android and desktop CI), else Xcode's MARKETING_VERSION build setting, else "dev".
+        val buildVersion =
+            providers
+                .gradleProperty("versionName")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .orElse(
+                    providers
+                        .environmentVariable("MARKETING_VERSION")
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() },
+                ).orElse("dev")
         inputs.property("rocketxEnvKey", envKey)
         inputs.property("rocketxEnvFile", envFileText)
         inputs.property("gitLog", gitLog)
+        inputs.property("gitSha", gitSha)
+        inputs.property("buildVersion", buildVersion)
         doLast {
             // Every char outside printable ASCII, and " \ $, becomes \uXXXX: no templates, any Unicode.
             fun kotlinString(value: String) =
@@ -222,6 +243,8 @@ val generateBuildSources =
 
                 internal object BuildInfo {
                     val GIT_LOG = ${kotlinString(gitLog.get())}
+                    val VERSION = ${kotlinString(buildVersion.get())}
+                    val GIT_SHA = ${kotlinString(gitSha.get().trim())}
                 }
 
                 """.trimIndent() + "\n",

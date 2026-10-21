@@ -154,6 +154,7 @@ jobs:
     timeout-minutes: 180
     env:
       PACKAGE_VERSION: ${{ needs.version.outputs.package_version }}
+      VERSION_NAME: ${{ needs.version.outputs.version_name }}
       FILE_DATE: ${{ needs.version.outputs.file_date }}
     strategy:
       fail-fast: false
@@ -235,7 +236,7 @@ jobs:
         shell: bash
         env:
           ROCKETX_API_KEY: ${{ secrets.ROCKETX_API_KEY }}
-        run: ./gradlew ${{ matrix.gradle }} --no-daemon -PpackageVersion="${{ env.PACKAGE_VERSION }}"
+        run: ./gradlew ${{ matrix.gradle }} --no-daemon -PpackageVersion="${{ env.PACKAGE_VERSION }}" -PversionName="${{ env.VERSION_NAME }}"
 
       - name: Stage installer
         shell: bash
