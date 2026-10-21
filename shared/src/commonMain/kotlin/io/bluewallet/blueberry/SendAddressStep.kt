@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -16,6 +15,7 @@ import io.bluewallet.blueberry.ui.AddressGroups
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.LabeledField
 import io.bluewallet.blueberry.ui.TextAction
 import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.wallet.isAddressValid
@@ -52,15 +52,13 @@ internal fun SendAddressStep(
         },
     ) {
         SendCard {
-            OutlinedTextField(
+            LabeledField(
+                label = "Bitcoin address",
                 value = address,
                 onValueChange = actions.onAddress,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
+                placeholder = "bc1…",
                 isError = address.isNotBlank() && !valid,
-                label = { Text("Bitcoin address") },
-                placeholder = { Text("bc1…") },
-                trailingIcon = { TextAction(text = "Scan", onClick = actions.onScan) },
+                trailing = { TextAction(text = "Scan", onClick = actions.onScan) },
             )
             when {
                 valid -> {
@@ -72,14 +70,12 @@ internal fun SendAddressStep(
             }
         }
         SendCard {
-            OutlinedTextField(
+            LabeledField(
+                label = "What's it for?",
                 value = label,
                 onValueChange = actions.onLabel,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
+                placeholder = "Groceries",
                 isError = labelError,
-                label = { Text("What's it for?") },
-                placeholder = { Text("Concert tickets") },
             )
             if (labelError) {
                 HelperText("Add a label. It names this payment and your change.", error = true)

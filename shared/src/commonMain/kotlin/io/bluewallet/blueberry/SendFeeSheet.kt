@@ -12,7 +12,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,6 +23,7 @@ import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.LabeledField
 import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.ProminentButtonHeight
 import io.bluewallet.blueberry.ui.TextAction
@@ -57,16 +57,22 @@ internal fun SendFeeSheet(
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        CardTitle("Network fee")
-        OutlinedTextField(
+        LabeledField(
+            label = "Network fee",
             value = draft,
             onValueChange = actions.onDraft,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            placeholder = "3",
             isError = draft.isNotBlank() && check !is FeeDraftCheck.Ok,
-            placeholder = { Text("3") },
-            suffix = { Text("sat/vB") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            trailing = {
+                Text(
+                    text = "sat/vB",
+                    modifier = Modifier.padding(end = 10.dp),
+                    color = BwColors.InkQuiet,
+                    fontFamily = BwFontFamily,
+                    fontSize = BwType.BodySize,
+                )
+            },
         )
         when (check) {
             is FeeDraftCheck.Ok -> FeePreview(check.estimate)

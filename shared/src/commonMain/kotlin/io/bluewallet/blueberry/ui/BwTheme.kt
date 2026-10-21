@@ -22,6 +22,7 @@ object BwPalette {
         val Paper = Color(0xFF000000)
         val Card = Color(0xFF181B1D)
         val Section = Color(0xFF1E2224)
+        val InputFill = Color(0xFF212427)
         val Ink = Color(0xFFFFFFFF)
         val InkSecondary = Color(0xFF606C73)
         val InkMuted = Color(0xFF606C73)
@@ -42,6 +43,7 @@ object BwPalette {
         val Paper = Color(0xFFF7F8FA)
         val Card = Color(0xFFFFFFFF)
         val Section = Color(0xFFF9F9F9)
+        val InputFill = Color(0xFFF0F2F5)
         val Ink = Color(0xFF0C2550)
         val InkSecondary = Color(0xFF81868E)
         val InkMuted = Color(0xFF9AA0AA)
@@ -73,6 +75,11 @@ object BwColors {
     val Section: Color
         @Composable @ReadOnlyComposable
         get() = if (LocalDarkPalette.current) BwPalette.Dark.Section else BwPalette.Light.Section
+
+    /** Fill behind text inputs that sit on a Card. */
+    val InputFill: Color
+        @Composable @ReadOnlyComposable
+        get() = if (LocalDarkPalette.current) BwPalette.Dark.InputFill else BwPalette.Light.InputFill
 
     val Ink: Color
         @Composable @ReadOnlyComposable
