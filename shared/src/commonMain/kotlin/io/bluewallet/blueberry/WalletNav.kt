@@ -147,10 +147,6 @@ internal fun WalletNavHost(
                     onBack = goBack,
                     initialSelectedKeys = sendSelectedKeys,
                     onChooseCoins = { navController.navigate(CoinsRoute(picker = true)) },
-                    onBroadcastSuccess = {
-                        sendSelectedKeys = emptySet()
-                        sendFeeRateSatPerVb = null
-                    },
                     onSelectedKeysChange = { sendSelectedKeys = it },
                     onFeeRateChange = { sendFeeRateSatPerVb = it },
                 )

@@ -51,6 +51,8 @@ data class CoinControlGroup(
     val provable: Boolean,
     val totalSats: Long,
     val coins: List<CoinControlCoin>,
+    /** Members of a linked group that the active filter hides. */
+    val hiddenCount: Int = 0,
 )
 
 data class CoinControlBubble(
@@ -310,11 +312,63 @@ fun filterCoinControlGroups(
             g.copy(
                 coins = coins,
                 totalSats = coins.sumOf { it.valueSats },
-                linked = g.linked && coins.size >= 2,
-                provable = coins.map { it.certainGroupId }.toSet().size == 1 || !g.linked,
+                provable = !g.linked || filteredGroupProvable(g.coins, coins),
+                hiddenCount = if (g.linked) g.coins.size - coins.size else 0,
             )
         }
     }
+}
+
+private fun filteredGroupProvable(
+    all: List<CoinControlCoin>,
+    visible: List<CoinControlCoin>,
+): Boolean {
+    val certain = visible.map { it.certainGroupId }.toSet().singleOrNull() ?: return false
+    return visible.size >= 2 || all.count { it.certainGroupId == certain } >= 2
+}
+
+/** Segment widths that fill [usable] in value proportion while keeping each at least [minWidth]. */
+fun coinWeightBarWidths(
+    values: List<Long>,
+    usable: Float,
+    minWidth: Float,
+): List<Float> {
+    if (values.isEmpty() || minWidth * values.size >= usable) {
+        return values.map { (usable / values.size).coerceAtLeast(0f) }
+    }
+    val clamped = BooleanArray(values.size)
+    var widths: List<Float>
+    do {
+        val rest = usable - minWidth * clamped.count { it }
+        val restSum =
+            values.indices
+                .filterNot { clamped[it] }
+                .sumOf { values[it].coerceAtLeast(0L) }
+                .toFloat()
+        widths =
+            values.mapIndexed { i, v ->
+                when {
+                    clamped[i] -> minWidth
+                    restSum <= 0f -> rest / clamped.count { !it }
+                    else -> rest * v.coerceAtLeast(0L) / restSum
+                }
+            }
+        val newlyClamped = widths.indices.filter { !clamped[it] && widths[it] < minWidth }
+        newlyClamped.forEach { clamped[it] = true }
+    } while (newlyClamped.isNotEmpty())
+    return widths
+}
+
+/** Spend-cost warning for the coins chosen for a send at the typed fee rate. */
+fun selectionCostLine(
+    utxos: List<WalletUtxoRow>,
+    selectedKeys: Set<String>,
+    feeRateSatPerVb: Double?,
+): String? {
+    if (selectedKeys.isEmpty() || feeRateSatPerVb == null) return null
+    val selected = utxos.filter { it.key in selectedKeys }
+    val coins = buildCoinControlSnapshot(selected, CoinLinkage(emptyMap(), emptyMap()), emptySet(), feeRateSatPerVb).coins
+    return nearDustCostLine(coins)
 }
 
 fun privacyNoticeForSelection(
@@ -402,23 +456,43 @@ fun coinControlAccessibilityLabel(
     if (linkedGroups.isEmpty()) {
         return "$coinsWord. No on-chain links. Opens coin control."
     }
-    val parts =
-        linkedGroups.joinToString(" and ") { g ->
-            "${g.coins.size} coins"
-        }
-    val linkedWord =
-        if (linkedGroups.size == 1) {
-            "1 linked group of $parts"
-        } else {
-            "${linkedGroups.size} linked groups of $parts"
-        }
+    val (provable, probable) = linkedGroups.partition { it.provable }
+    val groupsWord =
+        listOfNotNull(
+            accessibilityGroupPhrase(provable, "linked on-chain"),
+            accessibilityGroupPhrase(probable, "probably linked through change"),
+        ).joinToString(", ")
     val soloWord =
         when (soloCount) {
             0 -> ""
             1 -> ", 1 independent"
             else -> ", $soloCount independent"
         }
-    return "$coinsWord. $linkedWord$soloWord. Opens coin control."
+    return "$coinsWord. $groupsWord$soloWord. Opens coin control."
+}
+
+private fun accessibilityGroupPhrase(
+    groups: List<CoinControlGroup>,
+    relation: String,
+): String? {
+    if (groups.isEmpty()) return null
+    val sizes = groups.joinToString(" and ") { "${it.coins.size} coins" }
+    val count = if (groups.size == 1) "1 group" else "${groups.size} groups"
+    return "$count $relation, of $sizes"
+}
+
+fun coinGroupSubtitle(group: CoinControlGroup): String {
+    val relation =
+        when {
+            !group.linked -> return "No shared history, keep them apart"
+            group.provable -> "Already linked on-chain"
+            else -> "Probably linked through change"
+        }
+    return when (group.hiddenCount) {
+        0 -> relation
+        1 -> "$relation, 1 more coin filtered out"
+        else -> "$relation, ${group.hiddenCount} more coins filtered out"
+    }
 }
 
 fun coinRowSubtitle(coin: CoinControlCoin): String =

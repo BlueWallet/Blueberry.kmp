@@ -69,7 +69,6 @@ fun SendScreen(
     onBack: () -> Unit,
     initialSelectedKeys: Set<String> = emptySet(),
     onChooseCoins: () -> Unit = {},
-    onBroadcastSuccess: () -> Unit = {},
     onSelectedKeysChange: (Set<String>) -> Unit = {},
     onFeeRateChange: (Double?) -> Unit = {},
 ) {
@@ -134,9 +133,6 @@ fun SendScreen(
             selectedKeys = initialSelectedKeys
             if (step == SendStep.Utxos) stepName = SendStep.Details.name
         }
-    }
-    LaunchedEffect(broadcast.phase, broadcast.txHex) {
-        if (broadcast.phase == "success") onBroadcastSuccess()
     }
 
     fun applySendPayload(payload: String) {
@@ -282,6 +278,7 @@ fun SendScreen(
                                 privateSend = privateSend,
                                 invalid = invalidField,
                                 feeError = feeError,
+                                costLine = selectionCostLine(snap.utxos, selectedKeys, parseFeeRateSatPerVb(feeRate)),
                             ),
                         onEvent = handler@{ event ->
                             when (event) {
@@ -555,6 +552,7 @@ private data class DetailsForm(
     val privateSend: Boolean,
     val invalid: SendField?,
     val feeError: String?,
+    val costLine: String? = null,
 )
 
 @Composable
@@ -594,16 +592,7 @@ private fun DetailsStep(
             label = { Text("Payment label") },
             placeholder = { Text("groceries") },
         )
-        OutlinedTextField(
-            value = form.feeRate,
-            onValueChange = { onEvent(DetailsEvent.FeeRate(it)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            isError = form.invalid == SendField.FeeRate || form.feeError != null,
-            label = { Text("Fee rate (sat/vB)") },
-            placeholder = { Text("1") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        )
+        FeeRateField(form = form, onEvent = onEvent)
         if (form.feeError != null) {
             Text(form.feeError, color = BwColors.Danger, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
             if (isInsufficientSelectionError(form.feeError)) {
@@ -617,6 +606,26 @@ private fun DetailsStep(
         PrivateSendRow(checked = form.privateSend, onChecked = { onEvent(DetailsEvent.PrivateSend(it)) })
         PillButton(text = "Choose coins", onClick = { onEvent(DetailsEvent.ChooseCoins) }, modifier = Modifier.fillMaxWidth())
         PillButton(text = "Continue", onClick = { onEvent(DetailsEvent.Continue) }, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun FeeRateField(
+    form: DetailsForm,
+    onEvent: (DetailsEvent) -> Unit,
+) {
+    OutlinedTextField(
+        value = form.feeRate,
+        onValueChange = { onEvent(DetailsEvent.FeeRate(it)) },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        isError = form.invalid == SendField.FeeRate || form.feeError != null,
+        label = { Text("Fee rate (sat/vB)") },
+        placeholder = { Text("1") },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+    )
+    if (form.costLine != null) {
+        Text(form.costLine, color = BwColors.Warning, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
     }
 }
 

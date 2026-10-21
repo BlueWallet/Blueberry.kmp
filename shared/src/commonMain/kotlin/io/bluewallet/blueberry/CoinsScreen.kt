@@ -390,16 +390,15 @@ private fun CoinWeightBar(
     selectedKeys: Set<String>,
     modifier: Modifier = Modifier,
 ) {
-    val total = coins.sumOf { it.valueSats }.coerceAtLeast(1L)
     val hasSelection = selectedKeys.isNotEmpty()
     Canvas(modifier = modifier.clip(RoundedCornerShape(8.dp))) {
-        val gap = 2.dp.toPx()
-        val minW = 3.dp.toPx()
-        val usable = (size.width - gap * (coins.size - 1).coerceAtLeast(0)).coerceAtLeast(0f)
+        val gaps = (coins.size - 1).coerceAtLeast(0)
+        val gap = if (gaps == 0) 0f else minOf(2.dp.toPx(), size.width / 2f / gaps)
+        val usable = (size.width - gap * gaps).coerceAtLeast(0f)
+        val widths = coinWeightBarWidths(coins.map { it.valueSats }, usable, 3.dp.toPx())
         var x = 0f
         for ((index, coin) in coins.withIndex()) {
-            val frac = coin.valueSats.toFloat() / total.toFloat()
-            val w = (usable * frac).coerceAtLeast(minW)
+            val w = widths[index]
             val alpha = if (!hasSelection || coin.key in selectedKeys) 1f else 0.28f
             drawRoundRect(
                 color = Color(coin.colorArgb).copy(alpha = alpha),
@@ -481,12 +480,7 @@ private fun CoinGroupSection(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text =
-                        when {
-                            !group.linked -> "No shared history, keep them apart"
-                            group.provable -> "Already linked on-chain"
-                            else -> "Probably linked through change"
-                        },
+                    text = coinGroupSubtitle(group),
                     color = BwColors.InkSecondary,
                     fontFamily = BwFontFamily,
                     fontSize = 13.sp,

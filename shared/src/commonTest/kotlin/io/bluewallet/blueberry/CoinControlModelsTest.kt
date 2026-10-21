@@ -88,11 +88,69 @@ class CoinControlModelsTest {
     }
 
     @Test
-    fun filter_leaving_one_coin_of_a_group_is_not_linked() {
+    fun filter_leaving_one_coin_of_a_group_keeps_its_link() {
         val labeled = filterCoinControlGroups(fixtureSnapshot(), CoinControlFilter.Labeled)
         val fromA = labeled.first { it.groupId == "group-A" }
         assertEquals(listOf("c1:0"), fromA.coins.map { it.key })
-        assertFalse(fromA.linked)
+        assertTrue(fromA.linked)
+        assertTrue(fromA.provable)
+        assertEquals(2, fromA.hiddenCount)
+        assertEquals("Already linked on-chain, 2 more coins filtered out", coinGroupSubtitle(fromA))
+    }
+
+    @Test
+    fun filter_leaving_one_guessed_coin_says_probably() {
+        val snap = fixtureSnapshot(certainOverride = mapOf("c1:0" to "c1:0"))
+        val fromA = filterCoinControlGroups(snap, CoinControlFilter.Labeled).first { it.groupId == "group-A" }
+        assertTrue(fromA.linked)
+        assertFalse(fromA.provable)
+        assertEquals("Probably linked through change, 2 more coins filtered out", coinGroupSubtitle(fromA))
+    }
+
+    @Test
+    fun accessibility_label_separates_provable_from_guessed_groups() {
+        val snap = fixtureSnapshot(certainOverride = mapOf("c3:0" to "c3:0"))
+        val label = coinControlAccessibilityLabel(snap.coins.size, snap.groups.filter { it.linked }, snap.soloCount)
+        assertEquals(
+            "11 coins. 1 group linked on-chain, of 3 coins, 1 group probably linked through change, of 2 coins, " +
+                "6 independent. Opens coin control.",
+            label,
+        )
+    }
+
+    @Test
+    fun weight_bar_widths_fit_the_track() {
+        val values = listOf(1_000_000L) + List(40) { 1L }
+        val widths = coinWeightBarWidths(values, usable = 200f, minWidth = 3f)
+        assertEquals(200f, widths.sum(), 0.01f)
+        assertTrue(widths.all { it >= 3f - 0.001f })
+        assertEquals(80f, widths.first(), 0.01f)
+        val crowded = coinWeightBarWidths(List(100) { 5L }, usable = 200f, minWidth = 3f)
+        assertEquals(200f, crowded.sum(), 0.01f)
+    }
+
+    @Test
+    fun selection_cost_line_uses_typed_fee() {
+        val utxo =
+            WalletUtxoRow(
+                key = "d:0",
+                txid = "dd",
+                vout = 0,
+                outpointShort = "d",
+                valueSats = 1_043,
+                scriptPubKey = ByteArray(22) { if (it == 1) 0x14 else 0x01 }.also { it[0] = 0x00 },
+                amountLabel = "",
+                height = 1,
+                ageLabel = "1d",
+                valueBar = "",
+                name = null,
+                isChange = false,
+            )
+        assertNull(selectionCostLine(listOf(utxo), setOf("d:0"), null))
+        assertEquals(
+            "1 coin costs about 680 sats to spend, 65% of its value.",
+            selectionCostLine(listOf(utxo), setOf("d:0"), 10.0),
+        )
     }
 
     @Test
