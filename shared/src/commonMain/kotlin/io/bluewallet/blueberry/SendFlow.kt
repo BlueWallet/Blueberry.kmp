@@ -27,6 +27,14 @@ import kotlin.random.Random
 
 internal enum class SendStep { Address, Amount, Coins, Review, PrivateSend, Psbt, Broadcast }
 
+/** Coins chosen in coin control before Send skip the coin step while they still cover the payment. */
+internal fun stepAfterAmount(
+    selectedKeys: Set<String>,
+    covered: Boolean,
+): SendStep = if (selectedKeys.isNotEmpty() && covered) SendStep.Review else SendStep.Coins
+
+private const val FROZEN_OR_GONE_ERROR = "Some selected coins are frozen or no longer available. Review the selection."
+
 internal class SentSend(
     val signed: SignedSendResult,
     val inputs: List<SendInputUtxo>,
@@ -43,6 +51,7 @@ internal class SendFlow(
     val db: Database,
     private val scope: CoroutineScope,
     private val close: () -> Unit,
+    initialSelectedKeys: Set<String> = emptySet(),
 ) {
     val wallet: Wallet? get() = runtime.wallet
     val seed = Random.nextLong()
@@ -51,7 +60,10 @@ internal class SendFlow(
     var label by mutableStateOf("")
     var labelError by mutableStateOf(false)
     var amount by mutableStateOf("")
-    var selectedKeys by mutableStateOf(setOf<String>())
+    var selectedKeys by mutableStateOf(initialSelectedKeys)
+
+    /** True when Review was reached straight from Amount, so Back skips the coin step too. */
+    private var skippedCoins = false
     var feeRate by mutableStateOf(loadSendFeeRate(db))
     var feeSheetOpen by mutableStateOf(false)
     var feeDraft by mutableStateOf("")
@@ -71,9 +83,10 @@ internal class SendFlow(
             ?.let { "Needs a wallet that can sign." }
 
     val recipient: SendRecipient get() = SendRecipient(address.trim(), label.trim())
-    val walletTotalSats: Long get() = snap.utxos.sumOf { it.valueSats }
+    val spendableRows: List<WalletUtxoRow> get() = snap.utxos.filter { !it.isFrozen }
+    val walletTotalSats: Long get() = spendableRows.sumOf { it.valueSats }
     val amountSats: SendAmount? get() = (checkSendAmount(amount, walletTotalSats) as? SendAmountCheck.Ok)?.amount
-    val selectedRows: List<WalletUtxoRow> get() = snap.utxos.filter { it.key in selectedKeys }
+    val selectedRows: List<WalletUtxoRow> get() = spendableRows.filter { it.key in selectedKeys }
     val selectedInputs: List<SendInputUtxo>
         get() = selectedRows.map { SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey) }
     private val toScript: ByteArray? get() = runCatching { outputScriptFromAddress(recipient.address) }.getOrNull()
@@ -103,12 +116,12 @@ internal class SendFlow(
         val rate = feeRate
         val w = runtime.wallet
         val amt = amountSats
-        if (rate == null || amt == null) {
-            build = ReviewBuild.Idle
+        if (rate == null || amt == null || w == null) {
+            build = if (rate == null || amt == null) ReviewBuild.Idle else ReviewBuild.Failed("Wallet isn't loaded yet.")
             return
         }
-        if (w == null) {
-            build = ReviewBuild.Failed("Wallet isn't loaded yet.")
+        if (!selectionSpendable()) {
+            build = ReviewBuild.Failed(FROZEN_OR_GONE_ERROR)
             return
         }
         val params = SendBuildParams(selectedInputs, recipient.address, amt, rate)
@@ -120,6 +133,12 @@ internal class SendFlow(
                 if (it is CancellationException) throw it
                 ReviewBuild.Failed(it.message ?: it.toString())
             }
+    }
+
+    /** The persisted freeze list wins over a stale snapshot row. */
+    private suspend fun selectionSpendable(): Boolean {
+        val storedFrozen = withContext(Dispatchers.Default) { db.utxoFrozen.list().toSet() }
+        return spendableSelectedKeys(snap.utxos, selectedKeys, storedFrozen).size == selectedKeys.size
     }
 
     fun applyPayload(payload: String) {
@@ -141,7 +160,23 @@ internal class SendFlow(
         }
     }
 
+    fun continueFromAmount() {
+        if (amountSats == null) return
+        val next = stepAfterAmount(selectedKeys, coverage().covered)
+        skippedCoins = next == SendStep.Review
+        step = next
+    }
+
+    /** Keeps the selection to coins the wallet still holds and can spend. */
+    fun updateSnap(next: WalletTxsSnapshot) {
+        snap = next
+        val spendable = spendableRows.map { it.key }.toSet()
+        val kept = selectedKeys.intersect(spendable)
+        if (kept != selectedKeys) selectedKeys = kept
+    }
+
     fun toggleCoin(key: String) {
+        if (spendableRows.none { it.key == key }) return
         selectedKeys = if (key in selectedKeys) selectedKeys - key else selectedKeys + key
     }
 
@@ -157,6 +192,7 @@ internal class SendFlow(
 
     fun addCoins() {
         feeSheetOpen = false
+        skippedCoins = false
         step = SendStep.Coins
     }
 
@@ -268,7 +304,7 @@ internal class SendFlow(
             SendStep.Address -> close()
             SendStep.Amount -> step = SendStep.Address
             SendStep.Coins -> step = SendStep.Amount
-            SendStep.Review -> step = SendStep.Coins
+            SendStep.Review -> step = if (skippedCoins) SendStep.Amount else SendStep.Coins
             SendStep.PrivateSend -> {
                 privateSigned = null
                 step = SendStep.Review

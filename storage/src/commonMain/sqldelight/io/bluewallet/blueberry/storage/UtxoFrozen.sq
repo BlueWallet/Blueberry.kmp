@@ -1,0 +1,11 @@
+get:
+SELECT outpoint FROM utxo_frozen WHERE outpoint = ?;
+
+upsert:
+INSERT OR IGNORE INTO utxo_frozen(outpoint) VALUES (?);
+
+delete:
+DELETE FROM utxo_frozen WHERE outpoint = ?;
+
+list:
+SELECT outpoint FROM utxo_frozen ORDER BY outpoint;

@@ -1,51 +1,35 @@
 package io.bluewallet.blueberry
 
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import io.bluewallet.blueberry.wallet.sha256Hex
-import kotlin.math.min
 
-/** First 6 hex chars of SHA-256(outpoint). The circle color is this hue, tamed. */
+/**
+ * Spec coin palette (11). Assigned by [utxoCirclePaletteIndex] so a coin keeps
+ * the same color across screens and launches.
+ */
+internal val UtxoCirclePaletteArgb: LongArray =
+    longArrayOf(
+        0xFF7E4F8AL,
+        0xFF4E8064L,
+        0xFF4A7D73L,
+        0xFF77723FL,
+        0xFF8C5070L,
+        0xFF7C4F78L,
+        0xFF4B7B74L,
+        0xFF8A5450L,
+        0xFF7F7E52L,
+        0xFF4F8263L,
+        0xFF7C4E8EL,
+    )
+
+/** First 6 hex chars of SHA-256(outpoint). Used as a stable hash seed. */
 fun utxoCircleRgbHex(outpoint: String): String = sha256Hex(outpoint.encodeToByteArray()).take(6)
 
-/** Hue from the outpoint, held to a muted mid lightness so it sits on the dark cards. */
-fun utxoCircleArgb(outpoint: String): Long {
-    val rgb = utxoCircleRgbHex(outpoint).toInt(16)
-    val hue = rgbHueDegrees((rgb shr 16) and 0xFF, (rgb shr 8) and 0xFF, rgb and 0xFF)
-    return Color.hsl(hue, saturation = 0.22f, lightness = 0.38f).toArgb().toLong() and 0xFFFFFFFFL
+/** Palette index in `0 until 11` from a hash of [outpoint]. */
+fun utxoCirclePaletteIndex(outpoint: String): Int {
+    val hex = sha256Hex(outpoint.encodeToByteArray())
+    val n = hex.take(8).toLong(16)
+    return (n % UtxoCirclePaletteArgb.size).toInt()
 }
 
-private fun rgbHueDegrees(
-    r: Int,
-    g: Int,
-    b: Int,
-): Float {
-    val max = maxOf(r, g, b)
-    val delta = (max - minOf(r, g, b)).toFloat()
-    if (delta == 0f) return 0f
-    val sector =
-        when (max) {
-            r -> (g - b) / delta + if (g < b) 6f else 0f
-            g -> (b - r) / delta + 2f
-            else -> (r - g) / delta + 4f
-        }
-    return sector * 60f
-}
-
-fun visibleUtxoCircleCount(
-    total: Int,
-    maxFit: Int,
-): Int {
-    if (total <= 0 || maxFit <= 0) return 0
-    return min(total, maxFit)
-}
-
-/** How many overlapping circles of [diameter] stepping by [step] fit in [available]. */
-fun maxUtxoCirclesThatFit(
-    available: Float,
-    diameter: Float,
-    step: Float,
-): Int {
-    if (available < diameter || diameter <= 0f || step <= 0f) return 0
-    return 1 + ((available - diameter) / step).toInt()
-}
+/** Spec coin color for [outpoint]: palette[hash mod 11]. */
+fun utxoCircleArgb(outpoint: String): Long = UtxoCirclePaletteArgb[utxoCirclePaletteIndex(outpoint)]

@@ -2,7 +2,9 @@ package io.bluewallet.blueberry.ui
 
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -63,7 +65,12 @@ internal fun IosGlassSymbolButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    val latestOnClick by rememberUpdatedState(onClick)
+    val latestEnabled by rememberUpdatedState(enabled)
     val action = remember { BackAction() }
+    action.fire = {
+        if (latestEnabled) latestOnClick()
+    }
     UIKitView(
         factory = {
             val configuration = UIButtonConfiguration.glassButtonConfiguration()
@@ -71,7 +78,7 @@ internal fun IosGlassSymbolButton(
             val button =
                 UIButton.buttonWithConfiguration(
                     configuration,
-                    UIAction.actionWithHandler { action.onClick() },
+                    UIAction.actionWithHandler { action.fire() },
                 )
             button.backgroundColor = UIColor.clearColor
             button
@@ -85,12 +92,11 @@ internal fun IosGlassSymbolButton(
                     role = Role.Button
                     if (!enabled) disabled()
                     onClick {
-                        if (enabled) action.onClick()
+                        action.fire()
                         enabled
                     }
                 },
         update = { button ->
-            action.onClick = onClick
             button.enabled = enabled
         },
         properties = UIKitInteropProperties(placedAsOverlay = true),
@@ -98,5 +104,5 @@ internal fun IosGlassSymbolButton(
 }
 
 private class BackAction {
-    var onClick: () -> Unit = {}
+    var fire: () -> Unit = {}
 }

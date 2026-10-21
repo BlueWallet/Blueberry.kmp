@@ -44,7 +44,7 @@ object BwPalette {
         val Card = Color(0xFFFFFFFF)
         val Section = Color(0xFFF9F9F9)
         val InputFill = Color(0xFFF0F2F5)
-        val Ink = Color(0xFF0C2550)
+        val Ink = Color(0xFF000000)
         val InkSecondary = Color(0xFF81868E)
         val InkMuted = Color(0xFF9AA0AA)
         val InkQuiet = Color(0xFF5F6670)

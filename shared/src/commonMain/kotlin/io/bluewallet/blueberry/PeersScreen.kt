@@ -62,7 +62,6 @@ import io.bluewallet.blueberry.ui.LocalDarkPalette
 import io.bluewallet.blueberry.ui.PlatformScrollEdge
 import io.bluewallet.blueberry.ui.alwaysBounceTail
 import io.bluewallet.blueberry.ui.dither.DitherSyncGlow
-import io.bluewallet.blueberry.ui.platformBottomEdgeClearance
 import io.bluewallet.blueberry.ui.platformHeaderClearance
 import io.bluewallet.blueberry.ui.rememberReducedMotion
 import kotlinx.coroutines.delay
@@ -179,12 +178,6 @@ fun PeersScreen(
     val glowActive = !dockIdle && !detailedSync
     // Nothing covers home: no pushed screen and no sync sheet.
     val homeInFront = homeVisible && !detailedSync
-    val bottomEdge =
-        if (glowActive) {
-            0.dp
-        } else {
-            (HomeSyncDockBottomInset - platformBottomEdgeClearance()).coerceAtLeast(0.dp)
-        }
     val hazeState = rememberHazeState()
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -207,8 +200,9 @@ fun PeersScreen(
             PlatformScrollEdge(
                 modifier = Modifier.fillMaxSize(),
                 top = topChrome,
-                bottom = bottomEdge,
-                // iOS edge blurs are UIKit overlays; drop them under the sync scrim and pushed screens.
+                // iOS bottom edge is a fixed 40 dp 60%→0% scrim (ignores this value).
+                bottom = HomeSyncDockBottomInset,
+                // iOS edge overlays; drop them under the sync scrim and pushed screens.
                 showEdges = homeInFront,
             ) {
                 val dockVisible = showDock && !detailedSync
@@ -293,7 +287,8 @@ fun PeersScreen(
             )
         }
         AnimatedVisibility(
-            visible = !detailedSync && showDock,
+            // Keep dock UIKit/Compose chrome off-screen while a pushed route covers home.
+            visible = homeVisible && !detailedSync && showDock,
             modifier = Modifier.align(Alignment.BottomCenter),
             enter =
                 fadeIn(animationSpec = tween(200)) +
@@ -363,7 +358,7 @@ private fun HomePinnedChrome(
         HomeActionRow(onReceive = onOpenReceive, onSend = onOpenSend)
         Column {
             HomeSectionLabel("Coins")
-            CoinsPanel(utxos = walletTxs.utxos, onClick = onOpenCoins)
+            CoinsPanel(snap = walletTxs, onClick = onOpenCoins)
         }
         Column {
             HomeSectionLabel("Transactions")

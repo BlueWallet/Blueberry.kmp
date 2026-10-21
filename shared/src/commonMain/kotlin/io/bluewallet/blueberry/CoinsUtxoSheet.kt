@@ -36,12 +36,14 @@ import io.bluewallet.blueberry.ui.NavArrowDirection
 import io.bluewallet.blueberry.ui.PillButton
 
 @Composable
+@Suppress("LongParameterList")
 fun CoinsUtxoSheet(
     row: CoinsRowModel,
     draft: String,
     onDraft: (String) -> Unit,
     onCopy: (String) -> Unit,
     onDone: (save: Boolean) -> Unit,
+    onToggleFrozen: ((Boolean) -> Unit)? = null,
 ) {
     var copiedField by remember(row.key) { mutableStateOf<String?>(null) }
     val shape = RoundedCornerShape(28.dp)
@@ -92,6 +94,13 @@ fun CoinsUtxoSheet(
         }
         CoinsUtxoSheetLabel(draft = draft, onDraft = onDraft)
         PillButton(text = "Save", onClick = { onDone(true) }, modifier = Modifier.fillMaxWidth())
+        if (onToggleFrozen != null) {
+            PillButton(
+                text = if (row.isFrozen) "Unfreeze" else "Freeze",
+                onClick = { onToggleFrozen(!row.isFrozen) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 

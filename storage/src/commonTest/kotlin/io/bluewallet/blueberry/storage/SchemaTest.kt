@@ -28,6 +28,7 @@ class SchemaTest {
                     "sends",
                     "transactions",
                     "tx_payment_labels",
+                    "utxo_frozen",
                     "utxo_names",
                 ),
                 tableNames(driver),
@@ -77,6 +78,7 @@ class SchemaTest {
             )
             assertEquals(listOf("key", "value"), columnNames(driver, "key_value"))
             assertEquals(listOf("outpoint", "name"), columnNames(driver, "utxo_names"))
+            assertEquals(listOf("outpoint"), columnNames(driver, "utxo_frozen"))
             assertEquals(listOf("txid", "label"), columnNames(driver, "tx_payment_labels"))
             assertEquals(listOf("address", "label"), columnNames(driver, "address_labels"))
             assertEquals(

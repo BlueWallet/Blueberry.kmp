@@ -66,6 +66,10 @@ CREATE TABLE IF NOT EXISTS utxo_names (
   name TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS utxo_frozen (
+  outpoint TEXT PRIMARY KEY
+);
+
 CREATE TABLE IF NOT EXISTS tx_payment_labels (
   txid TEXT PRIMARY KEY,
   label TEXT NOT NULL

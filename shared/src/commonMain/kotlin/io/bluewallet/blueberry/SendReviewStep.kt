@@ -111,7 +111,7 @@ internal fun SendReviewStep(
         Box(modifier = Modifier.alpha(if (summary == null) 0.4f else 1f)) {
             AmountHero(sats = summary?.paidSats ?: (state.amount as? SendAmount.Exact)?.sats ?: 0L)
         }
-        if (summary != null) CoinsMoveCard(summary)
+        if (summary != null) CoinsMoveCard(summary, onChangeCoins = actions.onAddCoins)
         FeeCard(state = state, summary = summary, actions = actions)
         val warning = summary?.let { feeShareWarning(it.feeSats, it.paidSats) }
         if (warning != null) {
@@ -140,7 +140,10 @@ internal fun SendReviewStep(
 }
 
 @Composable
-private fun CoinsMoveCard(summary: TxSummary) {
+private fun CoinsMoveCard(
+    summary: TxSummary,
+    onChangeCoins: () -> Unit,
+) {
     val description =
         "Spends ${summary.inputs.size} coins totaling ${formatBtc(summary.inputs.sumOf { it.valueSats })}. " +
             summary.outputs.joinToString(" ") { "${it.label}: ${formatBtc(it.sats)}." }
@@ -154,7 +157,10 @@ private fun CoinsMoveCard(summary: TxSummary) {
                 fontSize = BwType.LabelSize,
             )
         }
-        SectionLabel("From your coins")
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel("From your coins", Modifier.weight(1f))
+            TextAction(text = "Change coins", onClick = onChangeCoins)
+        }
         for (input in summary.inputs) {
             SummaryLine(sats = input.valueSats, label = input.title, dot = { CoinDot(input.argb) })
         }
@@ -209,7 +215,10 @@ private fun FeeCard(
                 HelperText("These coins are short at this rate.", error = true)
                 TextAction(text = "Add coins", onClick = actions.onAddCoins)
             }
-            state.build is ReviewBuild.Failed -> HelperText(state.build.message, error = true)
+            state.build is ReviewBuild.Failed -> {
+                HelperText(state.build.message, error = true)
+                TextAction(text = "Change coins", onClick = actions.onAddCoins)
+            }
         }
         HelperText("Check a fee source you trust. 1 sat/vB can take days.")
         if (summary != null) {
@@ -302,6 +311,9 @@ internal fun CardTitle(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(text = text, color = BwColors.InkQuiet, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
+private fun SectionLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(text = text, modifier = modifier, color = BwColors.InkQuiet, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
 }

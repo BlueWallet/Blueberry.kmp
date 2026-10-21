@@ -3,8 +3,10 @@ package io.bluewallet.blueberry
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.MessageBus
 import io.bluewallet.blueberry.headers.nowMillis
+import io.bluewallet.blueberry.parse.CoinLinkage
 import io.bluewallet.blueberry.parse.TxFee
 import io.bluewallet.blueberry.parse.TxRow
+import io.bluewallet.blueberry.parse.computeCoinLinkage
 import io.bluewallet.blueberry.parse.firstAddressLabel
 import io.bluewallet.blueberry.parse.firstUtxoLabelByTxid
 import io.bluewallet.blueberry.parse.formatBlockTimeLabel
@@ -19,6 +21,7 @@ import io.bluewallet.blueberry.parse.shortTxid
 import io.bluewallet.blueberry.parse.utxoValueBar
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
+import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.hexToBytes
 import io.bluewallet.headers.decodeBlockHeader
@@ -56,6 +59,7 @@ data class WalletUtxoRow(
     val valueBar: String,
     val name: String?,
     val isChange: Boolean,
+    val isFrozen: Boolean = false,
 )
 
 data class WalletTxsSnapshot(
@@ -68,12 +72,21 @@ data class WalletTxsSnapshot(
     val txs: List<WalletTxRow> = emptyList(),
     val utxos: List<WalletUtxoRow> = emptyList(),
     val utxosReady: Boolean = false,
+    /** Unspent outpoint → likely linkage group id (includes guessed change); empty until a wallet is present. */
+    val coinGroupIds: Map<String, String> = emptyMap(),
+    /** Unspent outpoint → group id from provable links only (common inputs, address reuse). */
+    val coinCertainGroupIds: Map<String, String> = emptyMap(),
+    /** History the linkage was computed from; see [linkageFingerprint]. */
+    val linkageFingerprint: Long = 0L,
 )
 
 interface WalletTxsStore {
     fun get(): WalletTxsSnapshot
 
     fun apply(snapshot: WalletTxsSnapshot)
+
+    /** Install [transform] of the latest snapshot; re-run if another write lands first. */
+    fun update(transform: (WalletTxsSnapshot) -> WalletTxsSnapshot)
 
     fun setBlockCounts(
         parsed: Int,
@@ -278,11 +291,145 @@ private fun pendingWalletTxRow(
         privateSend = row.privateSend,
     )
 
+private class WalletCoins(
+    val utxos: List<WalletUtxoRow>,
+    val fees: Map<String, TxFee>,
+    val linkage: CoinLinkage,
+    val fingerprint: Long,
+) {
+    companion object {
+        val None = WalletCoins(emptyList(), emptyMap(), CoinLinkage(emptyMap(), emptyMap()), 0L)
+    }
+}
+
+private class CoinRowCtx(
+    val db: Database,
+    val nowMs: Long,
+    val timeLabels: MutableMap<Int, HeightTimeLabel>,
+    val nameByOutpoint: Map<String, String>,
+    val frozenOutpoints: Set<String>,
+)
+
+private fun walletCoins(
+    wallet: Wallet,
+    stored: List<StoredTx>,
+    ctx: CoinRowCtx,
+    cachedLinkage: LinkageCache?,
+): WalletCoins {
+    wallet.syncFromDb()
+    val txRows = stored.map { TxRow(it.txid, it.height, it.txIndex, it.tx) }
+    val scripts = wallet.scripts()
+    val scan = scanWatchTxs(txRows, scripts)
+    val watched = wallet.snapshot().addresses
+    val watchByScript = watched.associateBy { scriptHex(it.scriptPubKey) }
+    val changeScripts = watched.filter { it.change }.map { it.scriptPubKey }
+    val map = scan.utxos
+    val fingerprint = linkageFingerprint(stored, scripts.size)
+    val linkage =
+        cachedLinkage
+            ?.takeIf { it.fingerprint == fingerprint }
+            ?.linkage
+            ?.takeIf { it.likely.keys == map.keys && it.certain.keys == map.keys }
+            ?: computeCoinLinkage(txRows, scripts, changeScripts)
+    val maxValue = map.values.maxOfOrNull { it.value } ?: 0L
+    val utxos =
+        map.entries
+            .map { (key, u) ->
+                val (txid, vout) = parseOutpointKey(key)
+                val height = u.height ?: 0
+                val watch = watchByScript[scriptHex(u.scriptPubKey)]
+                val confirmedAt =
+                    if (height == 0) {
+                        null
+                    } else {
+                        timeLabelForHeight(ctx.db, height, ctx.nowMs, ctx.timeLabels).unixSeconds
+                    }
+                WalletUtxoRow(
+                    key = key,
+                    txid = txid,
+                    vout = vout,
+                    outpointShort = shortOutpoint(txid, vout),
+                    valueSats = u.value,
+                    scriptPubKey = u.scriptPubKey,
+                    address = watch?.address,
+                    path = watch?.path,
+                    amountLabel = formatBtc(u.value),
+                    height = height,
+                    ageLabel = formatCoinAgeFromConfirmedAt(confirmedAt, ctx.nowMs / 1000),
+                    valueBar = utxoValueBar(u.value, maxValue),
+                    name = ctx.nameByOutpoint[key],
+                    isChange = changeScripts.any { it.contentEquals(u.scriptPubKey) },
+                    isFrozen = key in ctx.frozenOutpoints,
+                )
+            }.sortedWith(
+                compareByDescending<WalletUtxoRow> { it.height }
+                    .thenBy { it.txid }
+                    .thenBy { it.vout },
+            )
+    return WalletCoins(utxos, scan.fees, linkage, fingerprint)
+}
+
+private fun confirmedTxRow(
+    tx: StoredTx,
+    whenLabel: HeightTimeLabel,
+    labels: TxRowLabels,
+    privateSend: Boolean,
+    fee: TxFee?,
+): WalletTxRow =
+    WalletTxRow(
+        txid = tx.txid,
+        shortTxid = shortTxid(tx.txid),
+        height = tx.height,
+        timeLabel = whenLabel.label,
+        blockTimeS = whenLabel.unixSeconds,
+        netDeltaSats = tx.netDeltaSats,
+        netDeltaLabel = formatNetDelta(tx.netDeltaSats),
+        paymentLabel = labels.noteByTxid[tx.txid],
+        utxoLabel = labels.utxoByTxid[tx.txid],
+        addressLabel = labels.address(tx.tx),
+        privateSend = privateSend,
+        fee = fee,
+    )
+
+/** Linkage computed for one exact history; reused only while that history is unchanged. */
+class LinkageCache(
+    val linkage: CoinLinkage,
+    val fingerprint: Long,
+)
+
+/** Linkage already in this snapshot; label and note edits leave it unchanged. */
+internal fun WalletTxsSnapshot.linkageCache(): LinkageCache = LinkageCache(CoinLinkage(certain = coinCertainGroupIds, likely = coinGroupIds), linkageFingerprint)
+
+private const val FNV64_OFFSET = -0x340d631b7bdddcdbL
+private const val FNV64_PRIME = 0x100000001b3L
+
+/**
+ * 64-bit FNV-1a over every input of [computeCoinLinkage] that can move a coin between groups:
+ * each stored tx with its height and block position (linkage walks them in that order), and the
+ * watched script set, whose growth can turn a foreign output into ours.
+ */
+internal fun linkageFingerprint(
+    stored: List<StoredTx>,
+    watchScriptCount: Int,
+): Long {
+    var h = FNV64_OFFSET
+
+    fun mix(s: String) {
+        for (c in s) h = (h xor c.code.toLong()) * FNV64_PRIME
+    }
+    for (tx in stored.sortedWith(compareBy({ it.height }, { it.txIndex }, { it.txid }))) {
+        mix("${tx.txid}:${tx.height}:${tx.txIndex};")
+    }
+    mix("scripts:$watchScriptCount")
+    return h
+}
+
 fun snapshotFromDb(
     db: Database,
     at: Long,
     nowMs: Long = nowMillis(),
     wallet: Wallet? = null,
+    cachedLinkage: LinkageCache? = null,
 ): WalletTxsSnapshot {
     val stored = db.transactions.list()
     val balanceSats = stored.fold(0L) { s, t -> s + t.netDeltaSats }
@@ -293,6 +440,7 @@ fun snapshotFromDb(
             .map { it.txid }
             .toSet()
     val nameByOutpoint = db.utxoNames.list().associate { it.outpoint to it.name }
+    val frozenOutpoints = db.utxoFrozen.list().toSet()
     val labels =
         TxRowLabels(
             noteByTxid = db.txPaymentLabels.list().associate { it.txid to it.label },
@@ -300,70 +448,16 @@ fun snapshotFromDb(
             byAddress = db.addressLabels.list().associate { it.address to it.label },
         )
 
-    var utxos = emptyList<WalletUtxoRow>()
-    var fees = emptyMap<String, TxFee>()
-    if (wallet != null) {
-        wallet.syncFromDb()
-        val scan =
-            scanWatchTxs(
-                stored.map { TxRow(it.txid, it.height, it.txIndex, it.tx) },
-                wallet.scripts(),
-            )
-        fees = scan.fees
-        val map = scan.utxos
-        var maxValue = 0L
-        for (u in map.values) {
-            if (u.value > maxValue) maxValue = u.value
-        }
-        val watched = wallet.snapshot().addresses
-        val watchByScript = watched.associateBy { scriptHex(it.scriptPubKey) }
-        val changeScripts = watched.filter { it.change }.map { it.scriptPubKey }
-        utxos =
-            map.entries
-                .map { (key, u) ->
-                    val (txid, vout) = parseOutpointKey(key)
-                    val height = u.height ?: 0
-                    val watch = watchByScript[scriptHex(u.scriptPubKey)]
-                    WalletUtxoRow(
-                        key = key,
-                        txid = txid,
-                        vout = vout,
-                        outpointShort = shortOutpoint(txid, vout),
-                        valueSats = u.value,
-                        scriptPubKey = u.scriptPubKey,
-                        address = watch?.address,
-                        path = watch?.path,
-                        amountLabel = formatBtc(u.value),
-                        height = height,
-                        ageLabel = timeLabelForHeight(db, height, nowMs, timeLabels).label,
-                        valueBar = utxoValueBar(u.value, maxValue),
-                        name = nameByOutpoint[key],
-                        isChange = changeScripts.any { it.contentEquals(u.scriptPubKey) },
-                    )
-                }.sortedWith(
-                    compareByDescending<WalletUtxoRow> { it.height }
-                        .thenBy { it.txid }
-                        .thenBy { it.vout },
-                )
-    }
+    val coinCtx = CoinRowCtx(db, nowMs, timeLabels, nameByOutpoint, frozenOutpoints)
+    val coins = wallet?.let { walletCoins(it, stored, coinCtx, cachedLinkage) } ?: WalletCoins.None
+    val utxos = coins.utxos
+    val fees = coins.fees
+    val linkage = coins.linkage
 
     val confirmedTxs =
         stored.map { tx ->
             val whenLabel = timeLabelForHeight(db, tx.height, nowMs, timeLabels)
-            WalletTxRow(
-                txid = tx.txid,
-                shortTxid = shortTxid(tx.txid),
-                height = tx.height,
-                timeLabel = whenLabel.label,
-                blockTimeS = whenLabel.unixSeconds,
-                netDeltaSats = tx.netDeltaSats,
-                netDeltaLabel = formatNetDelta(tx.netDeltaSats),
-                paymentLabel = labels.noteByTxid[tx.txid],
-                utxoLabel = labels.utxoByTxid[tx.txid],
-                addressLabel = labels.address(tx.tx),
-                privateSend = tx.txid in privateSendTxids,
-                fee = fees[tx.txid],
-            )
+            confirmedTxRow(tx, whenLabel, labels, privateSend = tx.txid in privateSendTxids, fee = fees[tx.txid])
         }
     val pending =
         pendingSendRows(
@@ -387,8 +481,35 @@ fun snapshotFromDb(
         txs = pending + confirmedTxs,
         utxos = utxos,
         utxosReady = wallet != null,
+        coinGroupIds = linkage.likely,
+        coinCertainGroupIds = linkage.certain,
+        linkageFingerprint = coins.fingerprint,
     )
 }
+
+/**
+ * Re-read freeze flags, UTXO names, and payment notes onto [snap]. Run inside
+ * [WalletTxsStore.update] so a rebuild that started before an edit cannot install stale values.
+ */
+internal fun withStoredUtxoMeta(
+    db: Database,
+    snap: WalletTxsSnapshot,
+): WalletTxsSnapshot {
+    val nameByOutpoint = db.utxoNames.list().associate { it.outpoint to it.name }
+    val frozen = db.utxoFrozen.list().toSet()
+    val utxoLabelByTxid = firstUtxoLabelByTxid(nameByOutpoint)
+    val noteByTxid = db.txPaymentLabels.list().associate { it.txid to it.label }
+    return snap.copy(
+        utxos = snap.utxos.map { it.copy(name = nameByOutpoint[it.key], isFrozen = it.key in frozen) },
+        txs = snap.txs.map { it.copy(utxoLabel = utxoLabelByTxid[it.txid], paymentLabel = noteByTxid[it.txid]) },
+    )
+}
+
+/** Install a freshly built [snapshot] with the latest stored UTXO metadata. */
+fun WalletTxsStore.applyFromDb(
+    db: Database,
+    snapshot: WalletTxsSnapshot,
+) = update { withStoredUtxoMeta(db, snapshot) }
 
 @OptIn(ExperimentalAtomicApi::class)
 private class WalletTxsStoreImpl : WalletTxsStore {
@@ -464,46 +585,41 @@ private class WalletTxsStoreImpl : WalletTxsStore {
         }
     }
 
-    override fun apply(snapshot: WalletTxsSnapshot) {
+    override fun apply(snapshot: WalletTxsSnapshot) = update { snapshot }
+
+    override fun update(transform: (WalletTxsSnapshot) -> WalletTxsSnapshot) {
         while (true) {
             val cur = state.load()
-            if (!cur.parsingActive) {
-                val updated =
-                    WalletTxsState(
-                        snapshot = snapshot.copy(etaMs = null),
-                        parsingActive = false,
-                        samples = emptyList(),
-                    )
-                if (state.compareAndSet(cur, updated)) {
-                    emitChange()
-                    return
-                }
-                continue
-            }
-            val prev = cur.snapshot
-            if (snapshot.at == null) {
-                val updated = cur.copy(snapshot = snapshot.copy(etaMs = null), samples = emptyList())
-                if (state.compareAndSet(cur, updated)) {
-                    emitChange()
-                    return
-                }
-                continue
-            }
-            val nextSamples =
-                nextProgressSamples(
-                    cur.samples,
-                    prev.blocksParsed,
-                    prev.blocksTotal,
-                    snapshot.at,
-                    snapshot.blocksParsed,
-                    snapshot.blocksTotal,
-                )
-            val hasBacklog = snapshot.blocksTotal > snapshot.blocksParsed
-            val nextEta = if (hasBacklog) estimateEtaMs(nextSamples, snapshot.blocksTotal) else null
-            val updated = cur.copy(snapshot = snapshot.copy(etaMs = nextEta), samples = nextSamples)
-            if (state.compareAndSet(cur, updated)) {
+            if (state.compareAndSet(cur, nextState(cur, transform(cur.snapshot)))) {
                 emitChange()
                 return
+            }
+        }
+    }
+
+    private fun nextState(
+        cur: WalletTxsState,
+        snapshot: WalletTxsSnapshot,
+    ): WalletTxsState {
+        val at = snapshot.at
+        return when {
+            !cur.parsingActive ->
+                WalletTxsState(snapshot = snapshot.copy(etaMs = null), parsingActive = false, samples = emptyList())
+            at == null -> cur.copy(snapshot = snapshot.copy(etaMs = null), samples = emptyList())
+            else -> {
+                val prev = cur.snapshot
+                val nextSamples =
+                    nextProgressSamples(
+                        cur.samples,
+                        prev.blocksParsed,
+                        prev.blocksTotal,
+                        at,
+                        snapshot.blocksParsed,
+                        snapshot.blocksTotal,
+                    )
+                val hasBacklog = snapshot.blocksTotal > snapshot.blocksParsed
+                val nextEta = if (hasBacklog) estimateEtaMs(nextSamples, snapshot.blocksTotal) else null
+                cur.copy(snapshot = snapshot.copy(etaMs = nextEta), samples = nextSamples)
             }
         }
     }
@@ -574,7 +690,7 @@ fun hydrateWallet(
         store.setBlockCounts(parsed, total, at)
         return
     }
-    store.apply(snapshotFromDb(db, at, nowMillis(), wallet))
+    store.applyFromDb(db, snapshotFromDb(db, at, nowMillis(), wallet, snap.linkageCache()))
 }
 
 fun bindWalletTxsEvents(

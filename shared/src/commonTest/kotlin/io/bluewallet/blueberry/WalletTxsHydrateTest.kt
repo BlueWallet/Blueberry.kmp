@@ -13,6 +13,7 @@ import io.bluewallet.blueberry.bus.SyncCatchupReason
 import io.bluewallet.blueberry.bus.SyncIdlePayload
 import io.bluewallet.blueberry.bus.WalletTxsPayload
 import io.bluewallet.blueberry.bus.createMessageBus
+import io.bluewallet.blueberry.parse.CoinLinkage
 import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.storage.DownloadedBlock
 import io.bluewallet.blueberry.storage.HeaderWrite
@@ -32,6 +33,7 @@ import io.bluewallet.headers.encodeBlockHeader
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -472,5 +474,56 @@ class WalletTxsHydrateTest {
         assertEquals(-1_000L, snap.txs.single().netDeltaSats)
         assertEquals(0L, snap.balanceSats)
         db.close()
+    }
+
+    @Test
+    fun cached_linkage_is_reused_only_for_the_same_coin_set() {
+        val db = createSqliteDatabase(":memory:")
+        val secret =
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        saveWalletSecret(db, secret)
+        val wallet = createWallet(db)
+        val a = wallet.snapshot().addresses.first { !it.change && it.index == 0 }
+        val b = wallet.snapshot().addresses.first { !it.change && it.index == 1 }
+        val incoming =
+            Transaction(
+                2L,
+                listOf(TxIn(OutPoint(TxHash(ByteArray(32).also { it[0] = 9 }), 0L), 0xffffffffL)),
+                listOf(TxOut(Satoshi(30_000L), a.scriptPubKey), TxOut(Satoshi(20_000L), b.scriptPubKey)),
+                0L,
+            )
+        db.transactions.upsert(
+            StoredTx(incoming.txid.toString(), 100, 0, "11".repeat(32), Transaction.write(incoming), 50_000L),
+        )
+        val fresh = snapshotFromDb(db, 1, 1, wallet)
+        val keys = fresh.coinGroupIds.keys
+        assertEquals(2, keys.size)
+
+        val print = fresh.linkageFingerprint
+        val sentinel = CoinLinkage(certain = keys.associateWith { "cached" }, likely = keys.associateWith { "cached" })
+        val reused = snapshotFromDb(db, 2, 2, wallet, LinkageCache(sentinel, print))
+        assertEquals(keys.associateWith { "cached" }, reused.coinGroupIds)
+
+        fun assertRecomputed(cache: LinkageCache) {
+            val snap = snapshotFromDb(db, 3, 3, wallet, cache)
+            assertEquals(fresh.coinGroupIds, snap.coinGroupIds)
+            assertEquals(fresh.coinCertainGroupIds, snap.coinCertainGroupIds)
+        }
+        assertRecomputed(LinkageCache(CoinLinkage(mapOf("gone:0" to "x"), mapOf("gone:0" to "x")), print))
+        assertRecomputed(LinkageCache(CoinLinkage(certain = emptyMap(), likely = sentinel.likely), print))
+        assertRecomputed(LinkageCache(sentinel, print + 1))
+        db.close()
+    }
+
+    @Test
+    fun linkage_fingerprint_moves_with_height_order_and_scripts() {
+        val a = StoredTx("aa".repeat(32), 100, 0, "11".repeat(32), byteArrayOf(1), 1L)
+        val b = StoredTx("bb".repeat(32), 101, 0, "11".repeat(32), byteArrayOf(2), 1L)
+        val base = linkageFingerprint(listOf(a, b), watchScriptCount = 40)
+        assertEquals(base, linkageFingerprint(listOf(b, a), watchScriptCount = 40))
+        assertNotEquals(base, linkageFingerprint(listOf(a, b.copy(height = 99)), watchScriptCount = 40))
+        assertNotEquals(base, linkageFingerprint(listOf(a, b.copy(txIndex = 3)), watchScriptCount = 40))
+        assertNotEquals(base, linkageFingerprint(listOf(a), watchScriptCount = 40))
+        assertNotEquals(base, linkageFingerprint(listOf(a, b), watchScriptCount = 41))
     }
 }

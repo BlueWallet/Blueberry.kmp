@@ -1,5 +1,6 @@
 package io.bluewallet.blueberry.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -49,8 +51,19 @@ import platform.UIKit.UIImageView
 import platform.UIKit.UIView
 import platform.UIKit.UIVisualEffectView
 
+/** Extra soft length past the pinned chrome so scroll content eases under the bar. */
 private val TopFeather = 20.dp
 
+/** Bottom edge: linear black/white fade over this height. */
+internal val IosBottomEdgeFade = 40.dp
+
+/** Peak opacity at the bottom of [IosBottomEdgeFade], fading to 0 at the top of the band. */
+private const val BOTTOM_EDGE_FADE_PEAK_ALPHA = 0.60f
+
+/**
+ * Top: system blur under status / nav chrome.
+ * Bottom: Compose scrim (not a UIKit overlay) so docks and bottom bars paint above it.
+ */
 @Composable
 actual fun PlatformScrollEdge(
     modifier: Modifier,
@@ -59,26 +72,33 @@ actual fun PlatformScrollEdge(
     showEdges: Boolean,
     content: @Composable () -> Unit,
 ) {
+    val bottomFade =
+        when {
+            bottom == null -> null
+            bottom > 0.dp -> bottom
+            else -> IosBottomEdgeFade
+        }
     Box(modifier) {
         content()
         if (showEdges) {
             Box(Modifier.fillMaxSize()) {
-                FadeBlur(
-                    fadeFromTop = true,
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopCenter)
-                            .fillMaxWidth()
-                            .height(top + TopFeather),
-                )
-                if (bottom != null) {
+                if (top > 0.dp) {
                     FadeBlur(
-                        fadeFromTop = false,
+                        fadeFromTop = true,
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopCenter)
+                                .fillMaxWidth()
+                                .height(top + TopFeather),
+                    )
+                }
+                if (bottomFade != null) {
+                    EdgeFade(
                         modifier =
                             Modifier
                                 .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
-                                .height(bottom + IosBottomEdgeFeather),
+                                .height(bottomFade),
                     )
                 }
             }
@@ -107,8 +127,26 @@ actual fun PlatformBottomEdgeBlur(
 }
 
 /**
+ * Soft bottom scrim in Compose so sibling chrome (Send dock, coin-control bar) can
+ * stack above it. UIKit overlays paint over the whole window and covered those buttons.
+ */
+@Composable
+private fun EdgeFade(modifier: Modifier) {
+    val ink = if (LocalDarkPalette.current) Color.Black else Color.White
+    Box(
+        modifier =
+            modifier.background(
+                Brush.verticalGradient(
+                    0f to ink.copy(alpha = 0f),
+                    1f to ink.copy(alpha = BOTTOM_EDGE_FADE_PEAK_ALPHA),
+                ),
+            ),
+    )
+}
+
+/**
  * System blur, faded by a mask on the container. Masking the effect view itself
- * leaves a hard edge.
+ * leaves a hard edge. Used for the top chrome only.
  */
 @OptIn(ExperimentalForeignApi::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -129,6 +167,7 @@ private fun FadeBlur(
                 height = size.height / density.density.toDouble(),
             )
         },
+        // Overlay so UIVisualEffectView can sample Compose content behind it.
         properties =
             UIKitInteropProperties(
                 placedAsOverlay = true,
@@ -186,17 +225,16 @@ private class FadeBlurView(
         if (width == placedWidth && height == placedHeight) return
         placedWidth = width
         placedHeight = height
-        fadeMask.image = edgeFadeImage(width, height, fadeFromTop)
+        fadeMask.image = topEdgeFadeMask(width, height)
         fadeMask.setFrame(rect)
         maskView = fadeMask
     }
 }
 
 @OptIn(ExperimentalForeignApi::class)
-private fun edgeFadeImage(
+private fun topEdgeFadeMask(
     width: Double,
     height: Double,
-    fadeFromTop: Boolean,
 ): UIImage? {
     // 0.0 = device scale so the mask stays sharp on Retina.
     UIGraphicsBeginImageContextWithOptions(CGSizeMake(width, height), false, 0.0)
@@ -204,7 +242,7 @@ private fun edgeFadeImage(
     if (context != null) {
         memScoped {
             val components = allocArray<CGFloatVar>(12)
-            val alphas = if (fadeFromTop) doubleArrayOf(1.0, 1.0, 0.0) else doubleArrayOf(0.0, 1.0, 1.0)
+            val alphas = doubleArrayOf(1.0, 1.0, 0.0)
             alphas.forEachIndexed { index, alpha ->
                 val offset = index * 4
                 components[offset] = 1.0
@@ -214,7 +252,7 @@ private fun edgeFadeImage(
             }
             val locations = allocArray<CGFloatVar>(3)
             locations[0] = 0.0
-            locations[1] = if (fadeFromTop) 0.42 else 0.58
+            locations[1] = 0.42
             locations[2] = 1.0
             val gradient =
                 CGGradientCreateWithColorComponents(

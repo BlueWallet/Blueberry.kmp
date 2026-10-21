@@ -2,12 +2,18 @@ package io.bluewallet.blueberry
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,9 +30,11 @@ import io.bluewallet.blueberry.ui.TextAction
 import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.ToPill
 
+private val CoinGroupGap = 24.dp
+
 internal class SendCoinsActions(
     val onToggle: (String) -> Unit,
-    val onSelectAll: () -> Unit,
+    val onSelectAll: (Set<String>) -> Unit,
     val onClear: () -> Unit,
     val onContinue: () -> Unit,
     val onBack: () -> Unit,
@@ -44,17 +52,24 @@ fun sendCoinsButtonLabel(
         else -> "Continue with $selectedCount coins"
     }
 
-@Suppress("LongParameterList")
+@Suppress("LongParameterList", "LongMethod")
 @Composable
 internal fun SendCoinsStep(
     to: SendRecipient,
     utxos: List<WalletUtxoRow>,
+    control: CoinControlSnapshot,
     selectedKeys: Set<String>,
     coverage: SendCoverage,
     rate: Double?,
     actions: SendCoinsActions,
 ) {
-    val selected = utxos.filter { it.key in selectedKeys }
+    val selected = utxos.filter { it.key in selectedKeys && !it.isFrozen }
+    var filter by remember { mutableStateOf(CoinControlFilter.All) }
+    val groups = remember(control, filter) { filterCoinControlGroups(control, filter) }
+    val visibleSpendable =
+        remember(groups) { groups.flatMap { g -> g.coins.filter { !it.isFrozen }.map { it.key } }.toSet() }
+    val selectedCoins = control.coins.filter { it.key in selectedKeys && !it.isFrozen }
+    val notice = remember(selectedCoins) { privacyNoticeForSelection(selectedCoins) }
     SendStepFrame(
         title = "Select Coins",
         caption = "Step 3 of 4",
@@ -70,26 +85,51 @@ internal fun SendCoinsStep(
     ) {
         ToPill(label = to.label, address = to.address)
         CoverageCard(selected = selected, coverage = coverage, rate = rate)
+        if (selectedCoins.isNotEmpty()) PrivacyNoticeText(notice)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "${selected.size} of ${utxos.size} coins",
+                text = "${selected.size} of ${utxos.count { !it.isFrozen }} coins",
                 modifier = Modifier.weight(1f),
                 color = BwColors.InkQuiet,
                 fontFamily = BwFontFamily,
                 fontSize = BwType.LabelSize,
             )
-            TextAction(text = "Select all", onClick = actions.onSelectAll)
+            TextAction(text = "Select all", onClick = { actions.onSelectAll(visibleSpendable) })
             TextAction(text = "Clear", onClick = actions.onClear)
         }
-        if (utxos.isEmpty()) {
-            HelperText("No coins in this wallet yet.")
-        } else {
-            SendCard {
-                for (coin in utxos) {
-                    CoinRow(coin = coin, selected = coin.key in selectedKeys, onToggle = { actions.onToggle(coin.key) })
+        when (control.availability) {
+            CoinAvailability.NoCoins -> HelperText("No coins in this wallet yet.")
+            CoinAvailability.AllFrozen -> HelperText(ALL_FROZEN_NOTICE, error = true)
+            CoinAvailability.Spendable -> {}
+        }
+        if (control.coins.isNotEmpty()) {
+            CoinFilterChips(counts = control.filterCounts, selected = filter, onSelect = { filter = it })
+            Column(verticalArrangement = Arrangement.spacedBy(CoinGroupGap)) {
+                for (group in groups) {
+                    key(group.groupId) {
+                        CoinGroupSection(
+                            group = group,
+                            selectedKeys = selectedKeys,
+                            onToggle = { coin -> if (!coin.isFrozen) actions.onToggle(coin.key) },
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PrivacyNoticeText(notice: PrivacyNotice) {
+    val color =
+        when (notice.kind) {
+            PrivacyNoticeKind.Hint -> BwColors.InkQuiet
+            PrivacyNoticeKind.Safe -> BwColors.Success
+            PrivacyNoticeKind.Warning -> BwColors.Warning
+        }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(notice.message, color = color, fontFamily = BwFontFamily, fontSize = BwType.LabelSize)
+        notice.costLine?.let { Text(it, color = BwColors.Warning, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize) }
     }
 }
 

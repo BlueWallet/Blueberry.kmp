@@ -45,18 +45,25 @@ import io.bluewallet.blueberry.wallet.SignedSendResult
 import kotlinx.coroutines.launch
 
 @Composable
+@Suppress("LongParameterList")
 fun SendScreen(
     runtime: PeersRuntime,
     db: Database,
     onBack: () -> Unit,
+    initialSelectedKeys: Set<String> = emptySet(),
+    onSelectedKeysChange: (Set<String>) -> Unit = {},
+    onFeeRateChange: (Double?) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val latestOnBack by rememberUpdatedState(onBack)
-    val flow = remember { SendFlow(runtime, db, scope) { latestOnBack() } }
+    val flow = remember { SendFlow(runtime, db, scope, close = { latestOnBack() }, initialSelectedKeys = initialSelectedKeys) }
     DisposableEffect(runtime.walletTxsStore) {
-        val off = runtime.walletTxsStore.subscribe { scope.launch { flow.snap = runtime.walletTxsStore.get() } }
+        flow.updateSnap(runtime.walletTxsStore.get())
+        val off = runtime.walletTxsStore.subscribe { scope.launch { flow.updateSnap(runtime.walletTxsStore.get()) } }
         onDispose { off() }
     }
+    LaunchedEffect(flow.selectedKeys) { onSelectedKeysChange(flow.selectedKeys) }
+    LaunchedEffect(flow.feeRate) { onFeeRateChange(flow.feeRate) }
     DisposableEffect(runtime.broadcastStore) {
         val off = runtime.broadcastStore.subscribe { scope.launch { flow.broadcast = runtime.broadcastStore.get() } }
         onDispose { off() }
@@ -110,7 +117,7 @@ private fun SendStepContent(flow: SendFlow) {
                 actions =
                     SendAmountActions(
                         onAmount = { flow.amount = it },
-                        onContinue = { if (flow.amountSats != null) flow.step = SendStep.Coins },
+                        onContinue = flow::continueFromAmount,
                         onBack = flow::goBack,
                     ),
             )
@@ -153,21 +160,18 @@ private fun SendScan(flow: SendFlow) {
 
 @Composable
 private fun SendCoins(flow: SendFlow) {
+    val control = remember(flow.snap, flow.feeRate) { coinControlSnapshotFrom(flow.snap, flow.feeRate) }
     SendCoinsStep(
         to = flow.recipient,
         utxos = flow.snap.utxos,
+        control = control,
         selectedKeys = flow.selectedKeys,
         coverage = flow.coverage(),
         rate = flow.feeRate,
         actions =
             SendCoinsActions(
                 onToggle = flow::toggleCoin,
-                onSelectAll = {
-                    flow.selectedKeys =
-                        flow.snap.utxos
-                            .map { it.key }
-                            .toSet()
-                },
+                onSelectAll = { keys -> flow.selectedKeys = flow.selectedKeys + keys },
                 onClear = { flow.selectedKeys = emptySet() },
                 onContinue = { if (flow.coverage().covered) flow.step = SendStep.Review },
                 onBack = flow::goBack,

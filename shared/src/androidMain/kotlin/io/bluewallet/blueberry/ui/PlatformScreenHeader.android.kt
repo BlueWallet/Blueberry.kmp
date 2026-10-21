@@ -8,18 +8,24 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
 
+@Suppress("UnusedParameter", "LongParameterList")
 @Composable
 actual fun PlatformScreenHeader(
     title: String,
     onBack: () -> Unit,
     modifier: Modifier,
     enabled: Boolean,
+    showBarTitle: Boolean,
+    trailingText: String?,
+    onTrailing: (() -> Unit)?,
 ) {
     MaterialScreenHeader(
         title = title,
         onBack = onBack,
         modifier = modifier,
         enabled = enabled,
+        trailingText = trailingText,
+        onTrailing = onTrailing,
     )
 }
 
