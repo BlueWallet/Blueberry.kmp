@@ -2,25 +2,26 @@
 
 package io.bluewallet.blueberry
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,41 +32,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
-import io.bluewallet.blueberry.bus.BroadcastCancelPayload
-import io.bluewallet.blueberry.bus.Event
-import io.bluewallet.blueberry.parse.PickUtxos
-import io.bluewallet.blueberry.parse.SendBuildParams
-import io.bluewallet.blueberry.parse.buildActiveSendTx
-import io.bluewallet.blueberry.parse.savePaymentLabel
-import io.bluewallet.blueberry.parse.utxoValuePercent
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import io.bluewallet.blueberry.storage.Database
-import io.bluewallet.blueberry.ui.AlwaysBounceScroll
-import io.bluewallet.blueberry.ui.BtcAmountText
-import io.bluewallet.blueberry.ui.BwCheckbox
 import io.bluewallet.blueberry.ui.BwColors
-import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
-import io.bluewallet.blueberry.ui.BwType
-import io.bluewallet.blueberry.ui.HorizontalProgressBar
-import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.ScreenHeader
-import io.bluewallet.blueberry.ui.alwaysBounceTail
-import io.bluewallet.blueberry.ui.alwaysBounceVerticalScroll
 import io.bluewallet.blueberry.ui.overlayBackStack
-import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.PsbtSendResult
-import io.bluewallet.blueberry.wallet.SendInputUtxo
 import io.bluewallet.blueberry.wallet.SignedSendResult
-import io.bluewallet.blueberry.wallet.loadWalletSecret
-import io.bluewallet.blueberry.wallet.parseWalletSecret
 import kotlinx.coroutines.launch
-
-private enum class SendStep { Utxos, Details, PrivateSend, Preview }
 
 @Composable
 fun SendScreen(
@@ -73,627 +50,242 @@ fun SendScreen(
     db: Database,
     onBack: () -> Unit,
 ) {
-    val wallet = runtime.wallet
-    var step by remember { mutableStateOf(SendStep.Utxos) }
-    var selectedKeys by remember { mutableStateOf(setOf<String>()) }
-    var details by remember { mutableStateOf<SendDetails?>(null) }
-    var preview by remember { mutableStateOf<BuildSendResult?>(null) }
-    var previewInputSum by remember { mutableStateOf(0L) }
-    var previewUtxos by remember { mutableStateOf<List<SendInputUtxo>>(emptyList()) }
-    var snap by remember { mutableStateOf(runtime.walletTxsStore.get()) }
-    var broadcast by remember { mutableStateOf(runtime.broadcastStore.get()) }
-    var address by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var label by remember { mutableStateOf("") }
-    var invalidField by remember { mutableStateOf<SendField?>(null) }
-    var feeRate by remember { mutableStateOf("") }
-    var feeError by remember { mutableStateOf<String?>(null) }
-    var cancelArmedForId by remember { mutableStateOf<String?>(null) }
-    var scanning by remember { mutableStateOf(false) }
-    var privateSend by remember { mutableStateOf(false) }
-    var privateSession by remember { mutableStateOf<PrivateSendSession?>(null) }
-    var privateSigned by remember { mutableStateOf<SignedSendResult?>(null) }
     val scope = rememberCoroutineScope()
+    val latestOnBack by rememberUpdatedState(onBack)
+    val flow = remember { SendFlow(runtime, db, scope) { latestOnBack() } }
     DisposableEffect(runtime.walletTxsStore) {
-        val off = runtime.walletTxsStore.subscribe { scope.launch { snap = runtime.walletTxsStore.get() } }
+        val off = runtime.walletTxsStore.subscribe { scope.launch { flow.snap = runtime.walletTxsStore.get() } }
         onDispose { off() }
     }
     DisposableEffect(runtime.broadcastStore) {
-        val off = runtime.broadcastStore.subscribe { scope.launch { broadcast = runtime.broadcastStore.get() } }
+        val off = runtime.broadcastStore.subscribe { scope.launch { flow.broadcast = runtime.broadcastStore.get() } }
         onDispose { off() }
     }
-    val selectedSum = snap.utxos.filter { it.key in selectedKeys }.sumOf { it.valueSats }
-
-    fun applySendPayload(payload: String) {
-        val next =
-            applyBip21Payload(
-                payload,
-                SendFormFields(address = address, amount = amount, label = label, privateSend = privateSend),
-            )
-        address = next.address
-        amount = next.amount
-        label = next.label
-        if (invalidField == SendField.Address ||
-            invalidField == SendField.Amount ||
-            invalidField == SendField.Label
-        ) {
-            invalidField = null
-        }
+    LaunchedEffect(flow) { flow.loadChangeScript() }
+    val reviewing = flow.step == SendStep.Review
+    LaunchedEffect(reviewing, flow.feeRate, flow.selectedKeys, flow.address, flow.amount) {
+        if (reviewing) flow.rebuild()
     }
-
-    fun goBack() {
-        val previewTxHex = (preview as? SignedSendResult)?.txHex ?: privateSigned?.txHex
-        val ownsJob = previewTxHex != null && broadcast.txHex == previewTxHex
-        val onBroadcastStep = step == SendStep.Preview || step == SendStep.PrivateSend
-        if (onBroadcastStep && ownsJob) {
-            when (inFlightBroadcastEscape(broadcast.phase, broadcast.id, cancelArmedForId)) {
-                BroadcastEscape.Cancel -> {
-                    runtime.bus.emit(Event.BroadcastCancel, BroadcastCancelPayload(broadcast.id!!))
-                    cancelArmedForId = broadcast.id
-                    return
-                }
-                BroadcastEscape.ForceClose -> {
-                    onBack()
-                    return
-                }
-                BroadcastEscape.Ignore -> {}
-            }
-        }
-        if (broadcast.phase == "success" || broadcast.phase == "error") {
-            runtime.broadcastStore.reset()
-        }
-        if (scanning) {
-            scanning = false
-            return
-        }
-        when (step) {
-            SendStep.Utxos -> onBack()
-            SendStep.Details -> step = SendStep.Utxos
-            SendStep.PrivateSend -> {
-                privateSigned = null
-                step = SendStep.Details
-            }
-            SendStep.Preview -> {
-                preview = null
-                step = SendStep.Details
-            }
-        }
+    LaunchedEffect(reviewing) {
+        if (reviewing && flow.feeRate == null) flow.openFeeSheet()
     }
-    BackHandler { goBack() }
-    val latestGoBack by rememberUpdatedState { goBack() }
-    DisposableEffect(Unit) {
-        val cb: () -> Unit = { latestGoBack() }
+    BackHandler { flow.goBack() }
+    DisposableEffect(flow) {
+        val cb: () -> Unit = { flow.goBack() }
         overlayBackStack.push(cb)
         onDispose { overlayBackStack.pop(cb) }
     }
-    AlwaysBounceScroll(
-        Modifier
-            .fillMaxSize()
-            .background(BwColors.Paper)
-            .safeDrawingPadding(),
-    ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
-            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-        ) {
-            ScreenHeader(
-                title = if (step == SendStep.PrivateSend) "Private Send" else "Send",
-                onBack = { goBack() },
+    Box(modifier = Modifier.fillMaxSize().background(BwColors.Paper)) {
+        SendStepContent(flow)
+        SendFeeOverlay(flow)
+    }
+}
+
+@Composable
+private fun SendStepContent(flow: SendFlow) {
+    when (flow.step) {
+        SendStep.Address ->
+            if (flow.scanning) {
+                SendScan(flow)
+            } else {
+                SendAddressStep(
+                    address = flow.address,
+                    label = flow.label,
+                    labelError = flow.labelError,
+                    actions =
+                        SendAddressActions(
+                            onAddress = flow::applyPayload,
+                            onLabel = {
+                                flow.label = it
+                                if (it.isNotBlank()) flow.labelError = false
+                            },
+                            onScan = { flow.scanning = true },
+                            onContinue = flow::continueFromAddress,
+                            onBack = flow::goBack,
+                        ),
+                )
+            }
+        SendStep.Amount ->
+            SendAmountStep(
+                to = flow.recipient,
+                amount = flow.amount,
+                walletTotalSats = flow.walletTotalSats,
+                actions =
+                    SendAmountActions(
+                        onAmount = { flow.amount = it },
+                        onContinue = { if (flow.amountSats != null) flow.step = SendStep.Coins },
+                        onBack = flow::goBack,
+                    ),
             )
-            when (step) {
-                SendStep.Utxos ->
-                    UtxoStep(
-                        modifier = Modifier.weight(1f),
-                        utxos = snap.utxos,
-                        selectedKeys = selectedKeys,
-                        onToggle = { key ->
-                            selectedKeys = if (key in selectedKeys) selectedKeys - key else selectedKeys + key
-                        },
-                        onContinue = {
-                            if (selectedKeys.isNotEmpty()) step = SendStep.Details
-                        },
-                    )
-                SendStep.Details ->
-                    if (scanning) {
-                        QrScanOverlay(
-                            modifier = Modifier.weight(1f),
-                            onResult = { payload ->
-                                applySendPayload(payload)
-                                scanning = false
-                            },
-                        )
-                    } else {
-                        DetailsStep(
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                            form =
-                                DetailsForm(
-                                    selectedSum = selectedSum,
-                                    address = address,
-                                    amount = amount,
-                                    label = label,
-                                    feeRate = feeRate,
-                                    privateSend = privateSend,
-                                    invalid = invalidField,
-                                    feeError = feeError,
-                                ),
-                            onEvent = handler@{ event ->
-                                when (event) {
-                                    is DetailsEvent.Address -> applySendPayload(event.value)
-                                    is DetailsEvent.Amount -> {
-                                        amount = event.value
-                                        if (invalidField == SendField.Amount) invalidField = null
-                                    }
-                                    is DetailsEvent.Label -> {
-                                        label = event.value
-                                        if (invalidField == SendField.Label) invalidField = null
-                                    }
-                                    is DetailsEvent.FeeRate -> {
-                                        feeRate = event.value
-                                        feeError = null
-                                        if (invalidField == SendField.FeeRate) invalidField = null
-                                    }
-                                    is DetailsEvent.PrivateSend -> privateSend = event.checked
-                                    DetailsEvent.Scan -> scanning = true
-                                    DetailsEvent.Max -> {
-                                        amount = "MAX"
-                                        if (invalidField == SendField.Amount) invalidField = null
-                                    }
-                                    DetailsEvent.Continue -> {
-                                        when (val result = validateSendDetails(address, amount, label, selectedSum, feeRate)) {
-                                            is SendDetailsValidation.Ok -> {
-                                                details = result.details
-                                                invalidField = null
-                                                if (sendContinueTarget(privateSend) is SendContinueTarget.PrivateSend) {
-                                                    val signErr =
-                                                        runCatching {
-                                                            privateSendSigningError(parseWalletSecret(loadWalletSecret(db)).kind)
-                                                        }.getOrElse { "Private send needs a signing wallet" }
-                                                    if (signErr != null) {
-                                                        feeError = signErr
-                                                        return@handler
-                                                    }
-                                                    val refund = currentReceiveAddress(runtime, db)
-                                                    if (refund.isNullOrEmpty()) {
-                                                        feeError = "missing refund address"
-                                                        return@handler
-                                                    }
-                                                    val pickedPrivate = pickSelected(snap.utxos, selectedKeys)
-                                                    if (pickedPrivate is PickUtxos.Error) {
-                                                        feeError = pickedPrivate.error
-                                                        return@handler
-                                                    }
-                                                    val selectedPrivate = (pickedPrivate as PickUtxos.Ok).selected
-                                                    privateSession =
-                                                        PrivateSendSession(
-                                                            destination = result.details.toAddress,
-                                                            label = result.details.paymentLabel,
-                                                            feeRateSatPerVb = result.feeRateSatPerVb,
-                                                            amountSats = result.details.amountSats,
-                                                            utxos =
-                                                                selectedPrivate.map {
-                                                                    SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey)
-                                                                },
-                                                            refundAddress = refund,
-                                                        )
-                                                    feeError = null
-                                                    privateSigned = null
-                                                    step = SendStep.PrivateSend
-                                                    return@handler
-                                                }
-                                                val w = wallet
-                                                if (w == null) {
-                                                    feeError = "missing send details"
-                                                    return@handler
-                                                }
-                                                val picked = pickSelected(snap.utxos, selectedKeys)
-                                                if (picked is PickUtxos.Error) {
-                                                    feeError = picked.error
-                                                    return@handler
-                                                }
-                                                val selected = (picked as PickUtxos.Ok).selected
-                                                val d = result.details
-                                                try {
-                                                    val built =
-                                                        buildActiveSendTx(
-                                                            db,
-                                                            w,
-                                                            SendBuildParams(
-                                                                utxos =
-                                                                    selected.map {
-                                                                        SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey)
-                                                                    },
-                                                                toAddress = d.toAddress,
-                                                                amountSats = d.amountSats,
-                                                                feeRateSatPerVb = result.feeRateSatPerVb,
-                                                            ),
-                                                        )
-                                                    val txid =
-                                                        when (built) {
-                                                            is SignedSendResult -> built.txid
-                                                            is PsbtSendResult -> built.txid
-                                                        }
-                                                    val changeVouts =
-                                                        when (built) {
-                                                            is SignedSendResult -> built.changeVouts
-                                                            is PsbtSendResult -> built.changeVouts
-                                                        }
-                                                    editLabels(db) {
-                                                        savePaymentLabel(db, txid, d.paymentLabel, changeVouts)
-                                                    }
-                                                    uploadLabels(scope, db)
-                                                    preview = built
-                                                    previewUtxos =
-                                                        selected.map {
-                                                            SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey)
-                                                        }
-                                                    previewInputSum = selected.sumOf { it.valueSats }
-                                                    feeError = null
-                                                    cancelArmedForId = null
-                                                    step = SendStep.Preview
-                                                } catch (err: Throwable) {
-                                                    feeError = err.message ?: err.toString()
-                                                }
-                                            }
-                                            is SendDetailsValidation.Invalid -> invalidField = result.field
-                                        }
-                                    }
-                                }
-                            },
-                        )
-                    }
-                SendStep.PrivateSend -> {
-                    val session = privateSession
-                    if (session == null) {
-                        Box(modifier = Modifier.weight(1f).fillMaxWidth())
-                    } else {
-                        PrivateSendStep(
-                            session = session,
-                            host =
-                                PrivateSendHost(
-                                    db = db,
-                                    wallet = wallet,
-                                    refundAddress = session.refundAddress,
-                                    broadcast = broadcast,
-                                    callbacks =
-                                        PrivateSendCallbacks(
-                                            onSigned = { privateSigned = it },
-                                            onBroadcast = { signed, row ->
-                                                val req =
-                                                    enqueueArmedBroadcast(runtime.broadcastStore, signed.txHex) {
-                                                        runtime.armPrivateSendPersist(row)
-                                                    } ?: return@PrivateSendCallbacks
-                                                runtime.bus.emit(Event.BroadcastRequest, req)
-                                            },
-                                            finish =
-                                                BroadcastFinishActions(
-                                                    onDone = {
-                                                        runtime.broadcastStore.reset()
-                                                        onBack()
-                                                    },
-                                                    onRetry = {
-                                                        val hex = privateSigned?.txHex ?: return@BroadcastFinishActions
-                                                        val req = enqueueBroadcast(runtime.broadcastStore, hex)
-                                                        if (req != null) runtime.bus.emit(Event.BroadcastRequest, req)
-                                                    },
-                                                ),
-                                        ),
-                                ),
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                        )
-                    }
-                }
-                SendStep.Preview ->
-                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        PreviewStep(
-                            preview = preview,
-                            details = details,
-                            inputSum = previewInputSum,
-                            broadcast = broadcast,
-                            actions =
-                                PreviewActions(
-                                    onBroadcast = {
-                                        val signed = preview as? SignedSendResult ?: return@PreviewActions
-                                        val dest = details?.toAddress ?: return@PreviewActions
-                                        val req =
-                                            enqueueArmedBroadcast(runtime.broadcastStore, signed.txHex) {
-                                                runtime.armSendPersist(sendRecord(dest, previewUtxos, signed))
-                                            } ?: return@PreviewActions
-                                        runtime.bus.emit(Event.BroadcastRequest, req)
-                                    },
-                                    finish =
-                                        BroadcastFinishActions(
-                                            onDone = {
-                                                runtime.broadcastStore.reset()
-                                                onBack()
-                                            },
-                                            onRetry = {
-                                                val signed = preview as? SignedSendResult ?: return@BroadcastFinishActions
-                                                val dest = details?.toAddress ?: return@BroadcastFinishActions
-                                                val req =
-                                                    enqueueArmedBroadcast(runtime.broadcastStore, signed.txHex) {
-                                                        runtime.armSendPersist(sendRecord(dest, previewUtxos, signed))
-                                                    } ?: return@BroadcastFinishActions
-                                                runtime.bus.emit(Event.BroadcastRequest, req)
-                                            },
-                                        ),
-                                ),
-                        )
-                    }
+        SendStep.Coins -> SendCoins(flow)
+        SendStep.Review -> SendReview(flow)
+        SendStep.PrivateSend -> SendPrivate(flow)
+        SendStep.Psbt -> {
+            val psbt = (flow.build as? ReviewBuild.Built)?.result as? PsbtSendResult
+            if (psbt != null) SendPsbtStep(flow.recipient, psbt.psbtHex, onDone = flow::finish, onBack = flow::goBack)
+        }
+        SendStep.Broadcast -> {
+            val sent = flow.sent
+            if (sent != null) {
+                SendBroadcastStep(
+                    receipt = sent.receipt,
+                    status = broadcastStatus(flow.broadcast, flow.cancelling()),
+                    actions =
+                        SendBroadcastActions(
+                            finish = BroadcastFinishActions(onDone = flow::finish, onRetry = flow::broadcastSent),
+                            onCancel = flow::goBack,
+                        ),
+                )
             }
         }
     }
 }
 
-private fun pickSelected(
-    utxos: List<WalletUtxoRow>,
-    keys: Set<String>,
-): PickUtxos<WalletUtxoRow> =
-    io.bluewallet.blueberry.parse
-        .pickUtxosByKeys(utxos, keys.toList()) { it.key }
-
 @Composable
-private fun UtxoStep(
-    modifier: Modifier = Modifier,
-    utxos: List<WalletUtxoRow>,
-    selectedKeys: Set<String>,
-    onToggle: (String) -> Unit,
-    onContinue: () -> Unit,
-) {
-    val selectedSum = utxos.filter { it.key in selectedKeys }.sumOf { it.valueSats }
-    Text(
-        text = "Select UTXOs",
-        color = BwColors.InkMuted,
-        fontFamily = BwFontFamily,
-        fontSize = BwType.CaptionSize,
-        fontWeight = BwType.Caption,
-    )
-    BtcAmountText(
-        sats = selectedSum,
-        color = BwColors.Ink,
-        modifier = Modifier.alpha(if (selectedKeys.isNotEmpty()) 1f else 0f),
-    )
-    if (utxos.isEmpty()) {
-        Text(
-            text = "No UTXOs",
-            color = BwColors.InkMuted,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.BodySize,
+private fun SendScan(flow: SendFlow) {
+    SendStepFrame(title = "Scan", caption = "Point at a Bitcoin QR code", onBack = flow::goBack, bottom = {}) {
+        QrScanOverlay(
+            modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+            onResult = { payload ->
+                flow.applyPayload(payload)
+                flow.scanning = false
+            },
         )
-    } else {
-        val maxValue = utxos.maxOf { it.valueSats }
-        val listState = rememberLazyListState()
-        LazyColumn(modifier = modifier.fillMaxWidth(), state = listState) {
-            items(utxos, key = { it.key }) { u ->
-                val checked = u.key in selectedKeys
-                UtxoStepRow(
-                    utxo = u,
-                    checked = checked,
-                    maxValue = maxValue,
-                    onToggle = onToggle,
-                )
-            }
-            alwaysBounceTail(listState)
-        }
     }
-    PillButton(
-        text = "Continue",
-        onClick = onContinue,
-        modifier = Modifier.fillMaxWidth(),
+}
+
+@Composable
+private fun SendCoins(flow: SendFlow) {
+    SendCoinsStep(
+        to = flow.recipient,
+        utxos = flow.snap.utxos,
+        selectedKeys = flow.selectedKeys,
+        coverage = flow.coverage(),
+        rate = flow.feeRate,
+        actions =
+            SendCoinsActions(
+                onToggle = flow::toggleCoin,
+                onSelectAll = {
+                    flow.selectedKeys =
+                        flow.snap.utxos
+                            .map { it.key }
+                            .toSet()
+                },
+                onClear = { flow.selectedKeys = emptySet() },
+                onContinue = { if (flow.coverage().covered) flow.step = SendStep.Review },
+                onBack = flow::goBack,
+            ),
     )
 }
 
 @Composable
-private fun UtxoStepRow(
-    utxo: WalletUtxoRow,
-    checked: Boolean,
-    maxValue: Long,
-    onToggle: (String) -> Unit,
-) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clickable { onToggle(utxo.key) }
-                .padding(vertical = BwSpace.Gap),
-        horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BwCheckbox(
-            checked = checked,
-            onCheckedChange = { onToggle(utxo.key) },
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            val title = utxoRowTitle(utxo.name, utxo.address)
-            if (title != null) {
-                Text(
-                    text = title.text,
-                    color = if (title.emphasized) BwColors.Ink else BwColors.InkMuted,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.BodySize,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                BtcAmountText(
-                    sats = utxo.valueSats,
-                    color = BwColors.InkMuted,
-                    trailingColor = BwColors.InkMuted,
-                    fontSize = BwType.CaptionSize,
-                )
-                val age = utxoRowAge(utxo.ageLabel)
-                if (age != null) {
-                    Text(
-                        text = " · $age",
-                        color = BwColors.InkMuted,
-                        fontFamily = BwFontFamily,
-                        fontSize = BwType.CaptionSize,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            HorizontalProgressBar(percent = utxoValuePercent(utxo.valueSats, maxValue))
-        }
-    }
+private fun SendReview(flow: SendFlow) {
+    val clipboard = LocalClipboardManager.current
+    var hexCopied by remember(flow.build) { mutableStateOf(false) }
+    val amount = flow.amountSats ?: return
+    SendReviewStep(
+        state =
+            SendReviewState(
+                to = flow.recipient,
+                coins = flow.selectedRows,
+                amount = amount,
+                rate = flow.feeRate,
+                build = flow.build,
+                privateSendBlock = flow.privateSendBlock,
+            ),
+        actions =
+            SendReviewActions(
+                onEditFee = flow::openFeeSheet,
+                onAddCoins = flow::addCoins,
+                onPrivateSend = flow::openPrivateSend,
+                onCopyHex = {
+                    val signed = (flow.build as? ReviewBuild.Built)?.result as? SignedSendResult
+                    if (signed != null) {
+                        clipboard.setText(AnnotatedString(signed.txHex))
+                        hexCopied = true
+                    }
+                },
+                onSend = flow::send,
+                onBack = flow::goBack,
+            ),
+        hexCopied = hexCopied,
+        showEdges = !flow.feeSheetOpen,
+    )
 }
-
-private sealed class DetailsEvent {
-    data class Address(
-        val value: String,
-    ) : DetailsEvent()
-
-    data class Amount(
-        val value: String,
-    ) : DetailsEvent()
-
-    data class Label(
-        val value: String,
-    ) : DetailsEvent()
-
-    data class FeeRate(
-        val value: String,
-    ) : DetailsEvent()
-
-    data class PrivateSend(
-        val checked: Boolean,
-    ) : DetailsEvent()
-
-    data object Scan : DetailsEvent()
-
-    data object Max : DetailsEvent()
-
-    data object Continue : DetailsEvent()
-}
-
-private data class DetailsForm(
-    val selectedSum: Long,
-    val address: String,
-    val amount: String,
-    val label: String,
-    val feeRate: String,
-    val privateSend: Boolean,
-    val invalid: SendField?,
-    val feeError: String?,
-)
 
 @Composable
-private fun DetailsStep(
-    form: DetailsForm,
-    onEvent: (DetailsEvent) -> Unit,
-    modifier: Modifier = Modifier,
-) {
+private fun SendPrivate(flow: SendFlow) {
+    val session = flow.privateSession ?: return
     Column(
         modifier =
-            modifier
-                .imePadding()
-                .alwaysBounceVerticalScroll(),
+            Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
-            Text("Selected", color = BwColors.InkMuted, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
-            BtcAmountText(sats = form.selectedSum, color = BwColors.Ink)
-        }
-        OutlinedTextField(
-            value = form.address,
-            onValueChange = { onEvent(DetailsEvent.Address(it)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            isError = form.invalid == SendField.Address,
-            label = { Text("Address") },
-            placeholder = { Text("bc1…") },
-            trailingIcon = { FieldTrailingAction("Scan") { onEvent(DetailsEvent.Scan) } },
+        ScreenHeader(title = "Private Send", onBack = flow::goBack)
+        PrivateSendStep(
+            session = session,
+            host =
+                PrivateSendHost(
+                    db = flow.db,
+                    wallet = flow.wallet,
+                    refundAddress = session.refundAddress,
+                    broadcast = flow.broadcast,
+                    callbacks =
+                        PrivateSendCallbacks(
+                            onSigned = { flow.privateSigned = it },
+                            onBroadcast = flow::privateBroadcast,
+                            finish = BroadcastFinishActions(onDone = flow::finish, onRetry = flow::privateRetry),
+                        ),
+                ),
+            modifier = Modifier.weight(1f).fillMaxWidth(),
         )
-        AmountField(form = form, onEvent = onEvent)
-        OutlinedTextField(
-            value = form.label,
-            onValueChange = { onEvent(DetailsEvent.Label(it)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            isError = form.invalid == SendField.Label,
-            label = { Text("Payment label") },
-            placeholder = { Text("groceries") },
-        )
-        OutlinedTextField(
-            value = form.feeRate,
-            onValueChange = { onEvent(DetailsEvent.FeeRate(it)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            isError = form.invalid == SendField.FeeRate || form.feeError != null,
-            label = { Text("Fee rate (sat/vB)") },
-            placeholder = { Text("1") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        )
-        if (form.feeError != null) {
-            Text(form.feeError, color = BwColors.Danger, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
-        }
-        PrivateSendRow(checked = form.privateSend, onChecked = { onEvent(DetailsEvent.PrivateSend(it)) })
-        PillButton(text = "Continue", onClick = { onEvent(DetailsEvent.Continue) }, modifier = Modifier.fillMaxWidth())
     }
 }
 
 @Composable
-private fun FieldTrailingAction(
-    text: String,
-    onClick: () -> Unit,
-) {
-    Text(
-        text = text,
-        color = BwColors.Link,
-        fontFamily = BwFontFamily,
-        fontSize = BwType.CaptionSize,
-        modifier = Modifier.clickable(onClick = onClick),
-    )
-}
-
-@Composable
-private fun AmountField(
-    form: DetailsForm,
-    onEvent: (DetailsEvent) -> Unit,
-) {
-    val focusManager = LocalFocusManager.current
-    val keyboard = LocalSoftwareKeyboardController.current
-    OutlinedTextField(
-        value = form.amount,
-        onValueChange = { onEvent(DetailsEvent.Amount(it)) },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        isError = form.invalid == SendField.Amount,
-        label = { Text("Amount") },
-        placeholder = { Text("0.00000000 or MAX") },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        trailingIcon = {
-            FieldTrailingAction("MAX") {
-                onEvent(DetailsEvent.Max)
-                focusManager.clearFocus()
-                keyboard?.hide()
-            }
-        },
-    )
-}
-
-@Composable
-private fun PrivateSendRow(
-    checked: Boolean,
-    onChecked: (Boolean) -> Unit,
-) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clickable { onChecked(!checked) },
-        horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BwCheckbox(checked = checked, onCheckedChange = onChecked)
-        Text(
-            text = "Private Send (costs extra)",
-            color = BwColors.Ink,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.BodySize,
-        )
+private fun SendFeeOverlay(flow: SendFlow) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        AnimatedVisibility(
+            visible = flow.feeSheetOpen,
+            enter = fadeIn(animationSpec = tween(220)),
+            exit = fadeOut(animationSpec = tween(180)),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.32f))
+                        .clickable { flow.feeSheetOpen = false },
+            )
+        }
+        AnimatedVisibility(
+            visible = flow.feeSheetOpen,
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+            enter =
+                slideInVertically(
+                    animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+                    initialOffsetY = { it },
+                ) + fadeIn(animationSpec = tween(200)),
+            exit =
+                slideOutVertically(
+                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                    targetOffsetY = { it },
+                ) + fadeOut(animationSpec = tween(160)),
+        ) {
+            SendFeeSheet(
+                draft = flow.feeDraft,
+                check = flow.feeCheck(),
+                actions =
+                    SendFeeSheetActions(
+                        onDraft = { flow.feeDraft = it },
+                        onApply = flow::applyFee,
+                        onAddCoins = flow::addCoins,
+                        onDismiss = { flow.feeSheetOpen = false },
+                    ),
+            )
+        }
     }
 }

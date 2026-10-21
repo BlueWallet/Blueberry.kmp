@@ -5,65 +5,11 @@ import io.bluewallet.blueberry.parse.parseBtcToSats
 import io.bluewallet.blueberry.wallet.SendAmount
 import io.bluewallet.blueberry.wallet.isAddressValid
 
-data class SendDetails(
-    val toAddress: String,
-    val amountSats: SendAmount,
-    val paymentLabel: String,
-)
-
 sealed class SendField {
     data object Address : SendField()
 
-    data object Amount : SendField()
-
     data object Label : SendField()
-
-    data object FeeRate : SendField()
 }
-
-sealed class SendDetailsValidation {
-    data class Ok(
-        val details: SendDetails,
-        val feeRateSatPerVb: Double,
-    ) : SendDetailsValidation()
-
-    data class Invalid(
-        val field: SendField,
-    ) : SendDetailsValidation()
-}
-
-fun validateSendDetails(
-    address: String,
-    amount: String,
-    label: String,
-    selectedSumSats: Long,
-    feeRate: String,
-): SendDetailsValidation {
-    val trimmedLabel = label.trim()
-    val max = isSendMaxAmount(amount)
-    val sats = parseBtcToSats(amount)
-    val rate = parseFeeRateSatPerVb(feeRate)
-    val field =
-        when {
-            !isAddressValid(address) -> SendField.Address
-            max && trimmedLabel.isEmpty() -> SendField.Label
-            !max && (sats == null || sats <= 0L || sats > selectedSumSats) -> SendField.Amount
-            !max && trimmedLabel.isEmpty() -> SendField.Label
-            rate == null -> SendField.FeeRate
-            else -> null
-        }
-    if (field != null) return SendDetailsValidation.Invalid(field)
-    val amountSats = if (max) SendAmount.Max else SendAmount.Exact(sats!!)
-    return SendDetailsValidation.Ok(SendDetails(address.trim(), amountSats, trimmedLabel), rate!!)
-}
-
-sealed class SendContinueTarget {
-    data object OnchainPreview : SendContinueTarget()
-
-    data object PrivateSend : SendContinueTarget()
-}
-
-fun sendContinueTarget(privateSend: Boolean): SendContinueTarget = if (privateSend) SendContinueTarget.PrivateSend else SendContinueTarget.OnchainPreview
 
 /** Address step: the first field that blocks Continue, or null when both are filled in. */
 fun validateSendAddress(

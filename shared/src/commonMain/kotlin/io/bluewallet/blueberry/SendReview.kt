@@ -6,6 +6,18 @@ import io.bluewallet.blueberry.wallet.PsbtSendResult
 import io.bluewallet.blueberry.wallet.SendAmount
 import io.bluewallet.blueberry.wallet.SignedSendResult
 
+/** What the recipient gets: the exact amount, or for Max everything left after fee and change. */
+fun sendPaidSats(
+    amount: SendAmount,
+    inputSum: Long,
+    feeSats: Long,
+    changeSats: Long,
+): Long =
+    when (amount) {
+        is SendAmount.Max -> inputSum - feeSats - changeSats
+        is SendAmount.Exact -> amount.sats
+    }
+
 data class BuiltSend(
     val txid: String,
     val feeSats: Long,
