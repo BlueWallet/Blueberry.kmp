@@ -25,6 +25,7 @@ object BwPalette {
         val Ink = Color(0xFFFFFFFF)
         val InkSecondary = Color(0xFF606C73)
         val InkMuted = Color(0xFF606C73)
+        val InkQuiet = Color(0xFF8E959C)
         val Action = Color(0xFFC7C7CC)
         val Link = Color(0xFF3788E0)
         val Accent = Color(0xFF3788E0)
@@ -44,6 +45,7 @@ object BwPalette {
         val Ink = Color(0xFF0C2550)
         val InkSecondary = Color(0xFF81868E)
         val InkMuted = Color(0xFF9AA0AA)
+        val InkQuiet = Color(0xFF5F6670)
         val Action = Color(0xFF50555C)
         val Link = Color(0xFF3788E0)
         val Accent = Color(0xFF3788E0)
@@ -83,6 +85,11 @@ object BwColors {
     val InkMuted: Color
         @Composable @ReadOnlyComposable
         get() = if (LocalDarkPalette.current) BwPalette.Dark.InkMuted else BwPalette.Light.InkMuted
+
+    /** Captions and helper text. InkMuted is under 4.5:1 for small text. */
+    val InkQuiet: Color
+        @Composable @ReadOnlyComposable
+        get() = if (LocalDarkPalette.current) BwPalette.Dark.InkQuiet else BwPalette.Light.InkQuiet
 
     val Action: Color
         @Composable @ReadOnlyComposable
@@ -150,6 +157,8 @@ object BwType {
     val ValueSize = 22.sp
     val HeroSize = 26.sp
     val CaptionSize = 12.sp
+    val DisplaySize = 40.sp
+    val DisplayLargeSize = 52.sp
 }
 
 private fun bwColorScheme(dark: Boolean) =
