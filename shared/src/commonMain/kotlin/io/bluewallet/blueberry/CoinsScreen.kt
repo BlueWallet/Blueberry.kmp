@@ -92,6 +92,10 @@ import kotlinx.coroutines.launch
 /** Breathing room under the inline nav title before the summary. */
 private val TitleBelowHeaderGap = 12.dp
 
+/** Room above and below the weight bar and filter chips, so they read as their own section. */
+private val CoinOverviewGap = 32.dp
+private val CoinGroupGap = 24.dp
+
 /** Frozen coins stay in the weight bar for scale but read as locked under the spendable headline. */
 private const val FROZEN_BAR_ALPHA = 0.18f
 
@@ -112,7 +116,7 @@ fun CoinsScreen(
     mode: CoinControlMode = CoinControlMode.Standalone,
     initialSelectedKeys: Set<String> = emptySet(),
     onSendWithCoins: (Set<String>) -> Unit = {},
-    onConfirmSelection: (Set<String>) -> Unit = {},
+    onConfirmSelection: (keys: Set<String>, coinsVanished: Boolean) -> Unit = { _, _ -> },
     onFrozenKey: (String) -> Unit = {},
     feeRateSatPerVb: Double? = null,
 ) {
@@ -135,14 +139,17 @@ fun CoinsScreen(
     val filtered = remember(control, filter) { filterCoinControlGroups(control, filter) }
     val visibleKeys =
         remember(filtered) { filtered.flatMap { group -> group.coins.map { it.key } }.toSet() }
-    // Narrowing the filter deselects hidden coins, so the weight bar, notice, and action share one set.
+    // Selected coins spent while the picker is open; Back must not answer a warning the subject never saw.
+    var coinsVanished by remember { mutableStateOf(false) }
     LaunchedEffect(control, visibleKeys) {
+        val live = control.coins.map { it.key }.toSet()
         val frozen =
             control.coins
                 .filter { it.isFrozen }
                 .map { it.key }
                 .toSet()
-        val next = pickerSelection(selectedKeys, visibleKeys, frozen, showsAll = filter == CoinControlFilter.All)
+        if ((selectedKeys - live).isNotEmpty()) coinsVanished = true
+        val next = pickerSelection(selectedKeys, live, visibleKeys, frozen, showsAll = filter == CoinControlFilter.All)
         if (next != selectedKeys) selectedKeys = next
     }
     val actionCoins = control.coins.filter { it.key in selectedKeys && !it.isFrozen }
@@ -150,7 +157,7 @@ fun CoinsScreen(
     val leave: () -> Unit = {
         when (mode) {
             CoinControlMode.Standalone -> onBack()
-            CoinControlMode.Picker -> onConfirmSelection(actionCoins.map { it.key }.toSet())
+            CoinControlMode.Picker -> onConfirmSelection(actionCoins.map { it.key }.toSet(), coinsVanished)
         }
     }
     val notice = remember(actionCoins) { privacyNoticeForSelection(actionCoins) }
@@ -210,21 +217,32 @@ fun CoinsScreen(
                             end = BwSpace.ScreenX,
                             bottom = listBottomPad,
                         ),
-                    verticalArrangement = Arrangement.spacedBy(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(CoinGroupGap),
                 ) {
                     item(key = "coin-control-header") {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(
+                            modifier = Modifier.padding(bottom = CoinOverviewGap - CoinGroupGap),
+                            verticalArrangement = Arrangement.spacedBy(CoinOverviewGap),
+                        ) {
                             CoinControlSummary(control)
-                            CoinWeightBar(
-                                coins = control.coins.sortedByDescending { it.valueSats },
-                                selectedKeys = selectedKeys,
-                                modifier = Modifier.fillMaxWidth().height(16.dp),
-                            )
-                            CoinFilterChips(
-                                counts = control.filterCounts,
-                                selected = filter,
-                                onSelect = { filter = it },
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text(
+                                    text = coinControlSummaryLine(control),
+                                    color = BwColors.InkSecondary,
+                                    fontFamily = BwFontFamily,
+                                    fontSize = 15.sp,
+                                )
+                                CoinWeightBar(
+                                    coins = control.coins.sortedByDescending { it.valueSats },
+                                    selectedKeys = selectedKeys,
+                                    modifier = Modifier.fillMaxWidth().height(16.dp),
+                                )
+                                CoinFilterChips(
+                                    counts = control.filterCounts,
+                                    selected = filter,
+                                    onSelect = { filter = it },
+                                )
+                            }
                         }
                     }
                     items(filtered, key = { it.groupId }) { group ->
@@ -299,7 +317,7 @@ fun CoinsScreen(
                         val keys = actionCoins.map { it.key }.toSet()
                         when (mode) {
                             CoinControlMode.Standalone -> onSendWithCoins(keys)
-                            CoinControlMode.Picker -> onConfirmSelection(keys)
+                            CoinControlMode.Picker -> onConfirmSelection(keys, false)
                         }
                     },
                 )
@@ -386,28 +404,6 @@ private fun CoinControlSummary(control: CoinControlSnapshot) {
                 fontSize = 15.sp,
             )
         }
-        val coinsWord = if (control.coins.size == 1) "1 coin" else "${control.coins.size} coins"
-        val parts = mutableListOf(coinsWord)
-        when (control.linkedGroupCount) {
-            0 -> parts += "no on-chain links"
-            1 -> parts += "1 linked group"
-            else -> parts += "${control.linkedGroupCount} linked groups"
-        }
-        when (control.probableGroupCount) {
-            0 -> Unit
-            1 -> parts += "1 probable"
-            else -> parts += "${control.probableGroupCount} probable"
-        }
-        when (control.soloCount) {
-            1 -> parts += "1 independent"
-            else -> if (control.soloCount > 1) parts += "${control.soloCount} independent"
-        }
-        Text(
-            text = parts.joinToString(" · "),
-            color = BwColors.InkSecondary,
-            fontFamily = BwFontFamily,
-            fontSize = 15.sp,
-        )
     }
 }
 
@@ -482,7 +478,11 @@ private fun CoinFilterChips(
                     Modifier
                         .clip(shape)
                         .background(bg, shape)
-                        .clickable { onSelect(f) }
+                        .semantics { this.selected = active }
+                        .clickable(
+                            role = Role.Tab,
+                            onClickLabel = coinFilterClickLabel(label, count, narrows = f != CoinControlFilter.All),
+                        ) { onSelect(f) }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
             )
         }

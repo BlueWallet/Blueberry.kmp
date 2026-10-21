@@ -33,6 +33,7 @@ import io.bluewallet.headers.encodeBlockHeader
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -498,14 +499,31 @@ class WalletTxsHydrateTest {
         val keys = fresh.coinGroupIds.keys
         assertEquals(2, keys.size)
 
+        val print = fresh.linkageFingerprint
         val sentinel = CoinLinkage(certain = keys.associateWith { "cached" }, likely = keys.associateWith { "cached" })
-        val reused = snapshotFromDb(db, 2, 2, wallet, sentinel)
+        val reused = snapshotFromDb(db, 2, 2, wallet, LinkageCache(sentinel, print))
         assertEquals(keys.associateWith { "cached" }, reused.coinGroupIds)
 
-        val stale = CoinLinkage(certain = mapOf("gone:0" to "x"), likely = mapOf("gone:0" to "x"))
-        val recomputed = snapshotFromDb(db, 3, 3, wallet, stale)
-        assertEquals(fresh.coinGroupIds, recomputed.coinGroupIds)
-        assertEquals(fresh.coinCertainGroupIds, recomputed.coinCertainGroupIds)
+        fun assertRecomputed(cache: LinkageCache) {
+            val snap = snapshotFromDb(db, 3, 3, wallet, cache)
+            assertEquals(fresh.coinGroupIds, snap.coinGroupIds)
+            assertEquals(fresh.coinCertainGroupIds, snap.coinCertainGroupIds)
+        }
+        assertRecomputed(LinkageCache(CoinLinkage(mapOf("gone:0" to "x"), mapOf("gone:0" to "x")), print))
+        assertRecomputed(LinkageCache(CoinLinkage(certain = emptyMap(), likely = sentinel.likely), print))
+        assertRecomputed(LinkageCache(sentinel, print + 1))
         db.close()
+    }
+
+    @Test
+    fun linkage_fingerprint_moves_with_height_order_and_scripts() {
+        val a = StoredTx("aa".repeat(32), 100, 0, "11".repeat(32), byteArrayOf(1), 1L)
+        val b = StoredTx("bb".repeat(32), 101, 0, "11".repeat(32), byteArrayOf(2), 1L)
+        val base = linkageFingerprint(listOf(a, b), watchScriptCount = 40)
+        assertEquals(base, linkageFingerprint(listOf(b, a), watchScriptCount = 40))
+        assertNotEquals(base, linkageFingerprint(listOf(a, b.copy(height = 99)), watchScriptCount = 40))
+        assertNotEquals(base, linkageFingerprint(listOf(a, b.copy(txIndex = 3)), watchScriptCount = 40))
+        assertNotEquals(base, linkageFingerprint(listOf(a), watchScriptCount = 40))
+        assertNotEquals(base, linkageFingerprint(listOf(a, b), watchScriptCount = 41))
     }
 }

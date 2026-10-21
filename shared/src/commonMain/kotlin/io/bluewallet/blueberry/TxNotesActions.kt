@@ -21,5 +21,5 @@ fun setTxNote(
         }
     }
     val at = nowMillis()
-    walletTxsStore.applyFromDb(db, snapshotFromDb(db, at, at, wallet, walletTxsStore.get().linkage()))
+    walletTxsStore.applyFromDb(db, snapshotFromDb(db, at, at, wallet, walletTxsStore.get().linkageCache()))
 }

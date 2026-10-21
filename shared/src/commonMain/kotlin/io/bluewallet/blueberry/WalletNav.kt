@@ -174,8 +174,8 @@ internal fun WalletNavHost(
                             launchSingleTop = true
                         }
                     },
-                    onConfirmSelection = { keys ->
-                        sendDraft = sendDraft.pickerCommitted(keys)
+                    onConfirmSelection = { keys, coinsVanished ->
+                        sendDraft = sendDraft.pickerCommitted(keys, coinsVanished)
                         goBack()
                     },
                     onFrozenKey = { key -> sendDraft = sendDraft.frozen(key) },

@@ -63,6 +63,7 @@ fun CoinsPanel(
                 control.coins.size,
                 control.groups.filter { it.linked },
                 control.soloCount,
+                frozenCount = control.coins.count { it.isFrozen },
             )
         }
     Pressable(

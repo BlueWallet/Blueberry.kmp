@@ -76,6 +76,8 @@ data class WalletTxsSnapshot(
     val coinGroupIds: Map<String, String> = emptyMap(),
     /** Unspent outpoint → group id from provable links only (common inputs, address reuse). */
     val coinCertainGroupIds: Map<String, String> = emptyMap(),
+    /** History the linkage was computed from; see [linkageFingerprint]. */
+    val linkageFingerprint: Long = 0L,
 )
 
 interface WalletTxsStore {
@@ -293,9 +295,10 @@ private class WalletCoins(
     val utxos: List<WalletUtxoRow>,
     val fees: Map<String, TxFee>,
     val linkage: CoinLinkage,
+    val fingerprint: Long,
 ) {
     companion object {
-        val None = WalletCoins(emptyList(), emptyMap(), CoinLinkage(emptyMap(), emptyMap()))
+        val None = WalletCoins(emptyList(), emptyMap(), CoinLinkage(emptyMap(), emptyMap()), 0L)
     }
 }
 
@@ -311,7 +314,7 @@ private fun walletCoins(
     wallet: Wallet,
     stored: List<StoredTx>,
     ctx: CoinRowCtx,
-    cachedLinkage: CoinLinkage?,
+    cachedLinkage: LinkageCache?,
 ): WalletCoins {
     wallet.syncFromDb()
     val txRows = stored.map { TxRow(it.txid, it.height, it.txIndex, it.tx) }
@@ -321,9 +324,12 @@ private fun walletCoins(
     val watchByScript = watched.associateBy { scriptHex(it.scriptPubKey) }
     val changeScripts = watched.filter { it.change }.map { it.scriptPubKey }
     val map = scan.utxos
-    // Linkage keys every unspent coin, so a cache over the same coin set is still exact.
+    val fingerprint = linkageFingerprint(stored, scripts.size)
     val linkage =
-        cachedLinkage?.takeIf { it.likely.keys == map.keys }
+        cachedLinkage
+            ?.takeIf { it.fingerprint == fingerprint }
+            ?.linkage
+            ?.takeIf { it.likely.keys == map.keys && it.certain.keys == map.keys }
             ?: computeCoinLinkage(txRows, scripts, changeScripts)
     val maxValue = map.values.maxOfOrNull { it.value } ?: 0L
     val utxos =
@@ -360,7 +366,7 @@ private fun walletCoins(
                     .thenBy { it.txid }
                     .thenBy { it.vout },
             )
-    return WalletCoins(utxos, scan.fees, linkage)
+    return WalletCoins(utxos, scan.fees, linkage, fingerprint)
 }
 
 private fun confirmedTxRow(
@@ -385,15 +391,45 @@ private fun confirmedTxRow(
         fee = fee,
     )
 
+/** Linkage computed for one exact history; reused only while that history is unchanged. */
+class LinkageCache(
+    val linkage: CoinLinkage,
+    val fingerprint: Long,
+)
+
 /** Linkage already in this snapshot; label and note edits leave it unchanged. */
-internal fun WalletTxsSnapshot.linkage(): CoinLinkage = CoinLinkage(certain = coinCertainGroupIds, likely = coinGroupIds)
+internal fun WalletTxsSnapshot.linkageCache(): LinkageCache = LinkageCache(CoinLinkage(certain = coinCertainGroupIds, likely = coinGroupIds), linkageFingerprint)
+
+private const val FNV64_OFFSET = -0x340d631b7bdddcdbL
+private const val FNV64_PRIME = 0x100000001b3L
+
+/**
+ * 64-bit FNV-1a over every input of [computeCoinLinkage] that can move a coin between groups:
+ * each stored tx with its height and block position (linkage walks them in that order), and the
+ * watched script set, whose growth can turn a foreign output into ours.
+ */
+internal fun linkageFingerprint(
+    stored: List<StoredTx>,
+    watchScriptCount: Int,
+): Long {
+    var h = FNV64_OFFSET
+
+    fun mix(s: String) {
+        for (c in s) h = (h xor c.code.toLong()) * FNV64_PRIME
+    }
+    for (tx in stored.sortedWith(compareBy({ it.height }, { it.txIndex }, { it.txid }))) {
+        mix("${tx.txid}:${tx.height}:${tx.txIndex};")
+    }
+    mix("scripts:$watchScriptCount")
+    return h
+}
 
 fun snapshotFromDb(
     db: Database,
     at: Long,
     nowMs: Long = nowMillis(),
     wallet: Wallet? = null,
-    cachedLinkage: CoinLinkage? = null,
+    cachedLinkage: LinkageCache? = null,
 ): WalletTxsSnapshot {
     val stored = db.transactions.list()
     val balanceSats = stored.fold(0L) { s, t -> s + t.netDeltaSats }
@@ -447,6 +483,7 @@ fun snapshotFromDb(
         utxosReady = wallet != null,
         coinGroupIds = linkage.likely,
         coinCertainGroupIds = linkage.certain,
+        linkageFingerprint = coins.fingerprint,
     )
 }
 

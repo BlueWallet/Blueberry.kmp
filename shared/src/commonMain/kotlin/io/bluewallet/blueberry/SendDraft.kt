@@ -14,8 +14,20 @@ internal data class SendDraft(
 
     fun withSelectionNeedsAck(value: Boolean): SendDraft = copy(selectionNeedsAck = value)
 
-    /** The subject just reviewed this set in the picker, so a vanished-coin warning is answered. */
-    fun pickerCommitted(keys: Set<String>): SendDraft = copy(selectedKeys = keys, selectionNeedsAck = false, advanceToDetails = keys.isNotEmpty())
+    /**
+     * The subject reviewed this set in the picker, which answers an earlier vanished-coin warning.
+     * Coins that vanished while the picker was open were never seen, so they raise the warning again
+     * and keep Send on the coin step where it is shown.
+     */
+    fun pickerCommitted(
+        keys: Set<String>,
+        coinsVanished: Boolean = false,
+    ): SendDraft =
+        copy(
+            selectedKeys = keys,
+            selectionNeedsAck = coinsVanished,
+            advanceToDetails = keys.isNotEmpty() && !coinsVanished,
+        )
 
     fun detailsAdvanceConsumed(): SendDraft = copy(advanceToDetails = false)
 
@@ -29,12 +41,30 @@ internal data class SendDraft(
     }
 }
 
-/** A confirmed pick moves the coin step on to Details; later steps are left alone. */
-internal fun sendStepAfterPick(
+internal data class SendStepResolution(
+    val step: SendStep,
+    /** True when a pending advance was read and must be cleared from the draft. */
+    val consumeAdvance: Boolean,
+)
+
+/**
+ * The single rule for where Send stands after a selection change, a picker commit, or recreation.
+ * A pending advance moves the coin step to Details; Details with no inputs falls back to choosing
+ * coins instead of blaming the amount; later steps are never moved.
+ */
+internal fun resolveSendStep(
     step: SendStep,
-    advanceToDetails: Boolean,
     selected: Set<String>,
-): SendStep = if (advanceToDetails && step == SendStep.Utxos && selected.isNotEmpty()) SendStep.Details else step
+    advanceToDetails: Boolean,
+): SendStepResolution {
+    val next =
+        when {
+            advanceToDetails && step == SendStep.Utxos && selected.isNotEmpty() -> SendStep.Details
+            step == SendStep.Details && selected.isEmpty() -> SendStep.Utxos
+            else -> step
+        }
+    return SendStepResolution(next, consumeAdvance = advanceToDetails)
+}
 
 /** Continue on the coin step also answers a vanished-coin warning, so it stays live while one is shown. */
 internal fun utxosContinueEnabled(
@@ -42,22 +72,18 @@ internal fun utxosContinueEnabled(
     selectionNeedsAck: Boolean,
 ): Boolean = selected.isNotEmpty() || selectionNeedsAck
 
-/** Details needs inputs; with none, Send falls back to choosing coins instead of blaming the amount. */
-internal fun sendStepForSelection(
-    step: SendStep,
-    selected: Set<String>,
-): SendStep = if (step == SendStep.Details && selected.isEmpty()) SendStep.Utxos else step
-
 /**
- * Picker selection after the filter or the snapshot changes: frozen coins always drop, and a
- * narrowed filter drops hidden coins so the weight bar, notice, and commit share one set.
+ * Picker selection after the filter or the snapshot changes. Only coins the wallet still holds and
+ * can spend survive, and a narrowed filter also drops hidden coins, so the weight bar, Clear, the
+ * notice, and the commit all read one set.
  */
 internal fun pickerSelection(
     selected: Set<String>,
+    liveKeys: Set<String>,
     visibleKeys: Set<String>,
     frozenKeys: Set<String>,
     showsAll: Boolean,
 ): Set<String> {
-    val shown = if (showsAll) selected else selected.intersect(visibleKeys)
-    return shown - frozenKeys
+    val held = selected.intersect(liveKeys) - frozenKeys
+    return if (showsAll) held else held.intersect(visibleKeys)
 }

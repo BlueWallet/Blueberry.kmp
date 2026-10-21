@@ -140,15 +140,12 @@ fun SendScreen(
             selectedKeys = initialSelectedKeys
         }
     }
-    LaunchedEffect(advanceToDetails) {
-        if (!advanceToDetails) return@LaunchedEffect
-        val next = sendStepAfterPick(step, advanceToDetails, initialSelectedKeys)
-        if (next != step) stepName = next.name
-        onAdvanceToDetailsConsumed()
-    }
-    LaunchedEffect(selectedKeys, step) {
-        val next = sendStepForSelection(step, selectedKeys)
-        if (next != step) stepName = next.name
+    LaunchedEffect(selectedKeys, step, advanceToDetails) {
+        // A pending advance arrives with the committed set in the draft, ahead of the local copy.
+        val selected = if (advanceToDetails) initialSelectedKeys else selectedKeys
+        val resolved = resolveSendStep(step, selected, advanceToDetails)
+        if (resolved.step != step) stepName = resolved.step.name
+        if (resolved.consumeAdvance) onAdvanceToDetailsConsumed()
     }
     val availability = coinAvailability(snap.utxos)
 

@@ -406,15 +406,21 @@ fun privacyNoticeForSelection(
             )
         else -> {
             val likely = selected.map { it.groupId }.toSet().size
-            val certain = selected.map { it.certainGroupId }.toSet().size
+            val byCertain = selected.groupBy { it.certainGroupId }
+            val alreadyLinked = byCertain.values.filter { it.size > 1 }.sumOf { it.size }
             val (kind, message) =
                 when {
-                    certain == 1 ->
+                    byCertain.size == 1 ->
                         PrivacyNoticeKind.Safe to
                             "These coins already share history on-chain, so spending them together reveals nothing new."
                     likely == 1 ->
                         PrivacyNoticeKind.Warning to
                             "These coins are probably linked through change. Spending them together confirms it."
+                    alreadyLinked > 0 ->
+                        PrivacyNoticeKind.Warning to
+                            "$alreadyLinked of these coins already share history on-chain. " +
+                            "Adding the other ${k - alreadyLinked} joins $likely separate histories, " +
+                            "so anyone watching the chain will learn they share an owner."
                     else ->
                         PrivacyNoticeKind.Warning to
                             "Joins $likely unlinked histories. Anyone watching the chain will learn these coins share an owner."
@@ -481,10 +487,17 @@ fun coinControlAccessibilityLabel(
     coinCount: Int,
     linkedGroups: List<CoinControlGroup>,
     soloCount: Int,
+    frozenCount: Int = 0,
 ): String {
     val coinsWord = if (coinCount == 1) "1 coin" else "$coinCount coins"
+    val frozenWord =
+        when {
+            frozenCount <= 0 -> ""
+            frozenCount >= coinCount -> " All coins are frozen."
+            else -> " $frozenCount frozen."
+        }
     if (linkedGroups.isEmpty()) {
-        return "$coinsWord. No on-chain links. Opens coin control."
+        return "$coinsWord. No on-chain links.$frozenWord Opens coin control."
     }
     val (provable, probable) = linkedGroups.partition { it.provable }
     val groupsWord =
@@ -498,7 +511,31 @@ fun coinControlAccessibilityLabel(
             1 -> ", 1 independent"
             else -> ", $soloCount independent"
         }
-    return "$coinsWord. $groupsWord$soloWord. Opens coin control."
+    return "$coinsWord. $groupsWord$soloWord.$frozenWord Opens coin control."
+}
+
+/** "11 coins · 1 linked group · 1 probable · 6 independent" line above the coin control weight bar. */
+fun coinControlSummaryLine(control: CoinControlSnapshot): String {
+    val parts = mutableListOf(if (control.coins.size == 1) "1 coin" else "${control.coins.size} coins")
+    parts +=
+        when (control.linkedGroupCount) {
+            0 -> "no on-chain links"
+            1 -> "1 linked group"
+            else -> "${control.linkedGroupCount} linked groups"
+        }
+    if (control.probableGroupCount > 0) parts += "${control.probableGroupCount} probable"
+    if (control.soloCount > 0) parts += "${control.soloCount} independent"
+    return parts.joinToString(" · ")
+}
+
+/** Screen-reader action for a filter chip; narrowing also drops hidden coins from the selection. */
+fun coinFilterClickLabel(
+    label: String,
+    count: Int,
+    narrows: Boolean,
+): String {
+    val coins = if (count == 1) "1 coin" else "$count coins"
+    return if (narrows) "Show $label, $coins. Deselects hidden coins" else "Show all $coins"
 }
 
 private fun accessibilityGroupPhrase(

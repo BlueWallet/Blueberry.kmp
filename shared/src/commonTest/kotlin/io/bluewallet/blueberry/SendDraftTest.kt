@@ -61,12 +61,55 @@ class SendDraftTest {
         assertFalse(SendDraft(selectedKeys = abc).pickerCommitted(emptySet()).advanceToDetails)
     }
 
+    /**
+     * Runs Send's one step effect the way Compose does: it reruns while the step or the pending
+     * advance changes, so the result is what the subject sees once the screen settles.
+     */
+    private fun settle(
+        restoredStep: SendStep,
+        draft: SendDraft,
+    ): Pair<SendStep, SendDraft> {
+        var step = restoredStep
+        var d = draft
+        repeat(4) {
+            val resolved = resolveSendStep(step, d.selectedKeys, d.advanceToDetails)
+            step = resolved.step
+            if (resolved.consumeAdvance) d = d.detailsAdvanceConsumed()
+        }
+        return step to d
+    }
+
     @Test
-    fun confirmed_pick_moves_the_coin_step_to_details_even_after_recreation() {
-        assertEquals(SendStep.Details, sendStepAfterPick(SendStep.Utxos, advanceToDetails = true, setOf("a")))
-        assertEquals(SendStep.Utxos, sendStepAfterPick(SendStep.Utxos, advanceToDetails = false, setOf("a")))
-        assertEquals(SendStep.Utxos, sendStepAfterPick(SendStep.Utxos, advanceToDetails = true, emptySet()))
-        assertEquals(SendStep.Preview, sendStepAfterPick(SendStep.Preview, advanceToDetails = true, setOf("a")))
+    fun recreated_send_on_the_coin_step_moves_to_details_once_after_use() {
+        val committed = SendDraft.Empty.pickerCommitted(setOf("a"))
+        val (step, after) = settle(SendStep.Utxos, committed)
+        assertEquals(SendStep.Details, step)
+        assertFalse(after.advanceToDetails)
+        // A later Back to the coin step is not undone by a stale advance.
+        assertEquals(SendStep.Utxos, settle(SendStep.Utxos, after).first)
+    }
+
+    @Test
+    fun empty_commit_from_details_returns_to_the_coin_step() {
+        val committed = SendDraft(selectedKeys = abc).pickerCommitted(emptySet())
+        assertEquals(SendStep.Utxos, settle(SendStep.Details, committed).first)
+    }
+
+    @Test
+    fun later_steps_are_left_alone_and_the_advance_is_still_consumed() {
+        val committed = SendDraft.Empty.pickerCommitted(setOf("a"))
+        val (step, after) = settle(SendStep.Preview, committed)
+        assertEquals(SendStep.Preview, step)
+        assertFalse(after.advanceToDetails)
+        assertEquals(SendStep.Details, settle(SendStep.Details, SendDraft(selectedKeys = setOf("a"))).first)
+    }
+
+    @Test
+    fun coins_spent_while_the_picker_was_open_keep_the_warning_on_the_coin_step() {
+        val committed = SendDraft(selectedKeys = abc).pickerCommitted(setOf("a"), coinsVanished = true)
+        assertTrue(committed.selectionNeedsAck)
+        assertFalse(committed.advanceToDetails)
+        assertEquals(SendStep.Utxos, settle(SendStep.Utxos, committed).first)
     }
 
     @Test
@@ -77,32 +120,28 @@ class SendDraftTest {
     }
 
     @Test
-    fun empty_selection_sends_details_back_to_choosing_coins() {
-        assertEquals(SendStep.Utxos, sendStepForSelection(SendStep.Details, emptySet()))
-    }
-
-    @Test
-    fun details_with_coins_stays_put_and_other_steps_are_untouched() {
-        assertEquals(SendStep.Details, sendStepForSelection(SendStep.Details, setOf("a")))
-        assertEquals(SendStep.Utxos, sendStepForSelection(SendStep.Utxos, emptySet()))
-        assertEquals(SendStep.Preview, sendStepForSelection(SendStep.Preview, emptySet()))
-    }
-
-    @Test
     fun narrowed_filter_drops_hidden_coins_from_the_picker_set() {
-        val next = pickerSelection(abc, visibleKeys = setOf("a", "b"), frozenKeys = emptySet(), showsAll = false)
+        val next =
+            pickerSelection(abc, liveKeys = abc, visibleKeys = setOf("a", "b"), frozenKeys = emptySet(), showsAll = false)
         assertEquals(setOf("a", "b"), next)
     }
 
     @Test
-    fun all_filter_keeps_coins_outside_the_visible_set() {
-        val next = pickerSelection(abc, visibleKeys = setOf("a"), frozenKeys = emptySet(), showsAll = true)
+    fun all_filter_keeps_live_coins_outside_the_visible_set() {
+        val next = pickerSelection(abc, liveKeys = abc, visibleKeys = setOf("a"), frozenKeys = emptySet(), showsAll = true)
         assertEquals(abc, next)
     }
 
     @Test
+    fun spent_coins_leave_the_picker_set_even_under_all() {
+        val next =
+            pickerSelection(abc, liveKeys = setOf("a", "b"), visibleKeys = setOf("a", "b"), frozenKeys = emptySet(), showsAll = true)
+        assertEquals(setOf("a", "b"), next)
+    }
+
+    @Test
     fun frozen_coins_always_leave_the_picker_set() {
-        val next = pickerSelection(abc, visibleKeys = abc, frozenKeys = setOf("c"), showsAll = true)
+        val next = pickerSelection(abc, liveKeys = abc, visibleKeys = abc, frozenKeys = setOf("c"), showsAll = true)
         assertEquals(setOf("a", "b"), next)
     }
 }

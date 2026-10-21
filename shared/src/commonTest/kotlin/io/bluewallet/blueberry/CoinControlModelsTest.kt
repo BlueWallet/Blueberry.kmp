@@ -182,6 +182,43 @@ class CoinControlModelsTest {
     }
 
     @Test
+    fun privacy_names_an_already_linked_pair_joined_by_an_outsider() {
+        // c3 sits in a provable fixture group; the outsider shares neither its provable nor its likely group.
+        val snap = fixtureSnapshot()
+        val pair = snap.coins.filter { it.certainGroupId == snap.coins.first { c -> c.key == "c3:0" }.certainGroupId }
+        assertTrue(pair.size >= 2, "fixture needs a provable pair, got ${pair.map { it.key }}")
+        val outsider = snap.coins.first { it.groupId != pair.first().groupId && it.certainGroupId != pair.first().certainGroupId }
+        val notice = privacyNoticeForSelection(pair.take(2) + outsider)
+        assertEquals(PrivacyNoticeKind.Warning, notice.kind)
+        assertTrue(notice.message.startsWith("2 of these coins already share history on-chain."), notice.message)
+        assertTrue(notice.message.contains("Adding the other 1 joins 2 separate histories"), notice.message)
+        assertFalse(notice.message.contains("unlinked"))
+    }
+
+    @Test
+    fun accessibility_label_names_frozen_coins() {
+        val snap = fixtureSnapshot()
+        val some = coinControlAccessibilityLabel(3, emptyList(), 3, frozenCount = 1)
+        assertEquals("3 coins. No on-chain links. 1 frozen. Opens coin control.", some)
+        val all = coinControlAccessibilityLabel(2, emptyList(), 2, frozenCount = 2)
+        assertEquals("2 coins. No on-chain links. All coins are frozen. Opens coin control.", all)
+        val linked = coinControlAccessibilityLabel(snap.coins.size, snap.groups.filter { it.linked }, snap.soloCount, frozenCount = 1)
+        assertTrue(linked.endsWith(". 1 frozen. Opens coin control."), linked)
+    }
+
+    @Test
+    fun summary_line_lists_coins_links_and_independents() {
+        val snap = fixtureSnapshot(certainOverride = mapOf("c3:0" to "c3:0"))
+        assertEquals("11 coins · 1 linked group · 1 probable · 6 independent", coinControlSummaryLine(snap))
+    }
+
+    @Test
+    fun filter_chip_action_names_the_count_and_the_deselect() {
+        assertEquals("Show all 11 coins", coinFilterClickLabel("All", 11, narrows = false))
+        assertEquals("Show Frozen, 1 coin. Deselects hidden coins", coinFilterClickLabel("Frozen", 1, narrows = true))
+    }
+
+    @Test
     fun privacy_near_dust_cost_line() {
         val snap = fixtureSnapshot()
         val c10 = snap.coins.first { it.key == "c10:0" }
