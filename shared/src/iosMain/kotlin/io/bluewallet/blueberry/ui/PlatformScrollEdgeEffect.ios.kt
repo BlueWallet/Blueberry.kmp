@@ -20,11 +20,12 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeProgressive
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.allocArray
 import kotlinx.cinterop.memScoped
@@ -93,19 +94,16 @@ actual fun PlatformBottomEdgeBlur(
     val tint = if (LocalDarkPalette.current) Color.Black else Color.White
     val style =
         remember(tint) {
-            HazeStyle(
-                backgroundColor = Color.Transparent,
-                tint = HazeTint(tint.copy(alpha = 0.82f)),
-                blurRadius = 20.dp,
-                noiseFactor = 0f,
-                fallbackTint = HazeTint(tint.copy(alpha = 0.92f)),
-            )
+            HazeBlurStyle {
+                backgroundColor(Color.Transparent)
+                colorEffects(listOf(HazeColorEffect.tint(tint.copy(alpha = 0.82f))))
+                blurRadius(20.dp)
+                noiseFactor(0f)
+                fallbackColorEffect(HazeColorEffect.tint(tint.copy(alpha = 0.92f)))
+                progressive(HazeProgressive.verticalGradient(startIntensity = 0f, endIntensity = 1f))
+            }
         }
-    Box(
-        modifier.hazeEffect(state = hazeState, style = style) {
-            progressive = HazeProgressive.verticalGradient(startIntensity = 0f, endIntensity = 1f)
-        },
-    )
+    Box(modifier.hazeBlur(input = HazeInput.Sources(hazeState), style = style))
 }
 
 /**

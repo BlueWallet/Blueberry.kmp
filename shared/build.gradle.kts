@@ -100,6 +100,7 @@ kotlin {
                 implementation(libs.compose.uiToolingPreview)
                 implementation(libs.qrose)
                 implementation(libs.haze)
+                implementation(libs.haze.blur)
                 implementation(libs.androidx.lifecycle.viewmodelCompose)
                 implementation(libs.androidx.lifecycle.runtimeCompose)
                 implementation(libs.bitcoin.headers)

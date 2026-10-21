@@ -34,7 +34,7 @@ sqlite-jdbc = "3.53.2.1"
 ktlint = "14.2.0"
 detekt = "1.23.8"
 # 1.6.9 is the last Haze line built for Compose 1.8. 1.7+ is compiled against Compose 1.12.
-haze = "1.6.9"
+haze = "2.0.1"
 
 [libraries]
 bitcoin-headers = { module = "io.bluewallet:bitcoin-headers", version.ref = "bitcoin-headers" }
@@ -78,6 +78,7 @@ sqldelight-sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", versi
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 qrose = { module = "io.github.alexzhirkevich:qrose", version.ref = "qrose" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }
 webcam-capture = { module = "com.github.sarxos:webcam-capture", version.ref = "webcam-capture" }
 slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
 
