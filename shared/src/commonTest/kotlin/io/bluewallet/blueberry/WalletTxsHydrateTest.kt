@@ -13,6 +13,7 @@ import io.bluewallet.blueberry.bus.SyncCatchupReason
 import io.bluewallet.blueberry.bus.SyncIdlePayload
 import io.bluewallet.blueberry.bus.WalletTxsPayload
 import io.bluewallet.blueberry.bus.createMessageBus
+import io.bluewallet.blueberry.parse.CoinLinkage
 import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.storage.DownloadedBlock
 import io.bluewallet.blueberry.storage.HeaderWrite
@@ -471,6 +472,40 @@ class WalletTxsHydrateTest {
         val snap = snapshotFromDb(db, 1, 1, wallet)
         assertEquals(-1_000L, snap.txs.single().netDeltaSats)
         assertEquals(0L, snap.balanceSats)
+        db.close()
+    }
+
+    @Test
+    fun cached_linkage_is_reused_only_for_the_same_coin_set() {
+        val db = createSqliteDatabase(":memory:")
+        val secret =
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        saveWalletSecret(db, secret)
+        val wallet = createWallet(db)
+        val a = wallet.snapshot().addresses.first { !it.change && it.index == 0 }
+        val b = wallet.snapshot().addresses.first { !it.change && it.index == 1 }
+        val incoming =
+            Transaction(
+                2L,
+                listOf(TxIn(OutPoint(TxHash(ByteArray(32).also { it[0] = 9 }), 0L), 0xffffffffL)),
+                listOf(TxOut(Satoshi(30_000L), a.scriptPubKey), TxOut(Satoshi(20_000L), b.scriptPubKey)),
+                0L,
+            )
+        db.transactions.upsert(
+            StoredTx(incoming.txid.toString(), 100, 0, "11".repeat(32), Transaction.write(incoming), 50_000L),
+        )
+        val fresh = snapshotFromDb(db, 1, 1, wallet)
+        val keys = fresh.coinGroupIds.keys
+        assertEquals(2, keys.size)
+
+        val sentinel = CoinLinkage(certain = keys.associateWith { "cached" }, likely = keys.associateWith { "cached" })
+        val reused = snapshotFromDb(db, 2, 2, wallet, sentinel)
+        assertEquals(keys.associateWith { "cached" }, reused.coinGroupIds)
+
+        val stale = CoinLinkage(certain = mapOf("gone:0" to "x"), likely = mapOf("gone:0" to "x"))
+        val recomputed = snapshotFromDb(db, 3, 3, wallet, stale)
+        assertEquals(fresh.coinGroupIds, recomputed.coinGroupIds)
+        assertEquals(fresh.coinCertainGroupIds, recomputed.coinCertainGroupIds)
         db.close()
     }
 }

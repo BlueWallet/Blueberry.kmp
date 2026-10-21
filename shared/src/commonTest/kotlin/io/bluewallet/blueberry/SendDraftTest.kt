@@ -54,6 +54,29 @@ class SendDraftTest {
     }
 
     @Test
+    fun non_empty_picker_commit_asks_send_to_advance_once() {
+        val committed = SendDraft.Empty.pickerCommitted(setOf("a"))
+        assertTrue(committed.advanceToDetails)
+        assertFalse(committed.detailsAdvanceConsumed().advanceToDetails)
+        assertFalse(SendDraft(selectedKeys = abc).pickerCommitted(emptySet()).advanceToDetails)
+    }
+
+    @Test
+    fun confirmed_pick_moves_the_coin_step_to_details_even_after_recreation() {
+        assertEquals(SendStep.Details, sendStepAfterPick(SendStep.Utxos, advanceToDetails = true, setOf("a")))
+        assertEquals(SendStep.Utxos, sendStepAfterPick(SendStep.Utxos, advanceToDetails = false, setOf("a")))
+        assertEquals(SendStep.Utxos, sendStepAfterPick(SendStep.Utxos, advanceToDetails = true, emptySet()))
+        assertEquals(SendStep.Preview, sendStepAfterPick(SendStep.Preview, advanceToDetails = true, setOf("a")))
+    }
+
+    @Test
+    fun coin_step_continue_stays_live_while_a_vanished_coin_warning_is_shown() {
+        assertTrue(utxosContinueEnabled(emptySet(), selectionNeedsAck = true))
+        assertTrue(utxosContinueEnabled(setOf("a"), selectionNeedsAck = false))
+        assertFalse(utxosContinueEnabled(emptySet(), selectionNeedsAck = false))
+    }
+
+    @Test
     fun empty_selection_sends_details_back_to_choosing_coins() {
         assertEquals(SendStep.Utxos, sendStepForSelection(SendStep.Details, emptySet()))
     }

@@ -92,6 +92,9 @@ import kotlinx.coroutines.launch
 /** Breathing room under the inline nav title before the summary. */
 private val TitleBelowHeaderGap = 12.dp
 
+/** Frozen coins stay in the weight bar for scale but read as locked under the spendable headline. */
+private const val FROZEN_BAR_ALPHA = 0.18f
+
 enum class CoinControlMode {
     /** Home entry: Send opens the send flow with the selection. */
     Standalone,
@@ -423,7 +426,12 @@ private fun CoinWeightBar(
         var x = 0f
         for ((index, coin) in coins.withIndex()) {
             val w = widths[index]
-            val alpha = if (!hasSelection || coin.key in selectedKeys) 1f else 0.28f
+            val alpha =
+                when {
+                    coin.isFrozen -> FROZEN_BAR_ALPHA
+                    !hasSelection || coin.key in selectedKeys -> 1f
+                    else -> 0.28f
+                }
             drawRoundRect(
                 color = Color(coin.colorArgb).copy(alpha = alpha),
                 topLeft = Offset(x, 0f),
@@ -574,6 +582,7 @@ private fun CoinControlRow(
         buildString {
             append(formatBtc(coin.valueSats))
             append(", ")
+            if (coin.isFrozen) append("frozen, ")
             append(subtitle)
             append(", ")
             append(coin.ageLabel)
@@ -593,7 +602,7 @@ private fun CoinControlRow(
                     .clip(RoundedCornerShape(12.dp))
                     .then(
                         if (coin.isFrozen) {
-                            Modifier
+                            Modifier.semantics { contentDescription = selectA11y }
                         } else {
                             Modifier
                                 .semantics {

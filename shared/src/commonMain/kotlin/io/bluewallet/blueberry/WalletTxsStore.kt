@@ -21,6 +21,7 @@ import io.bluewallet.blueberry.parse.shortTxid
 import io.bluewallet.blueberry.parse.utxoValueBar
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
+import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.hexToBytes
 import io.bluewallet.headers.decodeBlockHeader
@@ -288,11 +289,111 @@ private fun pendingWalletTxRow(
         privateSend = row.privateSend,
     )
 
+private class WalletCoins(
+    val utxos: List<WalletUtxoRow>,
+    val fees: Map<String, TxFee>,
+    val linkage: CoinLinkage,
+) {
+    companion object {
+        val None = WalletCoins(emptyList(), emptyMap(), CoinLinkage(emptyMap(), emptyMap()))
+    }
+}
+
+private class CoinRowCtx(
+    val db: Database,
+    val nowMs: Long,
+    val timeLabels: MutableMap<Int, HeightTimeLabel>,
+    val nameByOutpoint: Map<String, String>,
+    val frozenOutpoints: Set<String>,
+)
+
+private fun walletCoins(
+    wallet: Wallet,
+    stored: List<StoredTx>,
+    ctx: CoinRowCtx,
+    cachedLinkage: CoinLinkage?,
+): WalletCoins {
+    wallet.syncFromDb()
+    val txRows = stored.map { TxRow(it.txid, it.height, it.txIndex, it.tx) }
+    val scripts = wallet.scripts()
+    val scan = scanWatchTxs(txRows, scripts)
+    val watched = wallet.snapshot().addresses
+    val watchByScript = watched.associateBy { scriptHex(it.scriptPubKey) }
+    val changeScripts = watched.filter { it.change }.map { it.scriptPubKey }
+    val map = scan.utxos
+    // Linkage keys every unspent coin, so a cache over the same coin set is still exact.
+    val linkage =
+        cachedLinkage?.takeIf { it.likely.keys == map.keys }
+            ?: computeCoinLinkage(txRows, scripts, changeScripts)
+    val maxValue = map.values.maxOfOrNull { it.value } ?: 0L
+    val utxos =
+        map.entries
+            .map { (key, u) ->
+                val (txid, vout) = parseOutpointKey(key)
+                val height = u.height ?: 0
+                val watch = watchByScript[scriptHex(u.scriptPubKey)]
+                val confirmedAt =
+                    if (height == 0) {
+                        null
+                    } else {
+                        timeLabelForHeight(ctx.db, height, ctx.nowMs, ctx.timeLabels).unixSeconds
+                    }
+                WalletUtxoRow(
+                    key = key,
+                    txid = txid,
+                    vout = vout,
+                    outpointShort = shortOutpoint(txid, vout),
+                    valueSats = u.value,
+                    scriptPubKey = u.scriptPubKey,
+                    address = watch?.address,
+                    path = watch?.path,
+                    amountLabel = formatBtc(u.value),
+                    height = height,
+                    ageLabel = formatCoinAgeFromConfirmedAt(confirmedAt, ctx.nowMs / 1000),
+                    valueBar = utxoValueBar(u.value, maxValue),
+                    name = ctx.nameByOutpoint[key],
+                    isChange = changeScripts.any { it.contentEquals(u.scriptPubKey) },
+                    isFrozen = key in ctx.frozenOutpoints,
+                )
+            }.sortedWith(
+                compareByDescending<WalletUtxoRow> { it.height }
+                    .thenBy { it.txid }
+                    .thenBy { it.vout },
+            )
+    return WalletCoins(utxos, scan.fees, linkage)
+}
+
+private fun confirmedTxRow(
+    tx: StoredTx,
+    whenLabel: HeightTimeLabel,
+    labels: TxRowLabels,
+    privateSend: Boolean,
+    fee: TxFee?,
+): WalletTxRow =
+    WalletTxRow(
+        txid = tx.txid,
+        shortTxid = shortTxid(tx.txid),
+        height = tx.height,
+        timeLabel = whenLabel.label,
+        blockTimeS = whenLabel.unixSeconds,
+        netDeltaSats = tx.netDeltaSats,
+        netDeltaLabel = formatNetDelta(tx.netDeltaSats),
+        paymentLabel = labels.noteByTxid[tx.txid],
+        utxoLabel = labels.utxoByTxid[tx.txid],
+        addressLabel = labels.address(tx.tx),
+        privateSend = privateSend,
+        fee = fee,
+    )
+
+/** Linkage already in this snapshot; label and note edits leave it unchanged. */
+internal fun WalletTxsSnapshot.linkage(): CoinLinkage = CoinLinkage(certain = coinCertainGroupIds, likely = coinGroupIds)
+
 fun snapshotFromDb(
     db: Database,
     at: Long,
     nowMs: Long = nowMillis(),
     wallet: Wallet? = null,
+    cachedLinkage: CoinLinkage? = null,
 ): WalletTxsSnapshot {
     val stored = db.transactions.list()
     val balanceSats = stored.fold(0L) { s, t -> s + t.netDeltaSats }
@@ -311,77 +412,16 @@ fun snapshotFromDb(
             byAddress = db.addressLabels.list().associate { it.address to it.label },
         )
 
-    var utxos = emptyList<WalletUtxoRow>()
-    var fees = emptyMap<String, TxFee>()
-    var linkage = CoinLinkage(emptyMap(), emptyMap())
-    if (wallet != null) {
-        wallet.syncFromDb()
-        val txRows = stored.map { TxRow(it.txid, it.height, it.txIndex, it.tx) }
-        val scripts = wallet.scripts()
-        val scan = scanWatchTxs(txRows, scripts)
-        fees = scan.fees
-        val watched = wallet.snapshot().addresses
-        val watchByScript = watched.associateBy { scriptHex(it.scriptPubKey) }
-        val changeScripts = watched.filter { it.change }.map { it.scriptPubKey }
-        linkage = computeCoinLinkage(txRows, scripts, changeScripts)
-        val map = scan.utxos
-        var maxValue = 0L
-        for (u in map.values) {
-            if (u.value > maxValue) maxValue = u.value
-        }
-        utxos =
-            map.entries
-                .map { (key, u) ->
-                    val (txid, vout) = parseOutpointKey(key)
-                    val height = u.height ?: 0
-                    val watch = watchByScript[scriptHex(u.scriptPubKey)]
-                    val confirmedAt =
-                        if (height == 0) {
-                            null
-                        } else {
-                            timeLabelForHeight(db, height, nowMs, timeLabels).unixSeconds
-                        }
-                    WalletUtxoRow(
-                        key = key,
-                        txid = txid,
-                        vout = vout,
-                        outpointShort = shortOutpoint(txid, vout),
-                        valueSats = u.value,
-                        scriptPubKey = u.scriptPubKey,
-                        address = watch?.address,
-                        path = watch?.path,
-                        amountLabel = formatBtc(u.value),
-                        height = height,
-                        ageLabel = formatCoinAgeFromConfirmedAt(confirmedAt, nowMs / 1000),
-                        valueBar = utxoValueBar(u.value, maxValue),
-                        name = nameByOutpoint[key],
-                        isChange = changeScripts.any { it.contentEquals(u.scriptPubKey) },
-                        isFrozen = key in frozenOutpoints,
-                    )
-                }.sortedWith(
-                    compareByDescending<WalletUtxoRow> { it.height }
-                        .thenBy { it.txid }
-                        .thenBy { it.vout },
-                )
-    }
+    val coinCtx = CoinRowCtx(db, nowMs, timeLabels, nameByOutpoint, frozenOutpoints)
+    val coins = wallet?.let { walletCoins(it, stored, coinCtx, cachedLinkage) } ?: WalletCoins.None
+    val utxos = coins.utxos
+    val fees = coins.fees
+    val linkage = coins.linkage
 
     val confirmedTxs =
         stored.map { tx ->
             val whenLabel = timeLabelForHeight(db, tx.height, nowMs, timeLabels)
-            WalletTxRow(
-                txid = tx.txid,
-                shortTxid = shortTxid(tx.txid),
-                height = tx.height,
-                timeLabel = whenLabel.label,
-                blockTimeS = whenLabel.unixSeconds,
-                netDeltaSats = tx.netDeltaSats,
-                netDeltaLabel = formatNetDelta(tx.netDeltaSats),
-                paymentLabel = labels.noteByTxid[tx.txid],
-                utxoLabel = labels.utxoByTxid[tx.txid],
-                addressLabel = labels.address(tx.tx),
-                privateSend = tx.txid in privateSendTxids,
-                fee = fees[tx.txid],
-            )
+            confirmedTxRow(tx, whenLabel, labels, privateSend = tx.txid in privateSendTxids, fee = fees[tx.txid])
         }
     val pending =
         pendingSendRows(

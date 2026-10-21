@@ -73,6 +73,8 @@ fun SendScreen(
     onChooseCoins: () -> Unit = {},
     onSelectedKeysChange: (Set<String>) -> Unit = {},
     onFeeRateChange: (Double?) -> Unit = {},
+    advanceToDetails: Boolean = false,
+    onAdvanceToDetailsConsumed: () -> Unit = {},
 ) {
     val wallet = runtime.wallet
     // Form fields use rememberSaveable so the Send back-stack entry keeps them across the
@@ -136,8 +138,13 @@ fun SendScreen(
         if (initialSelectedKeys != pushedKeys[0] && selectedKeys != initialSelectedKeys) {
             pushedKeys[0] = initialSelectedKeys
             selectedKeys = initialSelectedKeys
-            if (initialSelectedKeys.isNotEmpty() && step == SendStep.Utxos) stepName = SendStep.Details.name
         }
+    }
+    LaunchedEffect(advanceToDetails) {
+        if (!advanceToDetails) return@LaunchedEffect
+        val next = sendStepAfterPick(step, advanceToDetails, initialSelectedKeys)
+        if (next != step) stepName = next.name
+        onAdvanceToDetailsConsumed()
     }
     LaunchedEffect(selectedKeys, step) {
         val next = sendStepForSelection(step, selectedKeys)
@@ -267,7 +274,7 @@ fun SendScreen(
                             }
                             if (selectedKeys.isNotEmpty()) stepName = SendStep.Details.name
                         },
-                        enabled = selectedKeys.isNotEmpty(),
+                        enabled = utxosContinueEnabled(selectedKeys, selectionNeedsAck),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }

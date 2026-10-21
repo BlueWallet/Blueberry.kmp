@@ -5,6 +5,8 @@ internal data class SendDraft(
     val selectedKeys: Set<String> = emptySet(),
     val feeRateSatPerVb: Double? = null,
     val selectionNeedsAck: Boolean = false,
+    /** Set by a non-empty picker commit; Send consumes it on its next composition, even a recreated one. */
+    val advanceToDetails: Boolean = false,
 ) {
     fun withSelection(keys: Set<String>): SendDraft = copy(selectedKeys = keys)
 
@@ -13,7 +15,9 @@ internal data class SendDraft(
     fun withSelectionNeedsAck(value: Boolean): SendDraft = copy(selectionNeedsAck = value)
 
     /** The subject just reviewed this set in the picker, so a vanished-coin warning is answered. */
-    fun pickerCommitted(keys: Set<String>): SendDraft = copy(selectedKeys = keys, selectionNeedsAck = false)
+    fun pickerCommitted(keys: Set<String>): SendDraft = copy(selectedKeys = keys, selectionNeedsAck = false, advanceToDetails = keys.isNotEmpty())
+
+    fun detailsAdvanceConsumed(): SendDraft = copy(advanceToDetails = false)
 
     fun frozen(key: String): SendDraft = copy(selectedKeys = selectedKeys - key)
 
@@ -24,6 +28,19 @@ internal data class SendDraft(
         fun fromStandalone(keys: Set<String>): SendDraft = SendDraft(selectedKeys = keys)
     }
 }
+
+/** A confirmed pick moves the coin step on to Details; later steps are left alone. */
+internal fun sendStepAfterPick(
+    step: SendStep,
+    advanceToDetails: Boolean,
+    selected: Set<String>,
+): SendStep = if (advanceToDetails && step == SendStep.Utxos && selected.isNotEmpty()) SendStep.Details else step
+
+/** Continue on the coin step also answers a vanished-coin warning, so it stays live while one is shown. */
+internal fun utxosContinueEnabled(
+    selected: Set<String>,
+    selectionNeedsAck: Boolean,
+): Boolean = selected.isNotEmpty() || selectionNeedsAck
 
 /** Details needs inputs; with none, Send falls back to choosing coins instead of blaming the amount. */
 internal fun sendStepForSelection(

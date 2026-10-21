@@ -149,6 +149,8 @@ internal fun WalletNavHost(
                     },
                     onSelectedKeysChange = { sendDraft = sendDraft.withSelection(it) },
                     onFeeRateChange = { sendDraft = sendDraft.withFeeRate(it) },
+                    advanceToDetails = sendDraft.advanceToDetails,
+                    onAdvanceToDetailsConsumed = { sendDraft = sendDraft.detailsAdvanceConsumed() },
                 )
             }
             composable<CoinsRoute> { entry ->
