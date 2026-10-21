@@ -76,7 +76,13 @@ data class CoinControlSnapshot(
     val totalSats: Long,
     val bubbles: List<CoinControlBubble>,
     val filterCounts: Map<CoinControlFilter, Int>,
-)
+    val frozenSats: Long = 0L,
+) {
+    val spendableSats: Long get() = totalSats - frozenSats
+
+    val availability: CoinAvailability
+        get() = coinAvailability(coinCount = coins.size, frozenCount = coins.count { it.isFrozen })
+}
 
 enum class PrivacyNoticeKind {
     Hint,
@@ -241,6 +247,7 @@ fun buildCoinControlSnapshot(
         totalSats = coins.sumOf { it.valueSats },
         bubbles = bubbles,
         filterCounts = filterCounts,
+        frozenSats = coins.filter { it.isFrozen }.sumOf { it.valueSats },
     )
 }
 

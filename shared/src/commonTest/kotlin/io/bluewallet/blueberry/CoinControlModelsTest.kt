@@ -236,6 +236,14 @@ class CoinControlModelsTest {
     }
 
     @Test
+    fun snapshot_splits_spendable_from_frozen() {
+        val snap = fixtureSnapshot()
+        assertEquals(292L, snap.frozenSats)
+        assertEquals(275_226L - 292L, snap.spendableSats)
+        assertEquals(CoinAvailability.Spendable, snap.availability)
+    }
+
+    @Test
     fun filter_recomputes_group_totals() {
         val snap = fixtureSnapshot()
         val frozen = filterCoinControlGroups(snap, CoinControlFilter.Frozen)

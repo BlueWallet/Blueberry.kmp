@@ -31,8 +31,9 @@ class CoinsPanelLayoutTest {
     private fun assertLabelFits(
         layout: BubbleStripLayout,
         width: Float,
+        labelDp: Float = BUBBLE_OVERFLOW_LABEL_DP,
     ) {
-        val reserved = if (layout.overflowCount > 0) BUBBLE_OVERFLOW_LABEL_DP else 0f
+        val reserved = if (layout.overflowCount > 0) labelDp else 0f
         assertTrue(
             layout.contentWidthDp() + reserved <= width + 0.5f,
             "coins ${layout.contentWidthDp()} + label $reserved overrun $width",
@@ -57,6 +58,19 @@ class CoinsPanelLayoutTest {
             val layout = layoutBubbleStrip(bubbles, availableWidthDp = width.toFloat())
             assertEquals(bubbles.size, layout.items.size + layout.overflowCount)
             assertLabelFits(layout, width.toFloat())
+        }
+    }
+
+    @Test
+    fun wide_measured_label_is_honoured() {
+        // Large font scale or a three-digit count: the reservation follows the measured label.
+        val bubbles = linked(6) + independent(120)
+        for (labelDp in listOf(20f, 44f, 72f)) {
+            for (width in 90..400 step 7) {
+                val layout = layoutBubbleStrip(bubbles, availableWidthDp = width.toFloat(), overflowLabelDp = labelDp)
+                assertEquals(bubbles.size, layout.items.size + layout.overflowCount)
+                assertLabelFits(layout, width.toFloat(), labelDp)
+            }
         }
     }
 

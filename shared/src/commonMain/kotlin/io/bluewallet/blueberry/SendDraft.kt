@@ -25,6 +25,12 @@ internal data class SendDraft(
     }
 }
 
+/** Details needs inputs; with none, Send falls back to choosing coins instead of blaming the amount. */
+internal fun sendStepForSelection(
+    step: SendStep,
+    selected: Set<String>,
+): SendStep = if (step == SendStep.Details && selected.isEmpty()) SendStep.Utxos else step
+
 /**
  * Picker selection after the filter or the snapshot changes: frozen coins always drop, and a
  * narrowed filter drops hidden coins so the weight bar, notice, and commit share one set.

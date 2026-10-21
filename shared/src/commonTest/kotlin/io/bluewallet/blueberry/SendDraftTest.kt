@@ -54,6 +54,18 @@ class SendDraftTest {
     }
 
     @Test
+    fun empty_selection_sends_details_back_to_choosing_coins() {
+        assertEquals(SendStep.Utxos, sendStepForSelection(SendStep.Details, emptySet()))
+    }
+
+    @Test
+    fun details_with_coins_stays_put_and_other_steps_are_untouched() {
+        assertEquals(SendStep.Details, sendStepForSelection(SendStep.Details, setOf("a")))
+        assertEquals(SendStep.Utxos, sendStepForSelection(SendStep.Utxos, emptySet()))
+        assertEquals(SendStep.Preview, sendStepForSelection(SendStep.Preview, emptySet()))
+    }
+
+    @Test
     fun narrowed_filter_drops_hidden_coins_from_the_picker_set() {
         val next = pickerSelection(abc, visibleKeys = setOf("a", "b"), frozenKeys = emptySet(), showsAll = false)
         assertEquals(setOf("a", "b"), next)

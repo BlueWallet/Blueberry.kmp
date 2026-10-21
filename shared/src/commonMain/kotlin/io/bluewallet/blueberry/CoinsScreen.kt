@@ -367,13 +367,22 @@ fun CoinsScreen(
 private fun CoinControlSummary(control: CoinControlSnapshot) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         BtcAmountText(
-            sats = control.totalSats,
+            sats = control.spendableSats,
             color = BwColors.Ink,
             fontSize = 42.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.55).sp,
             roundedDigits = true,
         )
+        FrozenBalancePill(control.frozenSats)
+        if (control.availability == CoinAvailability.AllFrozen) {
+            Text(
+                text = ALL_FROZEN_NOTICE,
+                color = BwColors.Warning,
+                fontFamily = BwFontFamily,
+                fontSize = 15.sp,
+            )
+        }
         val coinsWord = if (control.coins.size == 1) "1 coin" else "${control.coins.size} coins"
         val parts = mutableListOf(coinsWord)
         when (control.linkedGroupCount) {

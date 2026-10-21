@@ -59,7 +59,7 @@ import io.bluewallet.blueberry.wallet.loadWalletSecret
 import io.bluewallet.blueberry.wallet.parseWalletSecret
 import kotlinx.coroutines.launch
 
-private enum class SendStep { Utxos, Details, PrivateSend, Preview }
+internal enum class SendStep { Utxos, Details, PrivateSend, Preview }
 
 @Composable
 @Suppress("LongMethod", "LongParameterList", "CyclomaticComplexMethod")
@@ -139,6 +139,11 @@ fun SendScreen(
             if (initialSelectedKeys.isNotEmpty() && step == SendStep.Utxos) stepName = SendStep.Details.name
         }
     }
+    LaunchedEffect(selectedKeys, step) {
+        val next = sendStepForSelection(step, selectedKeys)
+        if (next != step) stepName = next.name
+    }
+    val availability = coinAvailability(snap.utxos)
 
     fun applySendPayload(payload: String) {
         val next =
@@ -222,8 +227,13 @@ fun SendScreen(
                     verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
                 ) {
                     Text(
-                        text = "Choose which coins this payment spends.",
-                        color = BwColors.InkSecondary,
+                        text = sendCoinPrompt(availability),
+                        color =
+                            if (availability == CoinAvailability.AllFrozen) {
+                                BwColors.Warning
+                            } else {
+                                BwColors.InkSecondary
+                            },
                         fontFamily = BwFontFamily,
                         fontSize = BwType.BodySize,
                     )
@@ -244,7 +254,7 @@ fun SendScreen(
                         )
                     }
                     PillButton(
-                        text = "Choose coins",
+                        text = if (availability == CoinAvailability.AllFrozen) "Open coin control" else "Choose coins",
                         onClick = onChooseCoins,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -312,6 +322,10 @@ fun SendScreen(
                                     if (selectionNeedsAck) {
                                         onSelectionNeedsAckChange(false)
                                         feeError = "Selection changed — some coins are gone. Continue again to proceed."
+                                        return@handler
+                                    }
+                                    if (selectedKeys.isEmpty()) {
+                                        stepName = SendStep.Utxos.name
                                         return@handler
                                     }
                                     when (val result = validateSendDetails(address, amount, label, selectedSum, feeRate)) {

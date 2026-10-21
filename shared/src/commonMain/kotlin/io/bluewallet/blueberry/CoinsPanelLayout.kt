@@ -34,6 +34,7 @@ fun layoutBubbleStrip(
     availableWidthDp: Float,
     rMaxDp: Float = 28f,
     rMinDp: Float = 2.5f,
+    overflowLabelDp: Float = BUBBLE_OVERFLOW_LABEL_DP,
 ): BubbleStripLayout {
     if (bubbles.isEmpty() || availableWidthDp <= 0f) {
         return BubbleStripLayout(emptyList(), 0, 1f)
@@ -65,7 +66,7 @@ fun layoutBubbleStrip(
     var overflow = 0
 
     // Once anything is dropped, the +N label takes the strip's right end.
-    fun budget(): Float = if (overflow > 0) availableWidthDp - BUBBLE_OVERFLOW_LABEL_DP else availableWidthDp
+    fun budget(): Float = if (overflow > 0) availableWidthDp - overflowLabelDp else availableWidthDp
 
     // Prefer dropping independent coins, then the smallest linked coin, so a
     // 2.5dp-floored cluster that still overflows is counted in +N instead of clipped.
@@ -102,7 +103,7 @@ fun layoutBubbleStrip(
     return BubbleStripLayout(items, overflow, scale)
 }
 
-/** Width reserved at the strip's end for the 12sp "+N" overflow label. */
+/** Fallback "+N" reservation; the panel passes the measured label width instead. */
 const val BUBBLE_OVERFLOW_LABEL_DP = 28f
 
 /** Drawn width of the laid-out coins, using the same gaps as the strip. */

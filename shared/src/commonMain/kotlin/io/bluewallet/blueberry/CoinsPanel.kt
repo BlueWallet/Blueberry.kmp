@@ -31,6 +31,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.bluewallet.blueberry.ui.BwColors
@@ -201,6 +203,7 @@ private fun CoinsPanelHeader(
 /** Vertical room for the largest bubble plus linked-group stadium padding. */
 private val BubbleStripGroupPad = 5.dp
 private val BubbleStripMaxHeight = 66.dp
+private val BubbleStripLabelGap = 6.dp
 
 @Composable
 private fun CoinsPanelPlaceholderStrip() {
@@ -229,11 +232,20 @@ private fun CoinsPanelBubbleStrip(bubbles: List<CoinControlBubble>) {
         contentAlignment = Alignment.CenterStart,
     ) {
         val density = LocalDensity.current
+        val measurer = rememberTextMeasurer()
+        val labelStyle = TextStyle(fontFamily = BwFontFamily, fontSize = 12.sp)
+        // Widest label this strip can show (every coin hidden), at the current font scale.
+        val labelDp =
+            remember(bubbles.size, density, measurer) {
+                val px = measurer.measure("+${bubbles.size}", labelStyle).size.width
+                with(density) { px.toDp() + BubbleStripLabelGap }.value
+            }
         val layout =
-            remember(bubbles, maxWidth) {
+            remember(bubbles, maxWidth, labelDp) {
                 layoutBubbleStrip(
                     bubbles = bubbles,
                     availableWidthDp = maxWidth.value,
+                    overflowLabelDp = labelDp,
                 )
             }
         val maxRadiusDp = layout.items.maxOfOrNull { it.radiusDp } ?: 10f
@@ -308,8 +320,7 @@ private fun CoinsPanelBubbleStrip(bubbles: List<CoinControlBubble>) {
             Text(
                 text = "+${layout.overflowCount}",
                 color = BwColors.InkSecondary,
-                fontFamily = BwFontFamily,
-                fontSize = 12.sp,
+                style = labelStyle,
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
