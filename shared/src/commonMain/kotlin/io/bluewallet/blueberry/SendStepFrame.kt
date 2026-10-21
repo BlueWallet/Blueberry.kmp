@@ -119,7 +119,6 @@ private fun SendBottomBar(
             modifier
                 .fillMaxWidth()
                 .imePadding()
-                .background(BwColors.Paper)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)),
     ) {
         Box(
