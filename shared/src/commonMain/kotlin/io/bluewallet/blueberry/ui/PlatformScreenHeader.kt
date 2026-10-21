@@ -38,6 +38,8 @@ expect fun PlatformScreenHeader(
     /** Trailing text action (e.g. Clear). Drawn in the header so it stays above edge overlays. */
     trailingText: String? = null,
     onTrailing: (() -> Unit)? = null,
+    /** Overflow actions behind a trailing "…" button. Empty hides the button. */
+    menu: List<HeaderMenuItem> = emptyList(),
 )
 
 /** Body copy at the platform default size: iOS 17pt, Material bodyLarge elsewhere. */
@@ -93,6 +95,7 @@ internal fun MaterialScreenHeader(
     enabled: Boolean = true,
     trailingText: String? = null,
     onTrailing: (() -> Unit)? = null,
+    menu: List<HeaderMenuItem> = emptyList(),
 ) {
     TopAppBar(
         modifier = modifier,
@@ -118,6 +121,7 @@ internal fun MaterialScreenHeader(
             if (trailingText != null && onTrailing != null) {
                 TextAction(text = trailingText, onClick = onTrailing)
             }
+            if (menu.isNotEmpty()) HeaderOverflowMenu(menu)
         },
     )
 }

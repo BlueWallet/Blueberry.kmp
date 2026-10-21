@@ -18,6 +18,7 @@ actual fun PlatformScreenHeader(
     showBarTitle: Boolean,
     trailingText: String?,
     onTrailing: (() -> Unit)?,
+    menu: List<HeaderMenuItem>,
 ) {
     MaterialScreenHeader(
         title = title,
@@ -26,6 +27,7 @@ actual fun PlatformScreenHeader(
         enabled = enabled,
         trailingText = trailingText,
         onTrailing = onTrailing,
+        menu = menu,
     )
 }
 

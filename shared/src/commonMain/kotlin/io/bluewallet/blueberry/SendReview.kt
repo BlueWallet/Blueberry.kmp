@@ -1,6 +1,5 @@
 package io.bluewallet.blueberry
 
-import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.PsbtSendResult
 import io.bluewallet.blueberry.wallet.SendAmount
@@ -93,18 +92,6 @@ fun feeShareWarning(
     val percent = (feeSats * 100 + paidSats / 2) / paidSats
     return "The fee is $percent% of what you're sending."
 }
-
-/** Review change row copy. */
-fun changeRowText(
-    changeSats: Long,
-    label: String,
-    leftoverToFee: Boolean,
-): String =
-    when {
-        changeSats > 0 -> "${formatBtc(changeSats)}, named \"change from: ${label.trim()}\""
-        leftoverToFee -> "None, the leftover went to the fee"
-        else -> "None"
-    }
 
 sealed class FeeDraftCheck {
     data object Invalid : FeeDraftCheck()

@@ -2,6 +2,7 @@
 
 package io.bluewallet.blueberry
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -23,7 +24,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -40,6 +40,7 @@ import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.ui.overlayBackStack
+import io.bluewallet.blueberry.ui.screenPushTransform
 import io.bluewallet.blueberry.wallet.PsbtSendResult
 import io.bluewallet.blueberry.wallet.SignedSendResult
 import kotlinx.coroutines.launch
@@ -87,7 +88,21 @@ fun SendScreen(
 
 @Composable
 private fun SendStepContent(flow: SendFlow) {
-    when (flow.step) {
+    AnimatedContent(
+        targetState = flow.step,
+        modifier = Modifier.fillMaxSize(),
+        transitionSpec = { screenPushTransform(forward = targetState.ordinal > initialState.ordinal) },
+    ) { step ->
+        SendStepScreen(flow, step)
+    }
+}
+
+@Composable
+private fun SendStepScreen(
+    flow: SendFlow,
+    step: SendStep,
+) {
+    when (step) {
         SendStep.Address ->
             if (flow.scanning) {
                 SendScan(flow)
@@ -171,7 +186,6 @@ private fun SendCoins(flow: SendFlow) {
         actions =
             SendCoinsActions(
                 onToggle = flow::toggleCoin,
-                onSelectAll = { keys -> flow.selectedKeys = flow.selectedKeys + keys },
                 onClear = { flow.selectedKeys = emptySet() },
                 onContinue = { if (flow.coverage().covered) flow.step = SendStep.Review },
                 onBack = flow::goBack,
@@ -182,7 +196,6 @@ private fun SendCoins(flow: SendFlow) {
 @Composable
 private fun SendReview(flow: SendFlow) {
     val clipboard = LocalClipboardManager.current
-    var hexCopied by remember(flow.build) { mutableStateOf(false) }
     val amount = flow.amountSats ?: return
     SendReviewStep(
         state =
@@ -201,15 +214,11 @@ private fun SendReview(flow: SendFlow) {
                 onPrivateSend = flow::openPrivateSend,
                 onCopyHex = {
                     val signed = (flow.build as? ReviewBuild.Built)?.result as? SignedSendResult
-                    if (signed != null) {
-                        clipboard.setText(AnnotatedString(signed.txHex))
-                        hexCopied = true
-                    }
+                    if (signed != null) clipboard.setText(AnnotatedString(signed.txHex))
                 },
                 onSend = flow::send,
                 onBack = flow::goBack,
             ),
-        hexCopied = hexCopied,
         showEdges = !flow.feeSheetOpen,
     )
 }

@@ -69,13 +69,6 @@ class SendReviewTest {
     }
 
     @Test
-    fun change_row_copy() {
-        assertEquals("0.00079983 BTC, named \"change from: Rent\"", changeRowText(79_983, " Rent ", false))
-        assertEquals("None, the leftover went to the fee", changeRowText(0, "Rent", true))
-        assertEquals("None", changeRowText(0, "Rent", false))
-    }
-
-    @Test
     fun review_button_follows_the_build() {
         val signed = SignedSendResult("00", "t", 1, 1, 0, emptyList())
         val psbt = PsbtSendResult("00", "t", 1, 1, 0, emptyList())

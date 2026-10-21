@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,7 +38,9 @@ import platform.UIKit.UIColor
 import platform.UIKit.UIControlStateNormal
 import platform.UIKit.UIFont
 import platform.UIKit.UIFontWeightSemibold
+import platform.UIKit.UIImage
 import platform.UIKit.UILabel
+import platform.UIKit.UIMenu
 
 private val NavigationBarHeight = 44.dp
 
@@ -57,6 +60,7 @@ actual fun PlatformScreenHeader(
     showBarTitle: Boolean,
     trailingText: String?,
     onTrailing: (() -> Unit)?,
+    menu: List<HeaderMenuItem>,
 ) {
     Box(
         modifier =
@@ -89,8 +93,56 @@ actual fun PlatformScreenHeader(
                 onClick = onTrailing,
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
+        } else if (menu.isNotEmpty()) {
+            IosOverlayMenuButton(menu = menu, modifier = Modifier.align(Alignment.CenterEnd))
         }
     }
+}
+
+/** "…" button that opens a native pull-down menu. UIKit overlay for the same reason as [IosOverlayTextAction]. */
+@OptIn(ExperimentalForeignApi::class, ExperimentalComposeUiApi::class)
+@Composable
+private fun IosOverlayMenuButton(
+    menu: List<HeaderMenuItem>,
+    modifier: Modifier = Modifier,
+) {
+    val glass = rememberSupportsIosLiquidGlass()
+    val actionColor = BwColors.Action
+    val latestMenu = rememberUpdatedState(menu)
+
+    fun buildMenu(): UIMenu =
+        UIMenu.menuWithChildren(
+            latestMenu.value.mapIndexed { i, item ->
+                UIAction.actionWithTitle(item.title, image = null, identifier = null) { _ ->
+                    latestMenu.value
+                        .getOrNull(i)
+                        ?.onClick
+                        ?.invoke()
+                }
+            },
+        )
+    UIKitView(
+        factory = {
+            val configuration =
+                if (glass) UIButtonConfiguration.glassButtonConfiguration() else UIButtonConfiguration.plainButtonConfiguration()
+            configuration.image = UIImage.systemImageNamed("ellipsis")
+            if (!glass) configuration.baseForegroundColor = actionColor.toUiColor()
+            val button = UIButton.buttonWithConfiguration(configuration, primaryAction = null)
+            button.backgroundColor = UIColor.clearColor
+            button.showsMenuAsPrimaryAction = true
+            button.menu = buildMenu()
+            button
+        },
+        modifier =
+            modifier
+                .size(44.dp)
+                .semantics {
+                    contentDescription = "More"
+                    role = Role.Button
+                },
+        update = { button -> button.menu = buildMenu() },
+        properties = UIKitInteropProperties(placedAsOverlay = true),
+    )
 }
 
 /**

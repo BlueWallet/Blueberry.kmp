@@ -23,12 +23,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.bluewallet.blueberry.parse.formatBtc
+import io.bluewallet.blueberry.ui.AddressGroups
 import io.bluewallet.blueberry.ui.AmountHero
 import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
+import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.Chevron
+import io.bluewallet.blueberry.ui.HeaderMenuItem
 import io.bluewallet.blueberry.ui.TextAction
 import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.ToPill
@@ -88,7 +91,6 @@ internal fun reviewButtonLabel(
 internal fun SendReviewStep(
     state: SendReviewState,
     actions: SendReviewActions,
-    hexCopied: Boolean,
     showEdges: Boolean,
 ) {
     val built = (state.build as? ReviewBuild.Built)?.result
@@ -98,6 +100,12 @@ internal fun SendReviewStep(
         caption = "Step 4 of 4",
         onBack = actions.onBack,
         showEdges = showEdges,
+        menu =
+            if (built != null && built !is PsbtSendResult) {
+                listOf(HeaderMenuItem("Copy transaction hex", actions.onCopyHex))
+            } else {
+                emptyList()
+            },
         bottom = {
             TintedPillButton(
                 text = reviewButtonLabel(state.rate, state.build),
@@ -107,11 +115,15 @@ internal fun SendReviewStep(
             )
         },
     ) {
-        ToPill(label = state.to.label, address = state.to.address)
+        if (state.to.label.isNotBlank()) ToPill(label = state.to.label, address = "")
         Box(modifier = Modifier.alpha(if (summary == null) 0.4f else 1f)) {
             AmountHero(sats = summary?.paidSats ?: (state.amount as? SendAmount.Exact)?.sats ?: 0L)
         }
-        if (summary != null) CoinsMoveCard(summary, onChangeCoins = actions.onAddCoins)
+        AddressGroups(
+            address = state.to.address,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp - BwSpace.Gap),
+        )
+        if (summary != null) CoinsMoveCard(summary)
         FeeCard(state = state, summary = summary, actions = actions)
         val warning = summary?.let { feeShareWarning(it.feeSats, it.paidSats) }
         if (warning != null) {
@@ -129,21 +141,12 @@ internal fun SendReviewStep(
                 )
                 BtcAmountText(sats = summary.totalLeavingSats, fontSize = BwType.BodySize)
             }
-            if (built !is PsbtSendResult) {
-                TextAction(
-                    text = if (hexCopied) "Copied" else "Copy transaction hex",
-                    onClick = actions.onCopyHex,
-                )
-            }
         }
     }
 }
 
 @Composable
-private fun CoinsMoveCard(
-    summary: TxSummary,
-    onChangeCoins: () -> Unit,
-) {
+private fun CoinsMoveCard(summary: TxSummary) {
     val description =
         "Spends ${summary.inputs.size} coins totaling ${formatBtc(summary.inputs.sumOf { it.valueSats })}. " +
             summary.outputs.joinToString(" ") { "${it.label}: ${formatBtc(it.sats)}." }
@@ -157,10 +160,7 @@ private fun CoinsMoveCard(
                 fontSize = BwType.LabelSize,
             )
         }
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            SectionLabel("From your coins", Modifier.weight(1f))
-            TextAction(text = "Change coins", onClick = onChangeCoins)
-        }
+        SectionLabel("From your coins")
         for (input in summary.inputs) {
             SummaryLine(sats = input.valueSats, label = input.title, dot = { CoinDot(input.argb) })
         }
@@ -184,54 +184,41 @@ private fun FeeCard(
     actions: SendReviewActions,
 ) {
     SendCard {
-        Row(
+        val count = state.coins.size
+        SendChevronRow(
+            title = "Change coins",
+            value = if (count == 1) "1 coin" else "$count coins",
+            valueColor = BwColors.InkQuiet,
+            onClick = actions.onAddCoins,
+        )
+        HorizontalDivider(color = BwColors.Section)
+        Column(
             modifier = Modifier.fillMaxWidth().clickable(onClick = actions.onEditFee),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
         ) {
-            CardTitle("Network fee", Modifier.weight(1f))
-            Text(
-                text = state.rate?.let { "${formatFeeRate(it)} sat/vB" } ?: "Set a fee rate",
-                color = if (state.rate == null) BwColors.Accent else BwColors.Ink,
-                fontFamily = BwFontFamily,
-                fontSize = BwType.BodySize,
-                fontWeight = BwType.Body,
+            SendChevronRow(
+                title = "Network fee",
+                value = state.rate?.let { "${formatFeeRate(it)} sat/vB" } ?: "Set a fee rate",
+                valueColor = if (state.rate == null) BwColors.Accent else BwColors.Ink,
             )
-            Chevron(modifier = Modifier.padding(start = 6.dp))
-        }
-        when {
-            summary != null ->
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "${summary.inputs.size} in, ${summary.chainOutputs} out · ${summary.vsize} vB",
-                        modifier = Modifier.weight(1f),
-                        color = BwColors.InkQuiet,
-                        fontFamily = BwFontFamily,
-                        fontSize = BwType.LabelSize,
-                    )
-                    BtcAmountText(sats = summary.feeSats, fontSize = BwType.BodySize)
+            when {
+                summary != null ->
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "${summary.vsize} vB",
+                            modifier = Modifier.weight(1f),
+                            color = BwColors.InkQuiet,
+                            fontFamily = BwFontFamily,
+                            fontSize = BwType.LabelSize,
+                        )
+                        BtcAmountText(sats = summary.feeSats, fontSize = BwType.BodySize)
+                    }
+                state.build is ReviewBuild.Building -> HelperText("Building…")
+                state.build.isShort() -> {
+                    HelperText("These coins are short at this rate.", error = true)
+                    TextAction(text = "Add coins", onClick = actions.onAddCoins)
                 }
-            state.build is ReviewBuild.Building -> HelperText("Building…")
-            state.build.isShort() -> {
-                HelperText("These coins are short at this rate.", error = true)
-                TextAction(text = "Add coins", onClick = actions.onAddCoins)
-            }
-            state.build is ReviewBuild.Failed -> {
-                HelperText(state.build.message, error = true)
-                TextAction(text = "Change coins", onClick = actions.onAddCoins)
-            }
-        }
-        HelperText("Check a fee source you trust. 1 sat/vB can take days.")
-        if (summary != null) {
-            HorizontalDivider(color = BwColors.Section)
-            Row(modifier = Modifier.fillMaxWidth()) {
-                CardTitle("Change", Modifier.weight(1f))
-                Text(
-                    text = changeRowText(summary.changeSats, state.to.label, leftoverToFee = state.amount is SendAmount.Exact),
-                    modifier = Modifier.weight(2f),
-                    color = BwColors.InkQuiet,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.LabelSize,
-                )
+                state.build is ReviewBuild.Failed -> HelperText(state.build.message, error = true)
             }
         }
     }

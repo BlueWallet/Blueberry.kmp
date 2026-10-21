@@ -33,6 +33,7 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwSpace
+import io.bluewallet.blueberry.ui.HeaderMenuItem
 import io.bluewallet.blueberry.ui.PlatformBottomEdgeBlur
 import io.bluewallet.blueberry.ui.PlatformLargeTitle
 import io.bluewallet.blueberry.ui.PlatformScreenHeader
@@ -57,6 +58,8 @@ internal fun SendStepFrame(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     showEdges: Boolean = true,
+    onClear: (() -> Unit)? = null,
+    menu: List<HeaderMenuItem> = emptyList(),
     bottom: @Composable () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -105,6 +108,9 @@ internal fun SendStepFrame(
         PlatformScreenHeader(
             title = title,
             onBack = onBack,
+            trailingText = if (onClear != null) "Clear" else null,
+            onTrailing = onClear,
+            menu = menu,
             modifier =
                 Modifier
                     .align(Alignment.TopCenter)
