@@ -30,7 +30,7 @@ class BwPaletteTest {
         assertEquals(Color(0xFFF7F8FA), BwPalette.Light.Paper)
         assertEquals(Color(0xFFFFFFFF), BwPalette.Light.Card)
         assertEquals(Color(0xFFF9F9F9), BwPalette.Light.Section)
-        assertEquals(Color(0xFF0C2550), BwPalette.Light.Ink)
+        assertEquals(Color(0xFF000000), BwPalette.Light.Ink)
         assertEquals(Color(0xFF81868E), BwPalette.Light.InkSecondary)
         assertEquals(Color(0xFF9AA0AA), BwPalette.Light.InkMuted)
         assertEquals(Color(0xFF50555C), BwPalette.Light.Action)

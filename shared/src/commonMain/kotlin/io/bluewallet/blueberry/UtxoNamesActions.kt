@@ -1,10 +1,10 @@
 package io.bluewallet.blueberry
 
-import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.wallet.Wallet
 
-/** Persist a UTXO label. Trim; empty clears. Refreshes wallet txs snapshot. */
+/** Persist a UTXO label. Trim; empty clears. Refreshes coin names and tx captions on the live snapshot. */
+@Suppress("UnusedParameter")
 fun setUtxoName(
     db: Database,
     wallet: Wallet,
@@ -20,6 +20,5 @@ fun setUtxoName(
             db.utxoNames.upsert(outpoint, trimmed)
         }
     }
-    val at = nowMillis()
-    walletTxsStore.apply(snapshotFromDb(db, at, at, wallet))
+    walletTxsStore.update { withStoredUtxoMeta(db, it) }
 }

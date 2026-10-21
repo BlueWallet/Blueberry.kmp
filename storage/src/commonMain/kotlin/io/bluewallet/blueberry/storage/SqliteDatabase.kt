@@ -64,6 +64,24 @@ internal class SqliteDatabase(
                     .map { UtxoNameRow(it.outpoint, it.name) }
         }
 
+    override val utxoFrozen =
+        object : UtxoFrozenRepository {
+            override fun isFrozen(outpoint: String): Boolean = storageDb.utxoFrozenQueries.get(outpoint).executeAsOneOrNull() != null
+
+            override fun freeze(outpoint: String) {
+                storageDb.utxoFrozenQueries.upsert(outpoint)
+            }
+
+            override fun unfreeze(outpoint: String) {
+                storageDb.utxoFrozenQueries.delete(outpoint)
+            }
+
+            override fun list(): List<String> =
+                storageDb.utxoFrozenQueries
+                    .list()
+                    .executeAsList()
+        }
+
     override val txPaymentLabels =
         object : TxPaymentLabelsRepository {
             override fun get(txid: String): TxPaymentLabelRow? =

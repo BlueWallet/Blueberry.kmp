@@ -44,7 +44,6 @@ import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.PlatformLargeTitle
 import io.bluewallet.blueberry.ui.PlatformScreenHeader
 import io.bluewallet.blueberry.ui.PlatformScrollEdge
-import io.bluewallet.blueberry.ui.ScreenPushOverlay
 import io.bluewallet.blueberry.ui.TextAction
 import io.bluewallet.blueberry.ui.alwaysBounceVerticalScroll
 import io.bluewallet.blueberry.ui.platformBottomEdgeClearance
@@ -53,23 +52,23 @@ import io.bluewallet.blueberry.wallet.WalletSecretKind
 import io.bluewallet.blueberry.wallet.parseWalletSecret
 
 @Composable
+@Suppress("LongParameterList", "LongMethod")
 fun SettingsScreen(
     databaseSize: String,
     secret: String?,
     db: Database,
     onClearStorage: () -> Unit,
     onBack: () -> Unit,
+    onOpenSecret: () -> Unit,
+    onOpenAbout: () -> Unit,
 ) {
     var confirmClear by remember { mutableStateOf(false) }
-    var showSecret by remember { mutableStateOf(false) }
-    var showAbout by remember { mutableStateOf(false) }
     val alwaysShowSync = LocalAlwaysShowSync.current
     val onAlwaysShowSyncChange = LocalAlwaysShowSyncChange.current
     var appearance by remember(db) { mutableStateOf(loadAppearance(db)) }
     val onAppearanceChange = LocalAppearanceChange.current
     val safe = WindowInsets.safeDrawing.asPaddingValues()
     val topChrome = safe.calculateTopPadding() + platformHeaderClearance()
-    val childOpen = showSecret || showAbout
     Box(
         modifier =
             Modifier
@@ -80,7 +79,7 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxSize(),
             top = topChrome,
             bottom = safe.calculateBottomPadding(),
-            showEdges = !childOpen,
+            showEdges = true,
         ) {
             Column(
                 modifier =
@@ -109,32 +108,24 @@ fun SettingsScreen(
                     checked = alwaysShowSync,
                     onCheckedChange = onAlwaysShowSyncChange,
                 )
-                SecretCard(secret = secret, onShow = { showSecret = true })
+                SecretCard(secret = secret, onShow = onOpenSecret)
                 StorageCard(databaseSize = databaseSize, onClear = { confirmClear = true })
                 ClickMeContent()
-                AboutRow(onOpen = { showAbout = true })
+                AboutRow(onOpen = onOpenAbout)
             }
         }
-        if (!childOpen) {
-            PlatformScreenHeader(
-                title = "Settings",
-                onBack = onBack,
-                modifier =
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(
-                            top = safe.calculateTopPadding(),
-                            start = BwSpace.ScreenX,
-                            end = BwSpace.ScreenX,
-                        ),
-            )
-        }
-        ScreenPushOverlay(visible = showSecret, onDismiss = { showSecret = false }) {
-            SecretScreen(secret = secret, onBack = { showSecret = false })
-        }
-        ScreenPushOverlay(visible = showAbout, onDismiss = { showAbout = false }) {
-            AboutScreen(onBack = { showAbout = false })
-        }
+        PlatformScreenHeader(
+            title = "Settings",
+            onBack = onBack,
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(
+                        top = safe.calculateTopPadding(),
+                        start = BwSpace.ScreenX,
+                        end = BwSpace.ScreenX,
+                    ),
+        )
     }
     if (confirmClear) {
         SettingsClearDialog(
