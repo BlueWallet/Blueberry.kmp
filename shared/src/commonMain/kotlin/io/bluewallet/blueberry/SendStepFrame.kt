@@ -24,15 +24,16 @@ import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.PlatformLargeTitle
 import io.bluewallet.blueberry.ui.PlatformScreenHeader
 import io.bluewallet.blueberry.ui.PlatformScrollEdge
-import io.bluewallet.blueberry.ui.ProminentButtonHeight
 import io.bluewallet.blueberry.ui.StepCaption
 import io.bluewallet.blueberry.ui.alwaysBounceVerticalScroll
-import io.bluewallet.blueberry.ui.platformBottomEdgeClearance
+import io.bluewallet.blueberry.ui.dismissKeyboardOnTap
 import io.bluewallet.blueberry.ui.platformHeaderClearance
+
+private val HeaderToContent = 32.dp
 
 /**
  * One send step: platform header with back, large title and caption, scrolling body,
- * and the primary action pinned at the bottom over the edge blur.
+ * and the primary action pinned below the scroll area so the edge blur never covers it.
  */
 @Suppress("LongParameterList")
 @Composable
@@ -47,31 +48,46 @@ internal fun SendStepFrame(
 ) {
     val safe = WindowInsets.safeDrawing.asPaddingValues()
     val topChrome = safe.calculateTopPadding() + platformHeaderClearance()
-    val sides = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
-    Box(modifier = modifier.fillMaxSize().background(BwColors.Paper)) {
-        PlatformScrollEdge(
-            modifier = Modifier.fillMaxSize(),
-            top = topChrome,
-            bottom = safe.calculateBottomPadding(),
-            showEdges = showEdges,
-        ) {
-            Column(
+    val horizontal = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+    Box(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(BwColors.Paper)
+                .dismissKeyboardOnTap(),
+    ) {
+        Column(modifier = Modifier.fillMaxSize().imePadding()) {
+            PlatformScrollEdge(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                top = topChrome,
+                showEdges = showEdges,
+            ) {
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .alwaysBounceVerticalScroll()
+                            .padding(top = topChrome + HeaderToContent)
+                            .windowInsetsPadding(horizontal)
+                            .padding(horizontal = BwSpace.ScreenX)
+                            .padding(bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+                ) {
+                    Column {
+                        PlatformLargeTitle(title = title)
+                        if (caption != null) StepCaption(caption)
+                    }
+                    content()
+                }
+            }
+            Box(
                 modifier =
                     Modifier
-                        .fillMaxSize()
-                        .imePadding()
-                        .alwaysBounceVerticalScroll()
-                        .padding(top = topChrome)
-                        .windowInsetsPadding(sides)
-                        .padding(horizontal = BwSpace.ScreenX)
-                        .padding(bottom = platformBottomEdgeClearance() + ProminentButtonHeight + 24.dp),
-                verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                        .padding(horizontal = BwSpace.ScreenX, vertical = 8.dp),
             ) {
-                Column {
-                    PlatformLargeTitle(title = title)
-                    if (caption != null) StepCaption(caption)
-                }
-                content()
+                bottom()
             }
         }
         PlatformScreenHeader(
@@ -82,16 +98,5 @@ internal fun SendStepFrame(
                     .align(Alignment.TopCenter)
                     .padding(top = safe.calculateTopPadding(), start = BwSpace.ScreenX, end = BwSpace.ScreenX),
         )
-        Box(
-            modifier =
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .imePadding()
-                    .windowInsetsPadding(sides)
-                    .padding(horizontal = BwSpace.ScreenX, vertical = 8.dp),
-        ) {
-            bottom()
-        }
     }
 }

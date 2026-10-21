@@ -27,6 +27,7 @@ import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.ProminentButtonHeight
 import io.bluewallet.blueberry.ui.TextAction
+import io.bluewallet.blueberry.ui.dismissKeyboardOnTap
 
 internal class SendFeeSheetActions(
     val onDraft: (String) -> Unit,
@@ -49,6 +50,7 @@ internal fun SendFeeSheet(
                 .fillMaxWidth()
                 .clip(shape)
                 .background(BwColors.Card, shape)
+                .dismissKeyboardOnTap()
                 .navigationBarsPadding()
                 .imePadding()
                 .verticalScroll(rememberScrollState())
