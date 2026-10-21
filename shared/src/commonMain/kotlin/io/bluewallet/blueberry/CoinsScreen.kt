@@ -4,6 +4,7 @@ package io.bluewallet.blueberry
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -51,6 +52,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.BtcAmountText
@@ -58,11 +61,11 @@ import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.OverlayBackEffects
-import io.bluewallet.blueberry.ui.PillButton
+import io.bluewallet.blueberry.ui.PlatformBottomEdgeBlur
 import io.bluewallet.blueberry.ui.PlatformScreenHeader
 import io.bluewallet.blueberry.ui.PlatformScrollEdge
+import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.alwaysBounceTail
-import io.bluewallet.blueberry.ui.platformBottomEdgeClearance
 import io.bluewallet.blueberry.ui.platformHeaderClearance
 import kotlinx.coroutines.launch
 
@@ -72,6 +75,7 @@ private val TitleBelowHeaderGap = 12.dp
 /** Room above and below the weight bar and filter chips, so they read as their own section. */
 private val CoinOverviewGap = 32.dp
 private val CoinGroupGap = 24.dp
+private val BottomFeather = 36.dp
 
 @Composable
 @Suppress("LongMethod", "LongParameterList", "CyclomaticComplexMethod")
@@ -136,6 +140,11 @@ fun CoinsScreen(
         } else {
             safe.calculateBottomPadding()
         }
+    val hazeState = rememberHazeState()
+    val blurHeight by animateDpAsState(
+        targetValue = (if (hasSelection) bottomBarHeight else safe.calculateBottomPadding()) + BottomFeather,
+        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+    )
 
     OverlayBackEffects(
         enabled = sheetOpen,
@@ -148,10 +157,9 @@ fun CoinsScreen(
                     .background(BwColors.Paper),
         ) {
             PlatformScrollEdge(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().background(BwColors.Paper).hazeSource(hazeState),
                 top = topChrome,
-                // Bottom scrim is a fixed 40 dp 60%→0% fade on iOS.
-                bottom = platformBottomEdgeClearance(),
+                bottom = null,
                 showEdges = !sheetOpen,
             ) {
                 LazyColumn(
@@ -218,6 +226,16 @@ fun CoinsScreen(
                     }
                     alwaysBounceTail(listState)
                 }
+            }
+            if (!sheetOpen) {
+                PlatformBottomEdgeBlur(
+                    hazeState = hazeState,
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .height(blurHeight),
+                )
             }
             if (!sheetOpen) {
                 PlatformScreenHeader(
@@ -360,44 +378,20 @@ private fun CoinControlBottomBar(
     modifier: Modifier = Modifier,
 ) {
     val k = selectedCoins.size
-    val total = selectedCoins.sumOf { it.valueSats }
-    val noticeColor =
-        when (notice.kind) {
-            PrivacyNoticeKind.Hint -> BwColors.InkSecondary
-            PrivacyNoticeKind.Safe -> BwColors.Success
-            PrivacyNoticeKind.Warning -> BwColors.Warning
-        }
     val word = if (k == 1) "coin" else "coins"
-    val amount = formatBtc(total).removeSuffix(" BTC")
-    val primaryLabel = "Send $k $word · $amount"
-    Column(
+    val amount = formatBtc(selectedCoins.sumOf { it.valueSats }).removeSuffix(" BTC")
+    CoinActionPanel(
+        notice = notice,
         modifier =
             modifier
-                .background(BwColors.Paper)
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
-                .padding(horizontal = BwSpace.ScreenX, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                .padding(horizontal = BwSpace.ScreenX, vertical = 8.dp),
     ) {
-        Text(
-            text = notice.message,
-            color = noticeColor,
-            fontFamily = BwFontFamily,
-            fontSize = 14.sp,
-        )
-        notice.costLine?.let { line ->
-            Text(
-                text = line,
-                color = BwColors.Warning,
-                fontFamily = BwFontFamily,
-                fontSize = 13.sp,
-            )
-        }
-        PillButton(
-            text = primaryLabel,
+        TintedPillButton(
+            text = "Send $k $word · $amount",
             onClick = onPrimary,
             enabled = k > 0,
             modifier = Modifier.fillMaxWidth(),
-            height = 56.dp,
         )
     }
 }

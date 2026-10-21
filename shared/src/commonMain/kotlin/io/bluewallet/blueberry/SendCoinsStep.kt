@@ -26,7 +26,6 @@ import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwType
-import io.bluewallet.blueberry.ui.TextAction
 import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.ToPill
 
@@ -34,7 +33,6 @@ private val CoinGroupGap = 24.dp
 
 internal class SendCoinsActions(
     val onToggle: (String) -> Unit,
-    val onSelectAll: (Set<String>) -> Unit,
     val onClear: () -> Unit,
     val onContinue: () -> Unit,
     val onBack: () -> Unit,
@@ -66,37 +64,32 @@ internal fun SendCoinsStep(
     val selected = utxos.filter { it.key in selectedKeys && !it.isFrozen }
     var filter by remember { mutableStateOf(CoinControlFilter.All) }
     val groups = remember(control, filter) { filterCoinControlGroups(control, filter) }
-    val visibleSpendable =
-        remember(groups) { groups.flatMap { g -> g.coins.filter { !it.isFrozen }.map { it.key } }.toSet() }
     val selectedCoins = control.coins.filter { it.key in selectedKeys && !it.isFrozen }
     val notice = remember(selectedCoins) { privacyNoticeForSelection(selectedCoins) }
     SendStepFrame(
         title = "Select Coins",
         caption = "Step 3 of 4",
         onBack = actions.onBack,
+        onClear = if (selectedKeys.isNotEmpty()) actions.onClear else null,
         bottom = {
-            TintedPillButton(
-                text = sendCoinsButtonLabel(selected.size, coverage),
-                onClick = actions.onContinue,
-                enabled = selected.isNotEmpty() && coverage.covered,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            CoinActionPanel(notice = notice.takeIf { selectedCoins.isNotEmpty() }) {
+                TintedPillButton(
+                    text = sendCoinsButtonLabel(selected.size, coverage),
+                    onClick = actions.onContinue,
+                    enabled = selected.isNotEmpty() && coverage.covered,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         },
     ) {
         ToPill(label = to.label, address = to.address)
         CoverageCard(selected = selected, coverage = coverage, rate = rate)
-        if (selectedCoins.isNotEmpty()) PrivacyNoticeText(notice)
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "${selected.size} of ${utxos.count { !it.isFrozen }} coins",
-                modifier = Modifier.weight(1f),
-                color = BwColors.InkQuiet,
-                fontFamily = BwFontFamily,
-                fontSize = BwType.LabelSize,
-            )
-            TextAction(text = "Select all", onClick = { actions.onSelectAll(visibleSpendable) })
-            TextAction(text = "Clear", onClick = actions.onClear)
-        }
+        Text(
+            text = "${selected.size} of ${utxos.count { !it.isFrozen }} coins",
+            color = BwColors.InkQuiet,
+            fontFamily = BwFontFamily,
+            fontSize = BwType.LabelSize,
+        )
         when (control.availability) {
             CoinAvailability.NoCoins -> HelperText("No coins in this wallet yet.")
             CoinAvailability.AllFrozen -> HelperText(ALL_FROZEN_NOTICE, error = true)
@@ -120,20 +113,6 @@ internal fun SendCoinsStep(
 }
 
 @Composable
-private fun PrivacyNoticeText(notice: PrivacyNotice) {
-    val color =
-        when (notice.kind) {
-            PrivacyNoticeKind.Hint -> BwColors.InkQuiet
-            PrivacyNoticeKind.Safe -> BwColors.Success
-            PrivacyNoticeKind.Warning -> BwColors.Warning
-        }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(notice.message, color = color, fontFamily = BwFontFamily, fontSize = BwType.LabelSize)
-        notice.costLine?.let { Text(it, color = BwColors.Warning, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize) }
-    }
-}
-
-@Composable
 private fun CoverageCard(
     selected: List<WalletUtxoRow>,
     coverage: SendCoverage,
@@ -150,13 +129,15 @@ private fun CoverageCard(
                 Text("of", color = BwColors.InkQuiet, fontFamily = BwFontFamily, fontSize = BwType.LabelSize)
                 BtcAmountText(sats = coverage.neededSats, color = BwColors.InkQuiet, fontSize = BwType.BodySize)
             }
-            val (status, color) =
-                when {
-                    selected.isEmpty() -> "Nothing picked" to BwColors.InkQuiet
-                    coverage.covered -> "Covered" to BwColors.Success
-                    else -> "Need ${formatBtc(coverage.neededSats - coverage.selectedSats)} more" to BwColors.Warning
-                }
-            Text(status, color = color, fontFamily = BwFontFamily, fontSize = BwType.LabelSize, fontWeight = BwType.Label)
+            if (selected.isNotEmpty()) {
+                val (status, color) =
+                    if (coverage.covered) {
+                        "Covered" to BwColors.Success
+                    } else {
+                        "Need ${formatBtc(coverage.neededSats - coverage.selectedSats)} more" to BwColors.Warning
+                    }
+                Text(status, color = color, fontFamily = BwFontFamily, fontSize = BwType.LabelSize, fontWeight = BwType.Label)
+            }
         }
         CoverageBar(selected = selected, neededSats = coverage.neededSats)
         HelperText(
