@@ -36,6 +36,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
 
 private val FieldShape = RoundedCornerShape(14.dp)
 private val FieldTextSize = 17.sp
@@ -58,7 +59,13 @@ private fun Modifier.keepAboveKeyboard(): Modifier {
     LaunchedEffect(focused, imeBottom) {
         if (focused && imeBottom > 0) {
             val below = imeBottom + with(density) { KeyboardBarClearance.toPx() }
-            requester.bringIntoView(Rect(0f, 0f, size.width.toFloat(), size.height + below))
+            // The field can be leaving composition (step push-out) while focus and the keyboard settle.
+            try {
+                requester.bringIntoView(Rect(0f, 0f, size.width.toFloat(), size.height + below))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: IllegalStateException) {
+            }
         }
     }
     return this
