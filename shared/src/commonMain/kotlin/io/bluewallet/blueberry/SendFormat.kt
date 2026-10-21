@@ -1,5 +1,10 @@
 package io.bluewallet.blueberry
 
+data class SendRecipient(
+    val address: String,
+    val label: String,
+)
+
 /** "bc1q2d…welh": enough of each end to check against the source. */
 fun shortAddress(address: String): String {
     val a = address.trim()
