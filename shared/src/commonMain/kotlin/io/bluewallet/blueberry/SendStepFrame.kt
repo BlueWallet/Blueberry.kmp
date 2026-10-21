@@ -41,7 +41,7 @@ private val HeaderToContent = 32.dp
 
 /**
  * One send step: platform header with back, large title and caption, scrolling body,
- * and the primary action pinned below the scroll area so the edge blur never covers it.
+ * and the primary action drawn over the bottom edge blur.
  */
 @Suppress("LongParameterList")
 @Composable
@@ -68,8 +68,9 @@ internal fun SendStepFrame(
         var barHeight by remember { mutableStateOf(0.dp) }
         val systemBottom = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()
         PlatformScrollEdge(
-            modifier = Modifier.fillMaxSize().padding(bottom = barHeight + systemBottom),
+            modifier = Modifier.fillMaxSize(),
             top = topChrome,
+            bottom = barHeight + systemBottom,
             showEdges = showEdges,
         ) {
             Column(
@@ -80,7 +81,7 @@ internal fun SendStepFrame(
                         .padding(top = topChrome + HeaderToContent)
                         .windowInsetsPadding(horizontal)
                         .padding(horizontal = BwSpace.ScreenX)
-                        .padding(bottom = 24.dp)
+                        .padding(bottom = barHeight + systemBottom + 24.dp)
                         .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom)),
                 verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
             ) {
