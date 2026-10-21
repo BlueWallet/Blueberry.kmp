@@ -56,7 +56,7 @@ internal fun SendCoinsStep(
 ) {
     val selected = utxos.filter { it.key in selectedKeys }
     SendStepFrame(
-        title = "Coins",
+        title = "Select Coins",
         caption = "Step 3 of 4",
         onBack = actions.onBack,
         bottom = {
