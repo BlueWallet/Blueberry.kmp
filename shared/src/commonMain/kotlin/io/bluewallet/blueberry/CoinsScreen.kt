@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalComposeUiApi::class)
+
 package io.bluewallet.blueberry
 
 import androidx.compose.animation.AnimatedVisibility
@@ -45,7 +47,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -135,11 +139,17 @@ fun CoinsScreen(
                 .filter { it.isFrozen }
                 .map { it.key }
                 .toSet()
-        val shown = if (filter == CoinControlFilter.All) selectedKeys else selectedKeys.intersect(visibleKeys)
-        val next = shown - frozen
+        val next = pickerSelection(selectedKeys, visibleKeys, frozen, showsAll = filter == CoinControlFilter.All)
         if (next != selectedKeys) selectedKeys = next
     }
     val actionCoins = control.coins.filter { it.key in selectedKeys && !it.isFrozen }
+    // Every picker exit writes the checked set, partial or empty, so Send never keeps unchecked coins.
+    val leave: () -> Unit = {
+        when (mode) {
+            CoinControlMode.Standalone -> onBack()
+            CoinControlMode.Picker -> onConfirmSelection(actionCoins.map { it.key }.toSet())
+        }
+    }
     val notice = remember(actionCoins) { privacyNoticeForSelection(actionCoins) }
     val rowsByKey = remember(snap.utxos) { coinsRows(snap.utxos).associateBy { it.key } }
     LaunchedEffect(editingKey) {
@@ -163,6 +173,8 @@ fun CoinsScreen(
             safe.calculateBottomPadding()
         }
 
+    // The sheet's handler is registered later, so it still wins while the sheet is open.
+    BackHandler(enabled = mode == CoinControlMode.Picker && !sheetOpen, onBack = leave)
     OverlayBackEffects(
         enabled = sheetOpen,
         onDismiss = { editingKey = null },
@@ -237,24 +249,12 @@ fun CoinsScreen(
             if (!sheetOpen) {
                 PlatformScreenHeader(
                     title = "Coin control",
-                    onBack = {
-                        // Picker Back with nothing selected must replace the hoisted send draft.
-                        if (mode == CoinControlMode.Picker && selectedKeys.isEmpty()) {
-                            onConfirmSelection(emptySet())
-                        } else {
-                            onBack()
-                        }
-                    },
+                    onBack = leave,
                     showBarTitle = true,
                     trailingText = if (hasSelection) "Clear" else null,
                     onTrailing =
                         if (hasSelection) {
-                            {
-                                selectedKeys = emptySet()
-                                if (mode == CoinControlMode.Picker) {
-                                    onConfirmSelection(emptySet())
-                                }
-                            }
+                            { selectedKeys = emptySet() }
                         } else {
                             null
                         },

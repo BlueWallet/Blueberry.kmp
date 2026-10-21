@@ -63,9 +63,13 @@ fun layoutBubbleStrip(
 
     var visible = bubbles
     var overflow = 0
+
+    // Once anything is dropped, the +N label takes the strip's right end.
+    fun budget(): Float = if (overflow > 0) availableWidthDp - BUBBLE_OVERFLOW_LABEL_DP else availableWidthDp
+
     // Prefer dropping independent coins, then the smallest linked coin, so a
     // 2.5dp-floored cluster that still overflows is counted in +N instead of clipped.
-    while (widthOf(visible, scale) > availableWidthDp + 0.5f && visible.isNotEmpty()) {
+    while (visible.isNotEmpty() && widthOf(visible, scale) > budget() + 0.5f) {
         val dropIdx =
             visible
                 .withIndex()
@@ -76,12 +80,11 @@ fun layoutBubbleStrip(
                 ?: break
         visible = visible.filterIndexed { i, _ -> i != dropIdx }
         overflow++
-        if (widthOf(visible, scale) + 28f <= availableWidthDp) break
     }
 
     val after = widthOf(visible, scale)
-    if (after > availableWidthDp && after > 0f) {
-        scale = (scale * availableWidthDp / after).coerceIn(0.05f, 1f)
+    if (after > budget() && after > 0f) {
+        scale = (scale * budget() / after).coerceIn(0.05f, 1f)
     }
 
     val rs = radiiFor(visible, scale)
@@ -98,6 +101,17 @@ fun layoutBubbleStrip(
         }
     return BubbleStripLayout(items, overflow, scale)
 }
+
+/** Width reserved at the strip's end for the 12sp "+N" overflow label. */
+const val BUBBLE_OVERFLOW_LABEL_DP = 28f
+
+/** Drawn width of the laid-out coins, using the same gaps as the strip. */
+internal fun BubbleStripLayout.contentWidthDp(): Float =
+    measureBubbleWidth(
+        items.map { CoinControlBubble(it.key, 0L, it.colorArgb, it.isFrozen, it.linkedGroupId, it.provable) },
+        items.map { it.radiusDp },
+        BubbleGaps(),
+    )
 
 @Suppress("NestedBlockDepth")
 private fun measureBubbleWidth(

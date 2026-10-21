@@ -69,10 +69,8 @@ internal fun WalletNavHost(
 ) {
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
-    var sendSelectedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var sendFeeRateSatPerVb by remember { mutableStateOf<Double?>(null) }
-    // Hoisted so Choose-coins navigation cannot drop a vanished-coin warning.
-    var sendSelectionNeedsAck by remember { mutableStateOf(false) }
+    // Hoisted so Choose-coins navigation cannot drop the selection, fee, or vanished-coin warning.
+    var sendDraft by remember { mutableStateOf(SendDraft.Empty) }
     val liveSendEntries = remember { mutableSetOf<String>() }
     // Subscribe so recomposition runs when the stack changes (for LocalHomeVisible).
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -82,9 +80,7 @@ internal fun WalletNavHost(
     val openSendFresh: () -> Unit =
         remember(navController) {
             {
-                sendSelectedKeys = emptySet()
-                sendFeeRateSatPerVb = null
-                sendSelectionNeedsAck = false
+                sendDraft = SendDraft.Empty
                 navController.navigate(SendRoute) { launchSingleTop = true }
             }
         }
@@ -137,11 +133,7 @@ internal fun WalletNavHost(
                         LifecycleEventObserver { _, event ->
                             if (event != Lifecycle.Event.ON_DESTROY) return@LifecycleEventObserver
                             liveSendEntries.remove(entry.id)
-                            if (liveSendEntries.isEmpty()) {
-                                sendSelectedKeys = emptySet()
-                                sendFeeRateSatPerVb = null
-                                sendSelectionNeedsAck = false
-                            }
+                            if (liveSendEntries.isEmpty()) sendDraft = SendDraft.Empty
                         },
                     )
                 }
@@ -149,12 +141,14 @@ internal fun WalletNavHost(
                     runtime = runtime,
                     db = db,
                     onBack = goBack,
-                    initialSelectedKeys = sendSelectedKeys,
-                    selectionNeedsAck = sendSelectionNeedsAck,
-                    onSelectionNeedsAckChange = { sendSelectionNeedsAck = it },
-                    onChooseCoins = { navController.navigate(CoinsRoute(picker = true)) },
-                    onSelectedKeysChange = { sendSelectedKeys = it },
-                    onFeeRateChange = { sendFeeRateSatPerVb = it },
+                    initialSelectedKeys = sendDraft.selectedKeys,
+                    selectionNeedsAck = sendDraft.selectionNeedsAck,
+                    onSelectionNeedsAckChange = { sendDraft = sendDraft.withSelectionNeedsAck(it) },
+                    onChooseCoins = {
+                        navController.navigate(CoinsRoute(picker = true)) { launchSingleTop = true }
+                    },
+                    onSelectedKeysChange = { sendDraft = sendDraft.withSelection(it) },
+                    onFeeRateChange = { sendDraft = sendDraft.withFeeRate(it) },
                 )
             }
             composable<CoinsRoute> { entry ->
@@ -169,21 +163,20 @@ internal fun WalletNavHost(
                         } else {
                             CoinControlMode.Standalone
                         },
-                    initialSelectedKeys = sendSelectedKeys,
-                    feeRateSatPerVb = sendFeeRateSatPerVb,
+                    initialSelectedKeys = sendDraft.selectedKeys,
+                    feeRateSatPerVb = sendDraft.feeRateSatPerVb,
                     onSendWithCoins = { keys ->
-                        sendSelectedKeys = keys
-                        sendFeeRateSatPerVb = null
+                        sendDraft = SendDraft.fromStandalone(keys)
                         navController.navigate(SendRoute) {
                             popUpTo(HomeRoute) { inclusive = false }
                             launchSingleTop = true
                         }
                     },
                     onConfirmSelection = { keys ->
-                        sendSelectedKeys = keys
+                        sendDraft = sendDraft.pickerCommitted(keys)
                         goBack()
                     },
-                    onFrozenKey = { key -> sendSelectedKeys = sendSelectedKeys - key },
+                    onFrozenKey = { key -> sendDraft = sendDraft.frozen(key) },
                 )
             }
             composable<TxDetailsRoute> { entry ->

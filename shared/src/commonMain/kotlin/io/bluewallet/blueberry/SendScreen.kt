@@ -110,7 +110,9 @@ fun SendScreen(
     }
     val selectedSum =
         snap.utxos.filter { it.key in selectedKeys && !it.isFrozen }.sumOf { it.valueSats }
+    val pushedKeys = remember { arrayOf(initialSelectedKeys) }
     LaunchedEffect(selectedKeys) {
+        pushedKeys[0] = selectedKeys
         onSelectedKeysChange(selectedKeys)
         if (isInsufficientSelectionError(feeError)) feeError = null
     }
@@ -130,9 +132,11 @@ fun SendScreen(
     }
     LaunchedEffect(feeRate) { onFeeRateChange(parseFeeRateSatPerVb(feeRate)) }
     LaunchedEffect(initialSelectedKeys) {
-        if (initialSelectedKeys.isNotEmpty() && selectedKeys != initialSelectedKeys) {
+        // An echo of our own push is ignored; an empty picker commit still replaces the old inputs.
+        if (initialSelectedKeys != pushedKeys[0] && selectedKeys != initialSelectedKeys) {
+            pushedKeys[0] = initialSelectedKeys
             selectedKeys = initialSelectedKeys
-            if (step == SendStep.Utxos) stepName = SendStep.Details.name
+            if (initialSelectedKeys.isNotEmpty() && step == SendStep.Utxos) stepName = SendStep.Details.name
         }
     }
 
