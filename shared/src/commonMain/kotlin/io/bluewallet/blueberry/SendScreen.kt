@@ -66,9 +66,6 @@ fun SendScreen(
     LaunchedEffect(reviewing, flow.feeRate, flow.selectedKeys, flow.address, flow.amount) {
         if (reviewing) flow.rebuild()
     }
-    LaunchedEffect(reviewing) {
-        if (reviewing && flow.feeRate == null) flow.openFeeSheet()
-    }
     BackHandler { flow.goBack() }
     DisposableEffect(flow) {
         val cb: () -> Unit = { flow.goBack() }
