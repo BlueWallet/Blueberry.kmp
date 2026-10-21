@@ -68,6 +68,8 @@ fun SendScreen(
     db: Database,
     onBack: () -> Unit,
     initialSelectedKeys: Set<String> = emptySet(),
+    selectionNeedsAck: Boolean = false,
+    onSelectionNeedsAckChange: (Boolean) -> Unit = {},
     onChooseCoins: () -> Unit = {},
     onSelectedKeysChange: (Set<String>) -> Unit = {},
     onFeeRateChange: (Double?) -> Unit = {},
@@ -92,7 +94,6 @@ fun SendScreen(
     var invalidField by remember { mutableStateOf<SendField?>(null) }
     var feeRate by rememberSaveable { mutableStateOf("") }
     var feeError by remember { mutableStateOf<String?>(null) }
-    var selectionNeedsAck by remember { mutableStateOf(false) }
     var cancelArmedForId by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
     var privateSend by rememberSaveable { mutableStateOf(false) }
@@ -123,7 +124,7 @@ fun SendScreen(
         val cleaned = selectedKeys.intersect(live) - frozen
         if (cleaned != selectedKeys) {
             val vanished = selectedKeys - live
-            if (vanished.isNotEmpty()) selectionNeedsAck = true
+            if (vanished.isNotEmpty()) onSelectionNeedsAckChange(true)
             selectedKeys = cleaned
         }
     }
@@ -247,7 +248,7 @@ fun SendScreen(
                         text = "Continue",
                         onClick = {
                             if (selectionNeedsAck) {
-                                selectionNeedsAck = false
+                                onSelectionNeedsAckChange(false)
                                 return@PillButton
                             }
                             if (selectedKeys.isNotEmpty()) stepName = SendStep.Details.name
@@ -305,7 +306,7 @@ fun SendScreen(
                                 }
                                 DetailsEvent.Continue -> {
                                     if (selectionNeedsAck) {
-                                        selectionNeedsAck = false
+                                        onSelectionNeedsAckChange(false)
                                         feeError = "Selection changed — some coins are gone. Continue again to proceed."
                                         return@handler
                                     }

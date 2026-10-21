@@ -71,6 +71,8 @@ internal fun WalletNavHost(
     val scope = rememberCoroutineScope()
     var sendSelectedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
     var sendFeeRateSatPerVb by remember { mutableStateOf<Double?>(null) }
+    // Hoisted so Choose-coins navigation cannot drop a vanished-coin warning.
+    var sendSelectionNeedsAck by remember { mutableStateOf(false) }
     val liveSendEntries = remember { mutableSetOf<String>() }
     // Subscribe so recomposition runs when the stack changes (for LocalHomeVisible).
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -82,6 +84,7 @@ internal fun WalletNavHost(
             {
                 sendSelectedKeys = emptySet()
                 sendFeeRateSatPerVb = null
+                sendSelectionNeedsAck = false
                 navController.navigate(SendRoute) { launchSingleTop = true }
             }
         }
@@ -137,6 +140,7 @@ internal fun WalletNavHost(
                             if (liveSendEntries.isEmpty()) {
                                 sendSelectedKeys = emptySet()
                                 sendFeeRateSatPerVb = null
+                                sendSelectionNeedsAck = false
                             }
                         },
                     )
@@ -146,6 +150,8 @@ internal fun WalletNavHost(
                     db = db,
                     onBack = goBack,
                     initialSelectedKeys = sendSelectedKeys,
+                    selectionNeedsAck = sendSelectionNeedsAck,
+                    onSelectionNeedsAckChange = { sendSelectionNeedsAck = it },
                     onChooseCoins = { navController.navigate(CoinsRoute(picker = true)) },
                     onSelectedKeysChange = { sendSelectedKeys = it },
                     onFeeRateChange = { sendFeeRateSatPerVb = it },

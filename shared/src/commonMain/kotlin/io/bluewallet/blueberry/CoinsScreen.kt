@@ -237,12 +237,24 @@ fun CoinsScreen(
             if (!sheetOpen) {
                 PlatformScreenHeader(
                     title = "Coin control",
-                    onBack = onBack,
+                    onBack = {
+                        // Picker Back with nothing selected must replace the hoisted send draft.
+                        if (mode == CoinControlMode.Picker && selectedKeys.isEmpty()) {
+                            onConfirmSelection(emptySet())
+                        } else {
+                            onBack()
+                        }
+                    },
                     showBarTitle = true,
                     trailingText = if (hasSelection) "Clear" else null,
                     onTrailing =
                         if (hasSelection) {
-                            { selectedKeys = emptySet() }
+                            {
+                                selectedKeys = emptySet()
+                                if (mode == CoinControlMode.Picker) {
+                                    onConfirmSelection(emptySet())
+                                }
+                            }
                         } else {
                             null
                         },
@@ -363,20 +375,23 @@ private fun CoinControlSummary(control: CoinControlSnapshot) {
             roundedDigits = true,
         )
         val coinsWord = if (control.coins.size == 1) "1 coin" else "${control.coins.size} coins"
-        val groupsWord =
-            if (control.linkedGroupCount == 1) {
-                "1 linked group"
-            } else {
-                "${control.linkedGroupCount} linked groups"
-            }
-        val soloWord =
-            if (control.soloCount == 1) {
-                "1 independent"
-            } else {
-                "${control.soloCount} independent"
-            }
+        val parts = mutableListOf(coinsWord)
+        when (control.linkedGroupCount) {
+            0 -> parts += "no on-chain links"
+            1 -> parts += "1 linked group"
+            else -> parts += "${control.linkedGroupCount} linked groups"
+        }
+        when (control.probableGroupCount) {
+            0 -> Unit
+            1 -> parts += "1 probable"
+            else -> parts += "${control.probableGroupCount} probable"
+        }
+        when (control.soloCount) {
+            1 -> parts += "1 independent"
+            else -> if (control.soloCount > 1) parts += "${control.soloCount} independent"
+        }
         Text(
-            text = "$coinsWord · $groupsWord · $soloWord",
+            text = parts.joinToString(" · "),
             color = BwColors.InkSecondary,
             fontFamily = BwFontFamily,
             fontSize = 15.sp,

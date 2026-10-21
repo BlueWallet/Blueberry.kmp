@@ -63,13 +63,17 @@ fun layoutBubbleStrip(
 
     var visible = bubbles
     var overflow = 0
+    // Prefer dropping independent coins, then the smallest linked coin, so a
+    // 2.5dp-floored cluster that still overflows is counted in +N instead of clipped.
     while (widthOf(visible, scale) > availableWidthDp + 0.5f && visible.isNotEmpty()) {
         val dropIdx =
             visible
                 .withIndex()
                 .filter { it.value.linkedGroupId == null }
                 .minByOrNull { it.value.valueSats }
-                ?.index ?: break
+                ?.index
+                ?: visible.withIndex().minByOrNull { it.value.valueSats }?.index
+                ?: break
         visible = visible.filterIndexed { i, _ -> i != dropIdx }
         overflow++
         if (widthOf(visible, scale) + 28f <= availableWidthDp) break

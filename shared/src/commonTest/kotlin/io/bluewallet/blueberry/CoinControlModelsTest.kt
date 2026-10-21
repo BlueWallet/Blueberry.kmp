@@ -13,6 +13,7 @@ class CoinControlModelsTest {
         val snap = fixtureSnapshot()
         assertEquals(11, snap.coins.size)
         assertEquals(2, snap.linkedGroupCount)
+        assertEquals(0, snap.probableGroupCount)
         assertEquals(6, snap.soloCount)
         assertEquals(275_226L, snap.totalSats)
         assertEquals("2 linked groups · 6 solo", coinControlHeaderRight(2, 6))
@@ -27,6 +28,18 @@ class CoinControlModelsTest {
         assertEquals("Independent", snap.groups[2].title)
         assertEquals(6, snap.groups[2].coins.size)
         assertEquals(49_960L, snap.groups[2].totalSats)
+    }
+
+    @Test
+    fun header_counts_only_provable_links_and_keeps_probable_distinct() {
+        val snap = fixtureSnapshot(provableLinks = false)
+        assertEquals(0, snap.linkedGroupCount)
+        assertEquals(2, snap.probableGroupCount)
+        assertEquals(
+            "No on-chain links · 2 probable · 6 solo",
+            coinControlHeaderRight(snap.linkedGroupCount, snap.soloCount, snap.probableGroupCount),
+        )
+        assertEquals("No on-chain links", coinControlHeaderRight(0, 6))
     }
 
     @Test
@@ -77,14 +90,18 @@ class CoinControlModelsTest {
     }
 
     @Test
-    fun filter_recomputes_provable_from_visible_coins() {
-        // Group A: c2 and c8 (both change) are provably linked; c1 joins only by a change guess.
+    fun filter_does_not_overclaim_when_hidden_sibling_is_only_a_guess() {
+        // Group A: c2 and c8 share a certain id; c1 joins only by a change guess.
         val snap = fixtureSnapshot(certainOverride = mapOf("c1:0" to "c1:0"))
         assertFalse(snap.groups[0].provable)
+        assertEquals(1, snap.linkedGroupCount)
+        assertEquals(1, snap.probableGroupCount)
         val change = filterCoinControlGroups(snap, CoinControlFilter.Change).first { it.groupId == "group-A" }
         assertEquals(setOf("c2:0", "c8:0"), change.coins.map { it.key }.toSet())
         assertTrue(change.linked)
-        assertTrue(change.provable)
+        // Hidden receive output is outside the certain id — do not say "Already linked on-chain".
+        assertFalse(change.provable)
+        assertEquals("Probably linked through change, 1 more coin filtered out", coinGroupSubtitle(change))
     }
 
     @Test

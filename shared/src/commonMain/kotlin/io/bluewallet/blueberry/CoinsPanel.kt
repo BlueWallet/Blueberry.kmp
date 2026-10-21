@@ -182,7 +182,12 @@ private fun CoinsPanelHeader(
             )
         }
         if (!placeholder && control.coins.isNotEmpty()) {
-            val right = coinControlHeaderRight(control.linkedGroupCount, control.soloCount)
+            val right =
+                coinControlHeaderRight(
+                    control.linkedGroupCount,
+                    control.soloCount,
+                    control.probableGroupCount,
+                )
             Text(
                 text = right,
                 color = BwColors.InkSecondary,

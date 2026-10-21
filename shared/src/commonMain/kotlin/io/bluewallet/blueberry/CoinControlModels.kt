@@ -68,7 +68,10 @@ data class CoinControlBubble(
 data class CoinControlSnapshot(
     val coins: List<CoinControlCoin>,
     val groups: List<CoinControlGroup>,
+    /** Provable (on-chain) multi-coin clusters only. */
     val linkedGroupCount: Int,
+    /** Multi-coin clusters joined only by a change guess. */
+    val probableGroupCount: Int,
     val soloCount: Int,
     val totalSats: Long,
     val bubbles: List<CoinControlBubble>,
@@ -232,7 +235,8 @@ fun buildCoinControlSnapshot(
     return CoinControlSnapshot(
         coins = coins,
         groups = groups,
-        linkedGroupCount = namedLinked.size,
+        linkedGroupCount = namedLinked.count { it.provable },
+        probableGroupCount = namedLinked.count { !it.provable },
         soloCount = independentCoins.size,
         totalSats = coins.sumOf { it.valueSats },
         bubbles = bubbles,
@@ -319,12 +323,18 @@ fun filterCoinControlGroups(
     }
 }
 
-private fun filteredGroupProvable(
+/**
+ * A filtered section is provable only when every member of the full cluster —
+ * including those the filter hides — shares one certain id. Visible coins that
+ * share a certain id while a hidden sibling does not must not claim "Already
+ * linked on-chain".
+ */
+internal fun filteredGroupProvable(
     all: List<CoinControlCoin>,
     visible: List<CoinControlCoin>,
 ): Boolean {
-    val certain = visible.map { it.certainGroupId }.toSet().singleOrNull() ?: return false
-    return visible.size >= 2 || all.count { it.certainGroupId == certain } >= 2
+    val certain = visible.map { it.certainGroupId }.toSet().singleOrNull()
+    return certain != null && all.isNotEmpty() && all.all { it.certainGroupId == certain }
 }
 
 /** Segment widths that fill [usable] in value proportion while keeping each at least [minWidth]. */
@@ -431,21 +441,34 @@ internal fun nearDustCostLine(selected: List<CoinControlCoin>): String? {
 fun coinControlHeaderRight(
     linkedGroupCount: Int,
     soloCount: Int,
-): String =
-    when {
-        linkedGroupCount == 0 && soloCount == 0 -> ""
-        linkedGroupCount == 0 -> "No on-chain links"
-        else -> {
-            val groups =
-                if (linkedGroupCount == 1) {
-                    "1 linked group"
-                } else {
-                    "$linkedGroupCount linked groups"
-                }
-            val solo = if (soloCount == 1) "1 solo" else "$soloCount solo"
-            "$groups · $solo"
+    probableGroupCount: Int = 0,
+): String {
+    if (linkedGroupCount == 0 && probableGroupCount == 0 && soloCount == 0) return ""
+    val parts = mutableListOf<String>()
+    if (linkedGroupCount == 0) {
+        parts += "No on-chain links"
+    } else {
+        parts +=
+            if (linkedGroupCount == 1) {
+                "1 linked group"
+            } else {
+                "$linkedGroupCount linked groups"
+            }
+    }
+    if (probableGroupCount == 1) {
+        parts += "1 probable"
+    } else if (probableGroupCount > 1) {
+        parts += "$probableGroupCount probable"
+    }
+    if (linkedGroupCount > 0 || probableGroupCount > 0) {
+        if (soloCount == 1) {
+            parts += "1 solo"
+        } else if (soloCount > 1) {
+            parts += "$soloCount solo"
         }
     }
+    return parts.joinToString(" · ")
+}
 
 fun coinControlAccessibilityLabel(
     coinCount: Int,
