@@ -690,7 +690,7 @@ fun hydrateWallet(
         store.setBlockCounts(parsed, total, at)
         return
     }
-    store.applyFromDb(db, snapshotFromDb(db, at, nowMillis(), wallet))
+    store.applyFromDb(db, snapshotFromDb(db, at, nowMillis(), wallet, snap.linkageCache()))
 }
 
 fun bindWalletTxsEvents(

@@ -196,6 +196,44 @@ class CoinControlModelsTest {
     }
 
     @Test
+    fun privacy_counts_two_provable_pairs_as_two_histories_being_joined() {
+        val base = fixtureSnapshot().coins.first()
+
+        fun coin(
+            key: String,
+            likely: String,
+            certain: String,
+        ) = base.copy(key = key, groupId = likely, certainGroupId = certain)
+        val notice =
+            privacyNoticeForSelection(
+                listOf(coin("a", "g1", "c1"), coin("b", "g1", "c1"), coin("c", "g2", "c2"), coin("d", "g2", "c2")),
+            )
+        assertEquals(PrivacyNoticeKind.Warning, notice.kind)
+        assertEquals(
+            "Joins 2 separate histories (2 groups already linked on-chain). " +
+                "Anyone watching the chain will learn these coins share an owner.",
+            notice.message,
+        )
+    }
+
+    @Test
+    fun privacy_names_a_change_guess_pair_joined_by_an_outsider() {
+        val base = fixtureSnapshot().coins.first()
+
+        fun coin(
+            key: String,
+            likely: String,
+            certain: String,
+        ) = base.copy(key = key, groupId = likely, certainGroupId = certain)
+        val notice =
+            privacyNoticeForSelection(listOf(coin("a", "g1", "c1"), coin("b", "g1", "c2"), coin("c", "g2", "c3")))
+        assertEquals(PrivacyNoticeKind.Warning, notice.kind)
+        assertTrue(notice.message.startsWith("2 of these coins are probably linked through change."), notice.message)
+        assertTrue(notice.message.contains("Adding the other 1 joins 2 separate histories"), notice.message)
+        assertFalse(notice.message.contains("unlinked"))
+    }
+
+    @Test
     fun accessibility_label_names_frozen_coins() {
         val snap = fixtureSnapshot()
         val some = coinControlAccessibilityLabel(3, emptyList(), 3, frozenCount = 1)

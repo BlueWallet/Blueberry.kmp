@@ -404,31 +404,53 @@ fun privacyNoticeForSelection(
                 "One coin selected. Spending it alone does not link other outputs.",
                 costLine = nearDustCostLine(selected),
             )
-        else -> {
-            val likely = selected.map { it.groupId }.toSet().size
-            val byCertain = selected.groupBy { it.certainGroupId }
-            val alreadyLinked = byCertain.values.filter { it.size > 1 }.sumOf { it.size }
-            val (kind, message) =
-                when {
-                    byCertain.size == 1 ->
-                        PrivacyNoticeKind.Safe to
-                            "These coins already share history on-chain, so spending them together reveals nothing new."
-                    likely == 1 ->
-                        PrivacyNoticeKind.Warning to
-                            "These coins are probably linked through change. Spending them together confirms it."
-                    alreadyLinked > 0 ->
-                        PrivacyNoticeKind.Warning to
-                            "$alreadyLinked of these coins already share history on-chain. " +
-                            "Adding the other ${k - alreadyLinked} joins $likely separate histories, " +
-                            "so anyone watching the chain will learn they share an owner."
-                    else ->
-                        PrivacyNoticeKind.Warning to
-                            "Joins $likely unlinked histories. Anyone watching the chain will learn these coins share an owner."
+        selected.map { it.certainGroupId }.toSet().size == 1 ->
+            PrivacyNotice(
+                PrivacyNoticeKind.Safe,
+                "These coins already share history on-chain, so spending them together reveals nothing new.",
+                nearDustCostLine(selected),
+            )
+        else -> PrivacyNotice(PrivacyNoticeKind.Warning, joinedHistoriesMessage(selected), nearDustCostLine(selected))
+    }
+}
+
+/** Selected coins split by likely history: a cluster is provable when every coin shares one certain group. */
+private fun joinedHistoriesMessage(selected: List<CoinControlCoin>): String {
+    val histories = selected.groupBy { it.groupId }.values
+    if (histories.size == 1) {
+        return "These coins are probably linked through change. Spending them together confirms it."
+    }
+    val clusters = histories.filter { it.size > 1 }
+    val provable = clusters.count { c -> c.map { it.certainGroupId }.toSet().size == 1 }
+    val probable = clusters.size - provable
+    val solo = histories.size - clusters.size
+    val owner = "Anyone watching the chain will learn these coins share an owner."
+    return when {
+        clusters.isEmpty() -> "Joins ${histories.size} unlinked histories. $owner"
+        clusters.size == 1 -> {
+            val n = clusters.single().size
+            val lead =
+                if (provable == 1) {
+                    "$n of these coins already share history on-chain."
+                } else {
+                    "$n of these coins are probably linked through change."
                 }
-            PrivacyNotice(kind, message, nearDustCostLine(selected))
+            "$lead Adding the other $solo joins ${histories.size} separate histories, " +
+                "so anyone watching the chain will learn they share an owner."
+        }
+        else -> {
+            val parts =
+                listOfNotNull(
+                    provable.takeIf { it > 0 }?.let { "${groupsWord(it)} already linked on-chain" },
+                    probable.takeIf { it > 0 }?.let { "${groupsWord(it)} probably linked through change" },
+                    solo.takeIf { it > 0 }?.let { if (it == 1) "1 single coin" else "$it single coins" },
+                )
+            "Joins ${histories.size} separate histories (${parts.joinToString(", ")}). $owner"
         }
     }
 }
+
+private fun groupsWord(n: Int): String = if (n == 1) "1 group" else "$n groups"
 
 internal fun nearDustCostLine(selected: List<CoinControlCoin>): String? {
     val costly =

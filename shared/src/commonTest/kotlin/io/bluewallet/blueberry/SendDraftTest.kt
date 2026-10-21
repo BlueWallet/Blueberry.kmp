@@ -72,7 +72,7 @@ class SendDraftTest {
         var step = restoredStep
         var d = draft
         repeat(4) {
-            val resolved = resolveSendStep(step, d.selectedKeys, d.advanceToDetails)
+            val resolved = resolveSendStep(step, d.selectedKeys, d.advanceToDetails, d.selectionNeedsAck)
             step = resolved.step
             if (resolved.consumeAdvance) d = d.detailsAdvanceConsumed()
         }
@@ -110,6 +110,14 @@ class SendDraftTest {
         assertTrue(committed.selectionNeedsAck)
         assertFalse(committed.advanceToDetails)
         assertEquals(SendStep.Utxos, settle(SendStep.Utxos, committed).first)
+    }
+
+    @Test
+    fun coins_spent_while_the_picker_was_open_from_details_return_to_the_warning() {
+        val committed = SendDraft(selectedKeys = abc).pickerCommitted(setOf("a"), coinsVanished = true)
+        assertEquals(SendStep.Utxos, settle(SendStep.Details, committed).first)
+        val coinSpentOnDetails = SendDraft(selectedKeys = setOf("a")).withSelectionNeedsAck(true)
+        assertEquals(SendStep.Utxos, settle(SendStep.Details, coinSpentOnDetails).first)
     }
 
     @Test

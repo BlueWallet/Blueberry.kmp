@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -64,10 +65,9 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.toggleableState
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -317,7 +317,7 @@ fun CoinsScreen(
                         val keys = actionCoins.map { it.key }.toSet()
                         when (mode) {
                             CoinControlMode.Standalone -> onSendWithCoins(keys)
-                            CoinControlMode.Picker -> onConfirmSelection(keys, false)
+                            CoinControlMode.Picker -> onConfirmSelection(keys, coinsVanished)
                         }
                     },
                 )
@@ -567,16 +567,12 @@ private fun CoinControlRow(
 ) {
     val subtitle = coinRowSubtitle(coin)
     val tag = coinRowTag(coin)
+    // The toggleable semantics announce the checked state and the hint; the label carries only the coin.
     val selectA11y =
-        buildString {
-            append(formatBtc(coin.valueSats))
-            append(", ")
-            if (coin.isFrozen) {
-                append("frozen, locked, not selectable")
-            } else {
-                append(if (selected) "selected" else "not selected")
-                append(", double tap to toggle selection")
-            }
+        if (coin.isFrozen) {
+            "${formatBtc(coin.valueSats)}, frozen, not selectable"
+        } else {
+            formatBtc(coin.valueSats)
         }
     val detailsA11y =
         buildString {
@@ -602,15 +598,14 @@ private fun CoinControlRow(
                     .clip(RoundedCornerShape(12.dp))
                     .then(
                         if (coin.isFrozen) {
-                            Modifier.semantics { contentDescription = selectA11y }
+                            Modifier.semantics {
+                                contentDescription = selectA11y
+                                disabled()
+                            }
                         } else {
                             Modifier
-                                .semantics {
-                                    contentDescription = selectA11y
-                                    this.selected = selected
-                                    toggleableState =
-                                        if (selected) ToggleableState.On else ToggleableState.Off
-                                }.clickable(role = Role.Checkbox, onClick = onToggle)
+                                .semantics { contentDescription = selectA11y }
+                                .toggleable(value = selected, role = Role.Checkbox, onValueChange = { onToggle() })
                         },
                     ).padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,

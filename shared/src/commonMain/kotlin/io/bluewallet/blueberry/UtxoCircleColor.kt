@@ -1,7 +1,6 @@
 package io.bluewallet.blueberry
 
 import io.bluewallet.blueberry.wallet.sha256Hex
-import kotlin.math.min
 
 /**
  * Spec coin palette (11). Assigned by [utxoCirclePaletteIndex] so a coin keeps
@@ -34,21 +33,3 @@ fun utxoCirclePaletteIndex(outpoint: String): Int {
 
 /** Spec coin color for [outpoint]: palette[hash mod 11]. */
 fun utxoCircleArgb(outpoint: String): Long = UtxoCirclePaletteArgb[utxoCirclePaletteIndex(outpoint)]
-
-fun visibleUtxoCircleCount(
-    total: Int,
-    maxFit: Int,
-): Int {
-    if (total <= 0 || maxFit <= 0) return 0
-    return min(total, maxFit)
-}
-
-/** How many overlapping circles of [diameter] stepping by [step] fit in [available]. */
-fun maxUtxoCirclesThatFit(
-    available: Float,
-    diameter: Float,
-    step: Float,
-): Int {
-    if (available < diameter || diameter <= 0f || step <= 0f) return 0
-    return 1 + ((available - diameter) / step).toInt()
-}

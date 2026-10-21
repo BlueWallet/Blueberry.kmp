@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -76,7 +77,14 @@ internal fun WalletNavHost(
     val backStackEntry by navController.currentBackStackEntryAsState()
     // Any pushed destination means home is covered — drop home UIKit overlays / dock.
     val homeVisible = backStackEntry != null && navController.previousBackStackEntry == null
-    val goBack: () -> Unit = remember(navController) { { navController.popBackStack() } }
+
+    // A screen pops only itself: a second tap during its exit animation must not pop the one below.
+    fun popIfCurrent(entry: NavBackStackEntry): Boolean =
+        navController.currentBackStackEntry?.id == entry.id &&
+            navController.previousBackStackEntry != null &&
+            navController.popBackStack()
+
+    fun backFrom(entry: NavBackStackEntry): () -> Unit = { popIfCurrent(entry) }
     val openSendFresh: () -> Unit =
         remember(navController) {
             {
@@ -117,11 +125,11 @@ internal fun WalletNavHost(
                     },
                 )
             }
-            composable<ReceiveRoute> {
+            composable<ReceiveRoute> { entry ->
                 ReceiveScreen(
                     runtime = runtime,
                     db = db,
-                    onBack = goBack,
+                    onBack = backFrom(entry),
                 )
             }
             composable<SendRoute> { entry ->
@@ -140,7 +148,7 @@ internal fun WalletNavHost(
                 SendScreen(
                     runtime = runtime,
                     db = db,
-                    onBack = goBack,
+                    onBack = backFrom(entry),
                     initialSelectedKeys = sendDraft.selectedKeys,
                     selectionNeedsAck = sendDraft.selectionNeedsAck,
                     onSelectionNeedsAckChange = { sendDraft = sendDraft.withSelectionNeedsAck(it) },
@@ -158,7 +166,7 @@ internal fun WalletNavHost(
                 CoinsScreen(
                     runtime = runtime,
                     db = db,
-                    onBack = goBack,
+                    onBack = backFrom(entry),
                     mode =
                         if (route.picker) {
                             CoinControlMode.Picker
@@ -175,8 +183,10 @@ internal fun WalletNavHost(
                         }
                     },
                     onConfirmSelection = { keys, coinsVanished ->
-                        sendDraft = sendDraft.pickerCommitted(keys, coinsVanished)
-                        goBack()
+                        if (navController.currentBackStackEntry?.id == entry.id) {
+                            sendDraft = sendDraft.pickerCommitted(keys, coinsVanished)
+                            popIfCurrent(entry)
+                        }
                     },
                     onFrozenKey = { key -> sendDraft = sendDraft.frozen(key) },
                 )
@@ -187,10 +197,10 @@ internal fun WalletNavHost(
                     runtime = runtime,
                     db = db,
                     txid = route.txid,
-                    onBack = goBack,
+                    onBack = backFrom(entry),
                 )
             }
-            composable<SettingsRoute> {
+            composable<SettingsRoute> { entry ->
                 SettingsScreen(
                     databaseSize =
                         remember(databasePath, session) {
@@ -202,20 +212,20 @@ internal fun WalletNavHost(
                         },
                     db = db,
                     onClearStorage = onClearStorage,
-                    onBack = goBack,
+                    onBack = backFrom(entry),
                     onOpenSecret = { navController.navigate(SecretRoute) { launchSingleTop = true } },
                     onOpenAbout = { navController.navigate(AboutRoute) { launchSingleTop = true } },
                 )
             }
-            composable<SecretRoute> {
+            composable<SecretRoute> { entry ->
                 val secret =
                     remember(databasePath, session) {
                         (inspectWalletSecret(db) as? WalletSecretInspection.Ok)?.value
                     }
-                SecretScreen(secret = secret, onBack = goBack)
+                SecretScreen(secret = secret, onBack = backFrom(entry))
             }
-            composable<AboutRoute> {
-                AboutScreen(onBack = goBack)
+            composable<AboutRoute> { entry ->
+                AboutScreen(onBack = backFrom(entry))
             }
         }
     }

@@ -140,12 +140,19 @@ fun SendScreen(
             selectedKeys = initialSelectedKeys
         }
     }
-    LaunchedEffect(selectedKeys, step, advanceToDetails) {
+    LaunchedEffect(selectedKeys, step, advanceToDetails, selectionNeedsAck) {
         // A pending advance arrives with the committed set in the draft, ahead of the local copy.
         val selected = if (advanceToDetails) initialSelectedKeys else selectedKeys
-        val resolved = resolveSendStep(step, selected, advanceToDetails)
+        val resolved = resolveSendStep(step, selected, advanceToDetails, selectionNeedsAck)
         if (resolved.step != step) stepName = resolved.step.name
         if (resolved.consumeAdvance) onAdvanceToDetailsConsumed()
+    }
+    LaunchedEffect(step) {
+        // Preview and private-send state is not saved, so a restored entry resumes at Details.
+        val lost =
+            (step == SendStep.Preview && preview == null) ||
+                (step == SendStep.PrivateSend && privateSession == null)
+        if (lost) stepName = SendStep.Details.name
     }
     val availability = coinAvailability(snap.utxos)
 
@@ -323,11 +330,6 @@ fun SendScreen(
                                     if (invalidField == SendField.Amount) invalidField = null
                                 }
                                 DetailsEvent.Continue -> {
-                                    if (selectionNeedsAck) {
-                                        onSelectionNeedsAckChange(false)
-                                        feeError = "Selection changed — some coins are gone. Continue again to proceed."
-                                        return@handler
-                                    }
                                     if (selectedKeys.isEmpty()) {
                                         stepName = SendStep.Utxos.name
                                         return@handler

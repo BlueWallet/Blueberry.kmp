@@ -29,20 +29,4 @@ class UtxoCircleColorTest {
         assertEquals(false, utxoCircleRgbHex("txid:0") == utxoCircleRgbHex("txid:1"))
         assertTrue(utxoCirclePaletteIndex("txid:0") != utxoCirclePaletteIndex("txid:1"))
     }
-
-    @Test
-    fun visible_count_is_total_until_the_row_is_full() {
-        assertEquals(0, visibleUtxoCircleCount(total = 0, maxFit = 8))
-        assertEquals(0, visibleUtxoCircleCount(total = 6, maxFit = 0))
-        assertEquals(6, visibleUtxoCircleCount(total = 6, maxFit = 8))
-        assertEquals(8, visibleUtxoCircleCount(total = 40, maxFit = 8))
-    }
-
-    @Test
-    fun max_fit_counts_overlapping_circles_that_fit_the_width() {
-        assertEquals(0, maxUtxoCirclesThatFit(available = 10f, diameter = 22f, step = 12f))
-        assertEquals(1, maxUtxoCirclesThatFit(available = 22f, diameter = 22f, step = 12f))
-        assertEquals(3, maxUtxoCirclesThatFit(available = 46f, diameter = 22f, step = 12f))
-        assertEquals(4, maxUtxoCirclesThatFit(available = 58f, diameter = 22f, step = 12f))
-    }
 }

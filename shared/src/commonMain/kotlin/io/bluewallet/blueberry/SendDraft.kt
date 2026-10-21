@@ -49,18 +49,19 @@ internal data class SendStepResolution(
 
 /**
  * The single rule for where Send stands after a selection change, a picker commit, or recreation.
- * A pending advance moves the coin step to Details; Details with no inputs falls back to choosing
- * coins instead of blaming the amount; later steps are never moved.
+ * A pending advance moves the coin step to Details; Details with no inputs, or with a vanished-coin
+ * warning only the coin step shows, falls back to choosing coins; later steps are never moved.
  */
 internal fun resolveSendStep(
     step: SendStep,
     selected: Set<String>,
     advanceToDetails: Boolean,
+    selectionNeedsAck: Boolean = false,
 ): SendStepResolution {
     val next =
         when {
             advanceToDetails && step == SendStep.Utxos && selected.isNotEmpty() -> SendStep.Details
-            step == SendStep.Details && selected.isEmpty() -> SendStep.Utxos
+            step == SendStep.Details && (selected.isEmpty() || selectionNeedsAck) -> SendStep.Utxos
             else -> step
         }
     return SendStepResolution(next, consumeAdvance = advanceToDetails)
