@@ -20,7 +20,12 @@ import io.bluewallet.blueberry.wallet.pickMnemonicChange
 import io.bluewallet.blueberry.wallet.preferredWifReceiveAddress
 import io.bluewallet.blueberry.wallet.resolvedScriptType
 import io.bluewallet.blueberry.wallet.saveHdWatchGaps
+import kotlinx.coroutines.CancellationException
 import kotlin.random.Random
+
+private fun requireAccepted(accept: () -> Boolean) {
+    if (!accept()) throw CancellationException("build dropped")
+}
 
 data class SendBuildParams(
     val utxos: List<SendInputUtxo>,
@@ -90,7 +95,9 @@ fun buildActiveSendTx(
     wallet: Wallet,
     params: SendBuildParams,
     random: Random = Random.Default,
+    accept: () -> Boolean = { true },
 ): BuildSendResult {
+    requireAccepted(accept)
     wallet.syncFromDb()
     var watch = wallet.snapshot()
     val changeAddress =
@@ -115,10 +122,12 @@ fun buildActiveSendTx(
                 if (existing != null) {
                     existing.address
                 } else {
+                    requireAccepted(accept)
                     val gaps = loadHdWatchGaps(db)
                     val current = gaps[pick.scriptType]
                     val next = WatchGaps(current.external, grownInternalCount(current.internal, pick.index))
                     saveHdWatchGaps(db, gaps.with(pick.scriptType, next))
+                    requireAccepted(accept)
                     watch = wallet.refresh()
                     findMnemonicChangeAddress(watch, pick).address
                 }

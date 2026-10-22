@@ -33,6 +33,7 @@ import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.sync.modules.createSyncIdleModule
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.createWallet
+import io.bluewallet.blueberry.wallet.outpointKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -106,6 +107,22 @@ class PeersRuntime(
         row: PrivateSendRow,
     ) {
         putPending(pendingPrivateSends, id, row)
+    }
+
+    /** Outpoints of sends still broadcasting or not yet confirmed. The picker must not offer them. */
+    @OptIn(ExperimentalAtomicApi::class)
+    fun reservedOutpoints(): Set<String> {
+        val armed = pendingSends.load().values.flatMap { it.coins } + pendingPrivateSends.load().values.flatMap { it.coins }
+        val stored =
+            db.sends
+                .list()
+                .filter { it.confirmedInBlock == 0L }
+                .flatMap { it.coins } +
+                db.privateSends
+                    .list()
+                    .filter { it.confirmedInBlock == 0L }
+                    .flatMap { it.coins }
+        return (armed + stored).map { outpointKey(it.txid, it.vout) }.toSet()
     }
 
     @OptIn(ExperimentalAtomicApi::class)

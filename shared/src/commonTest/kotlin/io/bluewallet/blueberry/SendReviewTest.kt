@@ -78,7 +78,7 @@ class SendReviewTest {
         assertButton("Send via Tor", ReviewButtonAction.Send, true, reviewButton(3.0, signed, false))
         assertButton("Show PSBT to sign", ReviewButtonAction.Send, true, reviewButton(3.0, psbt, false))
         val short = ReviewBuild.Failed("insufficient funds for amount and fee")
-        assertButton("Add coins or lower the fee", ReviewButtonAction.AddCoins, true, reviewButton(3.0, short, false))
+        assertButton("Add coins", ReviewButtonAction.AddCoins, true, reviewButton(3.0, short, false))
         assertTrue(short.isShort())
         assertButton("Review the selection", ReviewButtonAction.AddCoins, true, reviewButton(3.0, ReviewBuild.Failed(SELECTION_CHANGED), false))
         assertButton("Waiting for the wallet", ReviewButtonAction.Send, false, reviewButton(3.0, ReviewBuild.Failed(WALLET_NOT_LOADED), false))

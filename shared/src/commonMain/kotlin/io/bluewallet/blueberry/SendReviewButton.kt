@@ -27,7 +27,7 @@ internal fun reviewButton(
             ReviewButton("Show PSBT to sign", ReviewButtonAction.Send, true)
         build is ReviewBuild.Built -> ReviewButton("Send via Tor", ReviewButtonAction.Send, true)
         build is ReviewBuild.Failed && build.isShort() ->
-            ReviewButton("Add coins or lower the fee", ReviewButtonAction.AddCoins, true)
+            ReviewButton("Add coins", ReviewButtonAction.AddCoins, true)
         build is ReviewBuild.Failed && build.message == SELECTION_CHANGED ->
             ReviewButton("Review the selection", ReviewButtonAction.AddCoins, true)
         build is ReviewBuild.Failed && build.message == WALLET_NOT_LOADED ->

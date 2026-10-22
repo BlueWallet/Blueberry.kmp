@@ -1,13 +1,19 @@
 package io.bluewallet.blueberry
 
 import io.bluewallet.blueberry.bus.BroadcastDonePayload
+import io.bluewallet.blueberry.parse.SendBuildParams
+import io.bluewallet.blueberry.parse.buildActiveSendTx
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.storage.PrivateSendCoin
+import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.BuildSendResult
+import io.bluewallet.blueberry.wallet.SendAmount
 import io.bluewallet.blueberry.wallet.SignedSendResult
 import io.bluewallet.blueberry.wallet.SyncFromDbResult
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.WatchWallet
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -16,6 +22,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -131,6 +138,61 @@ class SendFlowTest {
             flow.goBack()
             assertTrue(closed)
             assertTrue(flow.build is ReviewBuild.Idle)
+            assertNull(runtime.broadcastStore.get("1"))
+        }
+
+    @Test
+    fun back_from_a_live_private_send_closes_and_leaves_the_job() =
+        runFlow { _, runtime, flow ->
+            prime(flow, coin("11", 100_000_000))
+            val signed = signed("aa")
+            flow.build = ReviewBuild.Built(signed, flow.draftStamp())
+            flow.privateSigned = signed
+            flow.step = SendStep.PrivateSend
+            runtime.broadcastStore.start("1", signed.txHex)
+            flow.goBack()
+            assertTrue(closed)
+            assertTrue(flow.build is ReviewBuild.Idle)
+            assertEquals("starting", runtime.broadcastStore.get("1")?.phase)
+            assertEquals(signed.txHex, runtime.broadcastStore.get("1")?.txHex)
+        }
+
+    @Test
+    fun applying_the_fee_already_showing_keeps_the_signed_transaction() =
+        runFlow { _, _, flow ->
+            prime(flow, coin("11", 100_000_000))
+            val built = ReviewBuild.Built(signed(), flow.draftStamp())
+            flow.build = built
+            flow.applyFee(1.0)
+            assertTrue(flow.build is ReviewBuild.Built)
+        }
+
+    @Test
+    fun an_in_flight_send_keeps_its_coins_out_of_the_next_picker() =
+        runFlow { db, runtime, flow ->
+            val live = coin("11", 100_000_000)
+            val resting = coin("22", 100_000_000)
+            runtime.armSendPersist(
+                "job",
+                SendRow(
+                    txid = "ab".repeat(32),
+                    txHex = "aa",
+                    destination = ADDRESS,
+                    coins = listOf(PrivateSendCoin(live.txid, live.vout, live.valueSats)),
+                ),
+            )
+            db.sends.upsert(
+                SendRow(
+                    txid = "cd".repeat(32),
+                    txHex = "bb",
+                    destination = ADDRESS,
+                    coins = listOf(PrivateSendCoin(resting.txid, resting.vout, resting.valueSats)),
+                ),
+            )
+            prime(flow, live, resting)
+            flow.updateSnap(flow.snap)
+            assertTrue(flow.spendableRows.isEmpty())
+            assertTrue(flow.selectionNeedsAck)
         }
 
     @Test
@@ -164,7 +226,7 @@ class SendFlowTest {
             val revision = runtime.walletRevision
             runtime.installWallet(IdleWallet())
             assertTrue(runtime.walletRevision > revision)
-            flow.buildTx = { _, _ -> signed() }
+            flow.buildTx = { _, _, _ -> signed() }
             flow.rebuild()
             val built = flow.build as ReviewBuild.Built
             assertEquals(flow.draftStamp(), built.draft)
@@ -176,7 +238,7 @@ class SendFlowTest {
             runtime.installWallet(IdleWallet())
             prime(flow, coin("11", 100_000_000))
             val gate = CompletableDeferred<BuildSendResult>()
-            flow.buildTx = { _, _ -> gate.await() }
+            flow.buildTx = { _, _, _ -> gate.await() }
             coroutineScope {
                 val job = launch { flow.rebuild() }
                 while (flow.build !is ReviewBuild.Building) yield()
@@ -194,7 +256,7 @@ class SendFlowTest {
             prime(flow, coin("11", 100_000_000))
             var current = 0
             var peak = 0
-            flow.buildTx = { _, _ ->
+            flow.buildTx = { _, _, _ ->
                 current++
                 if (current > peak) peak = current
                 delay(30)
@@ -209,6 +271,19 @@ class SendFlowTest {
             }
             assertEquals(1, peak)
             assertTrue(flow.build is ReviewBuild.Built)
+        }
+
+    @Test
+    fun a_dropped_build_does_not_touch_the_wallet() =
+        runFlow { db, _, _ ->
+            assertFailsWith<CancellationException> {
+                buildActiveSendTx(
+                    db,
+                    IdleWallet(),
+                    SendBuildParams(emptyList(), ADDRESS, SendAmount.Exact(1), 1.0),
+                    accept = { false },
+                )
+            }
         }
 }
 

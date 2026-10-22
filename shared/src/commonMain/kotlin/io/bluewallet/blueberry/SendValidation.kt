@@ -77,6 +77,19 @@ fun parseFeeRateSatPerVb(input: String): Double? {
     return if (n.isFinite() && n > 0.0) n else null
 }
 
+/** Amount-step primary label. An empty wallet says so, even when the field still holds a number. */
+fun amountContinueLabel(
+    input: String,
+    walletTotalSats: Long,
+): String {
+    val check = checkSendAmount(input, walletTotalSats)
+    return when {
+        check is SendAmountCheck.Ok -> "Continue"
+        walletTotalSats <= 0L -> "No spendable coins left"
+        else -> "Enter an amount"
+    }
+}
+
 /** Why Review cannot price this payment, or null when [checkSendAmount] is ok. */
 fun sendAmountUnavailable(
     input: String,

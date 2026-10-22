@@ -65,7 +65,7 @@ internal fun SendAmountStep(
         onBack = actions.onBack,
         bottom = {
             TintedPillButton(
-                text = if (check is SendAmountCheck.Ok) "Continue" else "Enter an amount",
+                text = amountContinueLabel(amount, walletTotalSats),
                 onClick = actions.onContinue,
                 enabled = check is SendAmountCheck.Ok,
                 modifier = Modifier.fillMaxWidth(),
@@ -75,7 +75,9 @@ internal fun SendAmountStep(
         ToPill(label = to.label, address = to.address)
         TypedAmount(amount = amount, max = max)
         if (max) HelperText("Everything you pick next, minus the fee.", Modifier.fillMaxWidth())
-        if (check is SendAmountCheck.MoreThanWallet) {
+        if (walletTotalSats <= 0L) {
+            HelperText("No spendable coins left.", Modifier.fillMaxWidth(), error = true)
+        } else if (check is SendAmountCheck.MoreThanWallet) {
             HelperText("More than your wallet holds.", Modifier.fillMaxWidth(), error = true)
         }
         Row(

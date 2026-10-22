@@ -17,6 +17,13 @@ class SendValidationTest {
     }
 
     @Test
+    fun an_empty_wallet_is_not_asked_for_an_amount() {
+        assertEquals("No spendable coins left", amountContinueLabel("0.5", 0))
+        assertEquals("Enter an amount", amountContinueLabel("", 50_000))
+        assertEquals("Continue", amountContinueLabel("0.0001", 50_000))
+    }
+
+    @Test
     fun review_says_why_an_amount_is_no_longer_payable() {
         assertEquals("No spendable coins left.", sendAmountUnavailable("0.5", 0))
         assertEquals("The wallet can no longer cover this amount.", sendAmountUnavailable("0.5", 1_000))

@@ -24,12 +24,15 @@ import io.bluewallet.blueberry.wallet.outputScriptFromAddress
 import io.bluewallet.blueberry.wallet.parseWalletSecret
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.coroutines.coroutineContext
 import kotlin.random.Random
 
 internal enum class SendStep { Address, Amount, Coins, Review, PrivateSend, Psbt, Broadcast }
@@ -109,9 +112,9 @@ internal class SendFlow(
     var reviewEpoch by mutableStateOf(0)
         private set
 
-    /** Tests substitute this so rebuild can run without signing. */
-    internal var buildTx: suspend (Wallet, SendBuildParams) -> BuildSendResult = { w, params ->
-        buildActiveSendTx(db, w, params, Random(seed))
+    /** Tests substitute this so rebuild can run without signing. [accept] is false once this build was dropped. */
+    internal var buildTx: suspend (Wallet, SendBuildParams, () -> Boolean) -> BuildSendResult = { w, params, accept ->
+        buildActiveSendTx(db, w, params, Random(seed), accept)
     }
 
     private val backStack = ArrayDeque<SendStep>()
@@ -126,7 +129,11 @@ internal class SendFlow(
             ?.let { "Needs a wallet that can sign." }
 
     val recipient: SendRecipient get() = SendRecipient(address.trim(), label.trim())
-    val spendableRows: List<WalletUtxoRow> get() = snap.utxos.filter { !it.isFrozen }
+    val spendableRows: List<WalletUtxoRow>
+        get() {
+            val reserved = runtime.reservedOutpoints()
+            return snap.utxos.filter { !it.isFrozen && it.key !in reserved }
+        }
     val walletTotalSats: Long get() = spendableRows.sumOf { it.valueSats }
     val amountSats: SendAmount? get() = (checkSendAmount(amount, walletTotalSats) as? SendAmountCheck.Ok)?.amount
     val selectedRows: List<WalletUtxoRow> get() = spendableRows.filter { it.key in selectedKeys }
@@ -179,16 +186,26 @@ internal class SendFlow(
         }
         val ticket = beginBuild()
         buildMutex.withLock {
-            publishBuild(ticket, produceBuild())
+            publishBuild(ticket, produceBuild(ticket))
         }
     }
 
-    private suspend fun produceBuild(): ReviewBuild {
+    /** RocketX signs under the same lock as Review, so the two cannot write the wallet together. */
+    internal suspend fun signPrivate(params: SendBuildParams): BuildSendResult {
+        val w = runtime.wallet ?: error("missing wallet")
+        return buildMutex.withLock {
+            withContext(Dispatchers.Default) {
+                buildActiveSendTx(db, w, params, Random(seed))
+            }
+        }
+    }
+
+    private suspend fun produceBuild(ticket: Int): ReviewBuild {
         val rate = feeRate
         val w = runtime.wallet
         val amt = amountSats
         return if (rate != null && amt != null && w != null) {
-            if (selectionSpendable()) buildSigned(w, amt, rate) else ReviewBuild.Failed(SELECTION_CHANGED)
+            if (selectionSpendable()) buildSigned(w, amt, rate, ticket) else ReviewBuild.Failed(SELECTION_CHANGED)
         } else if (rate == null || amt == null) {
             ReviewBuild.Idle
         } else {
@@ -200,11 +217,16 @@ internal class SendFlow(
         w: Wallet,
         amt: SendAmount,
         rate: Double,
+        ticket: Int,
     ): ReviewBuild {
         val stamp = draftStamp()
         val params = SendBuildParams(selectedInputs, recipient.address, amt, rate)
         return runCatching {
-            val signed = withContext(Dispatchers.Default) { buildTx(w, params) }
+            val signed =
+                withContext(Dispatchers.Default) {
+                    coroutineContext.ensureActive()
+                    buildTx(w, params) { ticketCurrent(ticket) && coroutineContext.isActive }
+                }
             ReviewBuild.Built(signed, stamp)
         }.getOrElse {
             if (it is CancellationException) throw it
@@ -212,8 +234,11 @@ internal class SendFlow(
         }
     }
 
+    private fun ticketCurrent(ticket: Int): Boolean = buildCell.load().ticket == ticket
+
     /** The persisted freeze list wins over a stale snapshot row. */
     private suspend fun selectionSpendable(): Boolean {
+        if (selectedKeys.size != selectedRows.size) return false
         val storedFrozen = withContext(Dispatchers.Default) { db.utxoFrozen.list().toSet() }
         return spendableSelectedKeys(snap.utxos, selectedKeys, storedFrozen).size == selectedKeys.size
     }
@@ -326,9 +351,10 @@ internal class SendFlow(
     }
 
     fun applyFee(rate: Double) {
-        feeRate = rate
         feeSheetOpen = false
         sendError = null
+        if (feeRate == rate) return
+        feeRate = rate
         dropBuild()
     }
 
@@ -435,9 +461,11 @@ internal class SendFlow(
         val rate = feeRate
         val amt = amountSats
         val refund = currentReceiveAddress(runtime, db)
+        val coinsHeld = selectionNeedsAck || selectedKeys.size != selectedRows.size
+        val held = coinsHeld || amt == null || privateSendBlock != null
         when {
             rate == null -> openFeeSheet()
-            amt == null || refund.isNullOrEmpty() || privateSendBlock != null -> {}
+            held || refund.isNullOrEmpty() -> {}
             else -> {
                 privateSession = PrivateSendSession(recipient.address, recipient.label, rate, amt, selectedInputs, refund)
                 privateSigned = null
@@ -485,17 +513,26 @@ internal class SendFlow(
 
     fun cancelling(): Boolean = cancelArmedForId != null && cancelArmedForId == broadcast.id && broadcastJobInFlight(broadcast.phase)
 
-    /** Back or swipe. The broadcast screen closes without cancelling its job. */
+    /** Back or swipe. A live broadcast or private send closes and leaves its job running. */
     fun goBack() {
         if (step == SendStep.Broadcast) {
             leaveBroadcast(broadcastId)
             close()
-            return
+        } else if (!dismissOverlay() && (step != SendStep.PrivateSend || !closeLivePrivateSend())) {
+            popStep()
         }
+    }
+
+    /** An in-flight or sent private payment closes. A failed one returns to Review. */
+    private fun closeLivePrivateSend(): Boolean {
         refreshBroadcast()
-        val phase = broadcast.phase
-        val owns = broadcastOwns(broadcast, ownedHex())
-        if (!dismissOverlay() && !closeIfFinished(phase, owns)) popStep()
+        val id = privateBroadcastId ?: sessionId(ownedHex())
+        val phase = if (id == null) null else runtime.broadcastStore.get(id)?.phase
+        if (phase == null || phase == "error") return false
+        leaveBroadcast(id)
+        dropBuild()
+        close()
+        return true
     }
 
     fun refreshBroadcast() {
@@ -536,18 +573,6 @@ internal class SendFlow(
             }
             else -> false
         }
-
-    /** A finished private send closes, and drops the direct signature. */
-    private fun closeIfFinished(
-        phase: String?,
-        owns: Boolean,
-    ): Boolean {
-        val privateDone = step == SendStep.PrivateSend && phase == "success" && owns
-        if (!privateDone) return false
-        dropBuild()
-        close()
-        return true
-    }
 
     private fun pushStep(next: SendStep) {
         navForward = true

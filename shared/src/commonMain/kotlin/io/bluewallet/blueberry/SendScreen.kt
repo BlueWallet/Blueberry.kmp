@@ -303,6 +303,7 @@ private fun SendPrivate(flow: SendFlow) {
                             onSigned = { flow.privateSigned = it },
                             onBroadcast = flow::privateBroadcast,
                             finish = BroadcastFinishActions(onDone = flow::finish, onRetry = flow::privateRetry),
+                            sign = flow::signPrivate,
                         ),
                 ),
             modifier = Modifier.weight(1f).fillMaxWidth(),

@@ -130,7 +130,11 @@ internal fun SendReviewStep(
         if (warning != null) {
             Text(warning, color = BwColors.Warning, fontFamily = BwFontFamily, fontSize = BwType.LabelSize)
         }
-        PrivateSendRow(block = state.alerts.privateSendBlock, onClick = actions.onPrivateSend)
+        PrivateSendRow(
+            block = state.alerts.privateSendBlock,
+            enabled = state.alerts.privateSendBlock == null && !state.alerts.selectionNeedsAck,
+            onClick = actions.onPrivateSend,
+        )
         if (summary != null) {
             Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -228,9 +232,9 @@ private fun FeeCard(
 @Composable
 private fun PrivateSendRow(
     block: String?,
+    enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    val enabled = block == null
     SendCard(
         modifier =
             Modifier
