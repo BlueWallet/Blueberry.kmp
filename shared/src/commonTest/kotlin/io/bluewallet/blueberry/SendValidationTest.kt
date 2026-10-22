@@ -17,6 +17,14 @@ class SendValidationTest {
     }
 
     @Test
+    fun review_says_why_an_amount_is_no_longer_payable() {
+        assertEquals("No spendable coins left.", sendAmountUnavailable("0.5", 0))
+        assertEquals("The wallet can no longer cover this amount.", sendAmountUnavailable("0.5", 1_000))
+        assertEquals("Enter an amount.", sendAmountUnavailable("", 50_000))
+        assertNull(sendAmountUnavailable("0.0001", 50_000))
+    }
+
+    @Test
     fun insufficient_selection_error_detects_build_message() {
         assertTrue(isInsufficientSelectionError("insufficient funds for amount and fee"))
         assertTrue(isInsufficientSelectionError("Insufficient funds"))

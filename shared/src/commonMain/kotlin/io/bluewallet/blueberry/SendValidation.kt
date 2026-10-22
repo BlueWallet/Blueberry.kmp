@@ -77,6 +77,18 @@ fun parseFeeRateSatPerVb(input: String): Double? {
     return if (n.isFinite() && n > 0.0) n else null
 }
 
+/** Why Review cannot price this payment, or null when [checkSendAmount] is ok. */
+fun sendAmountUnavailable(
+    input: String,
+    walletTotalSats: Long,
+): String? =
+    when (checkSendAmount(input, walletTotalSats)) {
+        is SendAmountCheck.Ok -> null
+        SendAmountCheck.MoreThanWallet -> "The wallet can no longer cover this amount."
+        SendAmountCheck.Empty ->
+            if (walletTotalSats <= 0L) "No spendable coins left." else "Enter an amount."
+    }
+
 /** True when build/send failed because the fixed coin set cannot cover amount + fee. */
 fun isInsufficientSelectionError(message: String?): Boolean {
     if (message == null) return false

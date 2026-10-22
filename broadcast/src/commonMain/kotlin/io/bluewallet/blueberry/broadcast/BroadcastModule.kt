@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.floor
 
@@ -86,9 +87,29 @@ fun createBroadcastModule(
     val stopped = AtomicBoolean(true)
     var unsubRequest: (() -> Unit)? = null
     var unsubCancel: (() -> Unit)? = null
-    var activeId: String? = null
-    var activeJob: Job? = null
+    val jobs = AtomicReference<Map<String, Job>>(emptyMap())
     var scope: CoroutineScope? = null
+
+    fun putJob(
+        id: String,
+        job: Job,
+    ) {
+        while (true) {
+            val cur = jobs.load()
+            if (jobs.compareAndSet(cur, cur + (id to job))) return
+        }
+    }
+
+    fun takeJob(
+        id: String,
+        job: Job,
+    ) {
+        while (true) {
+            val cur = jobs.load()
+            if (cur[id] !== job) return
+            if (jobs.compareAndSet(cur, cur - id)) return
+        }
+    }
 
     fun alivePeers(limit: Int): List<Peer> = ctx.db.peers.listAliveWithServices(NODE_P2P_V2, limit)
 
@@ -347,11 +368,6 @@ fun createBroadcastModule(
             logError("broadcast", "aborted/error", err)
             emit(BroadcastPhase.ERROR, null, message, null, null)
             ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Error(id, message))
-        } finally {
-            if (activeId == id) {
-                activeId = null
-                activeJob = null
-            }
         }
     }
 
@@ -368,26 +384,20 @@ fun createBroadcastModule(
             unsubRequest =
                 ctx.bus.on(Event.BroadcastRequest) { payload: BroadcastRequestPayload ->
                     if (stopped.load()) return@on
-                    if (activeId != null) {
-                        log("broadcast", "reject id=${payload.id} already-in-progress activeId=$activeId")
-                        ctx.bus.emit(
-                            Event.BroadcastDone,
-                            BroadcastDonePayload.Error(payload.id, "broadcast already in progress"),
-                        )
+                    if (jobs.load()[payload.id]?.isActive == true) {
+                        log("broadcast", "reject id=${payload.id} already-in-progress")
                         return@on
                     }
-                    activeId = payload.id
                     val job =
                         checkNotNull(scope).launch {
                             runBroadcast(payload.id, payload.txHex, payload.excludePeers)
                         }
-                    activeJob = job
+                    putJob(payload.id, job)
+                    job.invokeOnCompletion { takeJob(payload.id, job) }
                 }
             unsubCancel =
                 ctx.bus.on(Event.BroadcastCancel) { payload: BroadcastCancelPayload ->
-                    if (activeId == payload.id) {
-                        activeJob?.cancel(CancellationException("cancelled"))
-                    }
+                    jobs.load()[payload.id]?.cancel(CancellationException("cancelled"))
                 }
         }
 
@@ -397,19 +407,21 @@ fun createBroadcastModule(
             unsubCancel?.invoke()
             unsubRequest = null
             unsubCancel = null
-            activeJob?.cancel(CancellationException("cancelled"))
+            val running = jobs.load().values.toList()
+            running.forEach { it.cancel(CancellationException("cancelled")) }
             runBlocking {
-                try {
-                    activeJob?.join()
-                } catch (_: Throwable) {
+                running.forEach { job ->
+                    try {
+                        job.join()
+                    } catch (_: Throwable) {
+                    }
                 }
                 try {
                     injectedDispose?.invoke()
                 } catch (_: Throwable) {
                 }
             }
-            activeId = null
-            activeJob = null
+            jobs.store(emptyMap())
             ctx.bus.emit(
                 Event.ModuleStatus,
                 ModuleStatusPayload(module = "broadcast", status = ModuleStatus.STOPPED),

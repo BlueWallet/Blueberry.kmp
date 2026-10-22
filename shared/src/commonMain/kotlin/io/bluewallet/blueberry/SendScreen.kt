@@ -39,6 +39,7 @@ import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.ScreenHeader
+import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.overlayBackStack
 import io.bluewallet.blueberry.ui.screenPushTransform
 import io.bluewallet.blueberry.wallet.PsbtSendResult
@@ -66,13 +67,22 @@ fun SendScreen(
     LaunchedEffect(flow.selectedKeys) { onSelectedKeysChange(flow.selectedKeys) }
     LaunchedEffect(flow.feeRate) { onFeeRateChange(flow.feeRate) }
     DisposableEffect(runtime.broadcastStore) {
-        val off = runtime.broadcastStore.subscribe { scope.launch { flow.broadcast = runtime.broadcastStore.get() } }
+        val off = runtime.broadcastStore.subscribe { scope.launch { flow.refreshBroadcast() } }
         onDispose { off() }
     }
-    LaunchedEffect(flow) { flow.loadChangeScript() }
+    LaunchedEffect(runtime.walletRevision) { flow.loadChangeScript() }
     val reviewing = flow.step == SendStep.Review
-    LaunchedEffect(reviewing, flow.feeRate, flow.selectedKeys, flow.address, flow.amount) {
-        if (reviewing) flow.rebuild()
+    LaunchedEffect(
+        reviewing,
+        flow.feeRate,
+        flow.selectedKeys,
+        flow.address,
+        flow.amount,
+        flow.reviewEpoch,
+        flow.selectionNeedsAck,
+        runtime.walletRevision,
+    ) {
+        if (reviewing && !flow.selectionNeedsAck) flow.rebuild()
     }
     BackHandler { flow.goBack() }
     DisposableEffect(flow) {
@@ -91,7 +101,7 @@ private fun SendStepContent(flow: SendFlow) {
     AnimatedContent(
         targetState = flow.step,
         modifier = Modifier.fillMaxSize(),
-        transitionSpec = { screenPushTransform(forward = targetState.ordinal > initialState.ordinal) },
+        transitionSpec = { screenPushTransform(forward = flow.navForward) },
     ) { step ->
         SendStepScreen(flow, step)
     }
@@ -139,24 +149,8 @@ private fun SendStepScreen(
         SendStep.Coins -> SendCoins(flow)
         SendStep.Review -> SendReview(flow)
         SendStep.PrivateSend -> SendPrivate(flow)
-        SendStep.Psbt -> {
-            val psbt = (flow.build as? ReviewBuild.Built)?.result as? PsbtSendResult
-            if (psbt != null) SendPsbtStep(flow.recipient, psbt.psbtHex, onDone = flow::finish, onBack = flow::goBack)
-        }
-        SendStep.Broadcast -> {
-            val sent = flow.sent
-            if (sent != null) {
-                SendBroadcastStep(
-                    receipt = sent.receipt,
-                    status = broadcastStatus(flow.broadcast, flow.cancelling()),
-                    actions =
-                        SendBroadcastActions(
-                            finish = BroadcastFinishActions(onDone = flow::finish, onRetry = flow::broadcastSent),
-                            onCancel = flow::goBack,
-                        ),
-                )
-            }
-        }
+        SendStep.Psbt -> SendPsbt(flow)
+        SendStep.Broadcast -> SendBroadcast(flow)
     }
 }
 
@@ -187,16 +181,71 @@ private fun SendCoins(flow: SendFlow) {
             SendCoinsActions(
                 onToggle = flow::toggleCoin,
                 onClear = { flow.selectedKeys = emptySet() },
-                onContinue = { if (flow.coverage().covered) flow.step = SendStep.Review },
+                onReplaceSelection = flow::replaceSelection,
+                onContinue = flow::continueFromCoins,
                 onBack = flow::goBack,
             ),
     )
 }
 
 @Composable
+private fun SendPsbt(flow: SendFlow) {
+    val psbt = (flow.build as? ReviewBuild.Built)?.result as? PsbtSendResult
+    if (psbt != null) {
+        SendPsbtStep(flow.recipient, psbt.psbtHex, onDone = flow::finish, onBack = flow::goBack)
+    } else {
+        SendStepFrame(title = "Sign", caption = null, onBack = flow::goBack, bottom = {}) {
+            HelperText("The transaction isn't ready to sign.", error = true)
+        }
+    }
+}
+
+@Composable
+private fun SendBroadcast(flow: SendFlow) {
+    val sent = flow.sent
+    if (sent == null) {
+        SendStepFrame(title = "Send", caption = null, onBack = flow::goBack, bottom = {}) {
+            HelperText("Nothing is waiting to be sent.", error = true)
+        }
+        return
+    }
+    val owns = broadcastOwns(flow.broadcast, sent.signed.txHex)
+    val status =
+        if (flow.sendError != null && !owns) {
+            BroadcastStatusUi("Not sent yet", flow.sendError!!, BROADCAST_BUSY, BroadcastTone.Failed)
+        } else {
+            ownedBroadcastStatus(flow.broadcast, sent.signed.txHex, flow.cancelling())
+        }
+    SendBroadcastStep(
+        receipt = sent.receipt,
+        status = status,
+        actions =
+            SendBroadcastActions(
+                finish = BroadcastFinishActions(onDone = flow::finish, onRetry = flow::broadcastSent),
+                onCancel = flow::cancelBroadcast,
+                onClose = flow::goBack,
+            ),
+    )
+}
+
+@Composable
 private fun SendReview(flow: SendFlow) {
+    val amount = flow.amountSats
+    val blocked = sendAmountUnavailable(flow.amount, flow.walletTotalSats)
+    if (amount == null || blocked != null) {
+        SendStepFrame(
+            title = "Review",
+            caption = "Step 4 of 4",
+            onBack = flow::goBack,
+            bottom = {
+                TintedPillButton(text = "Review coins", onClick = flow::addCoins, modifier = Modifier.fillMaxWidth())
+            },
+        ) {
+            HelperText(blocked ?: "This amount can't be sent.", error = true)
+        }
+        return
+    }
     val clipboard = LocalClipboardManager.current
-    val amount = flow.amountSats ?: return
     SendReviewStep(
         state =
             SendReviewState(
@@ -205,7 +254,12 @@ private fun SendReview(flow: SendFlow) {
                 amount = amount,
                 rate = flow.feeRate,
                 build = flow.build,
-                privateSendBlock = flow.privateSendBlock,
+                alerts =
+                    ReviewAlerts(
+                        privateSendBlock = flow.privateSendBlock,
+                        selectionNeedsAck = flow.selectionNeedsAck,
+                        sendError = flow.sendError,
+                    ),
             ),
         actions =
             SendReviewActions(
@@ -235,6 +289,7 @@ private fun SendPrivate(flow: SendFlow) {
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
         ScreenHeader(title = "Private Send", onBack = flow::goBack)
+        flow.sendError?.let { HelperText(it, error = true) }
         PrivateSendStep(
             session = session,
             host =

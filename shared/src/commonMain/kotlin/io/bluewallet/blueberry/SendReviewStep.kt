@@ -33,11 +33,24 @@ import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.Chevron
 import io.bluewallet.blueberry.ui.HeaderMenuItem
 import io.bluewallet.blueberry.ui.TextAction
-import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.ToPill
 import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.PsbtSendResult
 import io.bluewallet.blueberry.wallet.SendAmount
+
+/** Coins, address, amount and fee a [ReviewBuild.Built] was signed for. */
+internal data class OutpointStamp(
+    val txid: String,
+    val vout: Int,
+    val valueSats: Long,
+)
+
+internal data class SendDraftStamp(
+    val outpoints: List<OutpointStamp>,
+    val address: String,
+    val amount: SendAmount,
+    val rate: Double,
+)
 
 internal sealed class ReviewBuild {
     data object Idle : ReviewBuild()
@@ -46,6 +59,7 @@ internal sealed class ReviewBuild {
 
     data class Built(
         val result: BuildSendResult,
+        val draft: SendDraftStamp,
     ) : ReviewBuild()
 
     data class Failed(
@@ -70,22 +84,15 @@ internal class SendReviewState(
     val amount: SendAmount,
     val rate: Double?,
     val build: ReviewBuild,
-    /** Why RocketX can't be used with this wallet, or null when it can. */
-    val privateSendBlock: String?,
+    val alerts: ReviewAlerts = ReviewAlerts(),
 )
 
-/** Primary button label on Review. */
-internal fun reviewButtonLabel(
-    rate: Double?,
-    build: ReviewBuild,
-): String =
-    when {
-        rate == null -> "Enter a fee rate"
-        build is ReviewBuild.Built && build.result is PsbtSendResult -> "Show PSBT to sign"
-        build is ReviewBuild.Built -> "Send via Tor"
-        build is ReviewBuild.Failed -> "Add coins or lower the fee"
-        else -> "Building…"
-    }
+internal class ReviewAlerts(
+    /** Why RocketX can't be used with this wallet, or null when it can. */
+    val privateSendBlock: String? = null,
+    val selectionNeedsAck: Boolean = false,
+    val sendError: String? = null,
+)
 
 @Composable
 internal fun SendReviewStep(
@@ -106,14 +113,7 @@ internal fun SendReviewStep(
             } else {
                 emptyList()
             },
-        bottom = {
-            TintedPillButton(
-                text = reviewButtonLabel(state.rate, state.build),
-                onClick = actions.onSend,
-                enabled = state.rate != null && built != null,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
+        bottom = { ReviewPrimaryButton(state, actions) },
     ) {
         if (state.to.label.isNotBlank()) ToPill(label = state.to.label, address = "")
         Box(modifier = Modifier.alpha(if (summary == null) 0.4f else 1f)) {
@@ -123,13 +123,14 @@ internal fun SendReviewStep(
             address = state.to.address,
             modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp - BwSpace.Gap),
         )
+        ReviewAlertText(state.alerts)
         if (summary != null) CoinsMoveCard(summary)
         FeeCard(state = state, summary = summary, actions = actions)
         val warning = summary?.let { feeShareWarning(it.feeSats, it.paidSats) }
         if (warning != null) {
             Text(warning, color = BwColors.Warning, fontFamily = BwFontFamily, fontSize = BwType.LabelSize)
         }
-        PrivateSendRow(block = state.privateSendBlock, onClick = actions.onPrivateSend)
+        PrivateSendRow(block = state.alerts.privateSendBlock, onClick = actions.onPrivateSend)
         if (summary != null) {
             Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(

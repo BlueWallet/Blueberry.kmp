@@ -40,6 +40,10 @@ expect fun PlatformScreenHeader(
     onTrailing: (() -> Unit)? = null,
     /** Overflow actions behind a trailing "…" button. Empty hides the button. */
     menu: List<HeaderMenuItem> = emptyList(),
+    /** When false, the leading back control is omitted. */
+    showBack: Boolean = true,
+    /** Trailing close icon. Takes the trailing slot instead of [trailingText]. */
+    onClose: (() -> Unit)? = null,
 )
 
 /** Body copy at the platform default size: iOS 17pt, Material bodyLarge elsewhere. */
@@ -96,6 +100,8 @@ internal fun MaterialScreenHeader(
     trailingText: String? = null,
     onTrailing: (() -> Unit)? = null,
     menu: List<HeaderMenuItem> = emptyList(),
+    showBack: Boolean = true,
+    onClose: (() -> Unit)? = null,
 ) {
     TopAppBar(
         modifier = modifier,
@@ -109,7 +115,7 @@ internal fun MaterialScreenHeader(
                 actionIconContentColor = BwColors.Action,
             ),
         navigationIcon = {
-            HeaderBackButton(onClick = onBack, enabled = enabled)
+            if (showBack) HeaderBackButton(onClick = onBack, enabled = enabled)
         },
         title = {
             Text(
@@ -118,10 +124,12 @@ internal fun MaterialScreenHeader(
             )
         },
         actions = {
-            if (trailingText != null && onTrailing != null) {
+            if (onClose != null) {
+                HeaderCloseButton(onClick = onClose, enabled = enabled)
+            } else if (trailingText != null && onTrailing != null) {
                 TextAction(text = trailingText, onClick = onTrailing)
             }
-            if (menu.isNotEmpty()) HeaderOverflowMenu(menu)
+            if (onClose == null && menu.isNotEmpty()) HeaderOverflowMenu(menu)
         },
     )
 }

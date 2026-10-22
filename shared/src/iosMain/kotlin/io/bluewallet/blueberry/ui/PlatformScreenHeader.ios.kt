@@ -61,6 +61,8 @@ actual fun PlatformScreenHeader(
     trailingText: String?,
     onTrailing: (() -> Unit)?,
     menu: List<HeaderMenuItem>,
+    showBack: Boolean,
+    onClose: (() -> Unit)?,
 ) {
     Box(
         modifier =
@@ -81,12 +83,20 @@ actual fun PlatformScreenHeader(
                         .padding(horizontal = BarSideClearance),
             )
         }
-        IosGlassBackButton(
-            onBack = onBack,
-            enabled = enabled,
-            modifier = Modifier.align(Alignment.CenterStart),
-        )
-        if (trailingText != null && onTrailing != null) {
+        if (showBack) {
+            IosGlassBackButton(
+                onBack = onBack,
+                enabled = enabled,
+                modifier = Modifier.align(Alignment.CenterStart),
+            )
+        }
+        if (onClose != null) {
+            IosGlassCloseButton(
+                onClose = onClose,
+                enabled = enabled,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
+        } else if (trailingText != null && onTrailing != null) {
             // Must be a UIKit overlay — Compose siblings sit under the bar-title overlay.
             IosOverlayTextAction(
                 text = trailingText,

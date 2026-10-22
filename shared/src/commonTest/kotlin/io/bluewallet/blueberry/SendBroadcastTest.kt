@@ -34,8 +34,47 @@ class SendBroadcastTest {
 
     @Test
     fun cancelling_overrides_working_but_not_finished() {
-        assertEquals("Stopping…", broadcastStatus(BroadcastSnapshot(phase = "attempt"), cancelling = true).line)
+        val stopping = broadcastStatus(BroadcastSnapshot(phase = "attempt"), cancelling = true)
+        assertEquals("Stopping…", stopping.line)
+        assertEquals("Close to leave. Stopping continues.", stopping.caption)
         assertEquals("Sent privately", broadcastStatus(BroadcastSnapshot(phase = "success"), cancelling = true).line)
+    }
+
+    @Test
+    fun another_transactions_success_is_not_this_receipt() {
+        val other = BroadcastSnapshot(txHex = "bb", phase = "success")
+        val status = ownedBroadcastStatus(other, "aa")
+        assertEquals(BroadcastTone.Working, status.tone)
+        assertEquals("Starting Tor", status.line)
+        assertEquals(BroadcastTone.Sent, ownedBroadcastStatus(other, "bb").tone)
+    }
+
+    @Test
+    fun list_rows_follow_a_job_until_the_transaction_is_stored() {
+        val running =
+            BroadcastSession(
+                BroadcastSnapshot(id = "1", txHex = "aa", phase = "starting"),
+                BroadcastReceipt("txid-run", "bc1qexample", "Rent", 10_000, 200),
+            )
+        val failed =
+            BroadcastSession(
+                BroadcastSnapshot(id = "2", txHex = "bb", phase = "error", error = "eof"),
+                BroadcastReceipt("txid-fail", "bc1qother", "", 5_000, 100),
+            )
+        val rows = broadcastListRows(listOf(running, failed), emptySet())
+        assertEquals(listOf("2", "1"), rows.map { it.id })
+        assertEquals("Not sent", rows[0].status)
+        assertEquals("bc1qother", rows[0].title)
+        assertEquals("Broadcasting", rows[1].status)
+        assertEquals("Rent", rows[1].title)
+        assertEquals(emptyList(), broadcastListRows(listOf(running), setOf("txid-run")))
+        val sent =
+            BroadcastSession(
+                BroadcastSnapshot(id = "3", txHex = "cc", phase = "success"),
+                BroadcastReceipt("txid-sent", "bc1qsent", "Done", 1, 1),
+            )
+        assertEquals("Sent", broadcastListRows(listOf(sent), emptySet()).single().status)
+        assertEquals(emptyList(), broadcastListRows(listOf(sent), setOf("txid-sent")))
     }
 
     @Test

@@ -69,16 +69,32 @@ class SendReviewTest {
     }
 
     @Test
-    fun review_button_follows_the_build() {
-        val signed = SignedSendResult("00", "t", 1, 1, 0, emptyList())
-        val psbt = PsbtSendResult("00", "t", 1, 1, 0, emptyList())
-        assertEquals("Enter a fee rate", reviewButtonLabel(null, ReviewBuild.Idle))
-        assertEquals("Building…", reviewButtonLabel(3.0, ReviewBuild.Building))
-        assertEquals("Send via Tor", reviewButtonLabel(3.0, ReviewBuild.Built(signed)))
-        assertEquals("Show PSBT to sign", reviewButtonLabel(3.0, ReviewBuild.Built(psbt)))
+    fun review_button_names_the_action_it_runs() {
+        val stamp = SendDraftStamp(emptyList(), "bc1q", SendAmount.Exact(1), 3.0)
+        val signed = ReviewBuild.Built(SignedSendResult("00", "t", 1, 1, 0, emptyList()), stamp)
+        val psbt = ReviewBuild.Built(PsbtSendResult("00", "t", 1, 1, 0, emptyList()), stamp)
+        assertButton("Enter a fee rate", ReviewButtonAction.EditFee, true, reviewButton(null, ReviewBuild.Idle, false))
+        assertButton("Building…", ReviewButtonAction.Send, false, reviewButton(3.0, ReviewBuild.Building, false))
+        assertButton("Send via Tor", ReviewButtonAction.Send, true, reviewButton(3.0, signed, false))
+        assertButton("Show PSBT to sign", ReviewButtonAction.Send, true, reviewButton(3.0, psbt, false))
         val short = ReviewBuild.Failed("insufficient funds for amount and fee")
-        assertEquals("Add coins or lower the fee", reviewButtonLabel(3.0, short))
+        assertButton("Add coins or lower the fee", ReviewButtonAction.AddCoins, true, reviewButton(3.0, short, false))
         assertTrue(short.isShort())
+        assertButton("Review the selection", ReviewButtonAction.AddCoins, true, reviewButton(3.0, ReviewBuild.Failed(SELECTION_CHANGED), false))
+        assertButton("Waiting for the wallet", ReviewButtonAction.Send, false, reviewButton(3.0, ReviewBuild.Failed(WALLET_NOT_LOADED), false))
+        assertButton("Can't send this", ReviewButtonAction.Send, false, reviewButton(3.0, ReviewBuild.Failed("boom"), false))
+        assertButton("Review the selection", ReviewButtonAction.AddCoins, true, reviewButton(3.0, signed, true))
+    }
+
+    private fun assertButton(
+        label: String,
+        action: ReviewButtonAction,
+        enabled: Boolean,
+        button: ReviewButton,
+    ) {
+        assertEquals(label, button.label)
+        assertEquals(action, button.action)
+        assertEquals(enabled, button.enabled)
     }
 
     @Test

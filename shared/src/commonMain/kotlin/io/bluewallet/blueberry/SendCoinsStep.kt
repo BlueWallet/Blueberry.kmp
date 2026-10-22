@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +35,7 @@ private val CoinGroupGap = 24.dp
 internal class SendCoinsActions(
     val onToggle: (String) -> Unit,
     val onClear: () -> Unit,
+    val onReplaceSelection: (Set<String>) -> Unit,
     val onContinue: () -> Unit,
     val onBack: () -> Unit,
 )
@@ -64,6 +66,17 @@ internal fun SendCoinsStep(
     val selected = utxos.filter { it.key in selectedKeys && !it.isFrozen }
     var filter by remember { mutableStateOf(CoinControlFilter.All) }
     val groups = remember(control, filter) { filterCoinControlGroups(control, filter) }
+    val visibleKeys = remember(groups) { groups.flatMap { group -> group.coins.map { it.key } }.toSet() }
+    LaunchedEffect(control, visibleKeys, filter) {
+        val live = control.coins.map { it.key }.toSet()
+        val frozen =
+            control.coins
+                .filter { it.isFrozen }
+                .map { it.key }
+                .toSet()
+        val next = pickerSelection(selectedKeys, live, visibleKeys, frozen, showsAll = filter == CoinControlFilter.All)
+        if (next != selectedKeys) actions.onReplaceSelection(next)
+    }
     val selectedCoins = control.coins.filter { it.key in selectedKeys && !it.isFrozen }
     val notice = remember(selectedCoins) { privacyNoticeForSelection(selectedCoins) }
     SendStepFrame(

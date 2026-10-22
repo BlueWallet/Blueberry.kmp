@@ -3,6 +3,7 @@ package io.bluewallet.blueberry
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +46,11 @@ data object CoinsRoute
 @Serializable
 data class TxDetailsRoute(
     val txid: String,
+)
+
+@Serializable
+data class BroadcastRoute(
+    val id: String,
 )
 
 @Serializable
@@ -91,7 +97,24 @@ internal fun WalletNavHost(
             }
         }
 
-    CompositionLocalProvider(LocalHomeVisible provides homeVisible) {
+    var broadcastSessions by remember { mutableStateOf(runtime.broadcastStore.sessions()) }
+    DisposableEffect(runtime.broadcastStore) {
+        val off =
+            runtime.broadcastStore.subscribe {
+                scope.launch { broadcastSessions = runtime.broadcastStore.sessions() }
+            }
+        onDispose { off() }
+    }
+    val openBroadcast: (String) -> Unit =
+        remember(navController) {
+            { id -> navController.navigate(BroadcastRoute(id)) { launchSingleTop = true } }
+        }
+
+    CompositionLocalProvider(
+        LocalHomeVisible provides homeVisible,
+        LocalBroadcastSessions provides broadcastSessions,
+        LocalOpenBroadcast provides openBroadcast,
+    ) {
         // Only swallow back on home so NavHost can pop pushed screens.
         BackHandler(enabled = homeVisible) { /* idle: do not finish the activity / app */ }
         // Do not set enterTransition/exitTransition: iOS keeps the native-like push defaults.
@@ -176,6 +199,10 @@ internal fun WalletNavHost(
                     txid = route.txid,
                     onBack = backFrom(entry),
                 )
+            }
+            composable<BroadcastRoute> { entry ->
+                val route = entry.toRoute<BroadcastRoute>()
+                BroadcastScreen(runtime = runtime, id = route.id, onClose = backFrom(entry))
             }
             composable<SettingsRoute> { entry ->
                 SettingsScreen(

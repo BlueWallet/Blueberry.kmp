@@ -1,7 +1,6 @@
 package io.bluewallet.blueberry
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,8 +38,9 @@ class BroadcastFinishActions(
 
 internal class SendBroadcastActions(
     val finish: BroadcastFinishActions,
-    /** Back while sending: first tap cancels, second closes. */
+    /** Stops this broadcast. The header Close leaves it running. */
     val onCancel: () -> Unit,
+    val onClose: () -> Unit,
 )
 
 internal class SendReceipt(
@@ -59,20 +59,16 @@ internal fun SendBroadcastStep(
     SendStepFrame(
         title = status.title,
         caption = null,
-        onBack = actions.onCancel,
+        onBack = actions.onClose,
+        onClose = actions.onClose,
         bottom = {
             when (status.tone) {
                 BroadcastTone.Sent ->
                     TintedPillButton(text = "Done", onClick = actions.finish.onDone, modifier = Modifier.fillMaxWidth())
                 BroadcastTone.Failed ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextAction(text = "Close", onClick = actions.finish.onDone)
-                        TintedPillButton(text = "Retry", onClick = actions.finish.onRetry, modifier = Modifier.weight(1f))
-                    }
+                    TintedPillButton(text = "Retry", onClick = actions.finish.onRetry, modifier = Modifier.fillMaxWidth())
                 BroadcastTone.Working ->
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        TextAction(text = "Cancel", onClick = actions.onCancel)
-                    }
+                    TintedPillButton(text = "Cancel", onClick = actions.onCancel, modifier = Modifier.fillMaxWidth())
             }
         },
     ) {

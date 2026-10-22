@@ -59,6 +59,7 @@ internal fun SendStepFrame(
     modifier: Modifier = Modifier,
     showEdges: Boolean = true,
     onClear: (() -> Unit)? = null,
+    onClose: (() -> Unit)? = null,
     menu: List<HeaderMenuItem> = emptyList(),
     bottom: @Composable () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
@@ -105,18 +106,33 @@ internal fun SendStepFrame(
             onHeight = { barHeight = with(density) { it.toDp() } },
             content = bottom,
         )
-        PlatformScreenHeader(
-            title = title,
-            onBack = onBack,
-            trailingText = if (onClear != null) "Clear" else null,
-            onTrailing = onClear,
-            menu = menu,
-            modifier =
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = safe.calculateTopPadding(), start = BwSpace.ScreenX, end = BwSpace.ScreenX),
-        )
+        Box(
+            Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = safe.calculateTopPadding(), start = BwSpace.ScreenX, end = BwSpace.ScreenX),
+        ) {
+            SendStepHeader(title, onBack, onClear, onClose, menu)
+        }
     }
+}
+
+@Composable
+private fun SendStepHeader(
+    title: String,
+    onBack: () -> Unit,
+    onClear: (() -> Unit)?,
+    onClose: (() -> Unit)?,
+    menu: List<HeaderMenuItem>,
+) {
+    PlatformScreenHeader(
+        title = title,
+        onBack = onBack,
+        trailingText = if (onClose == null && onClear != null) "Clear" else null,
+        onTrailing = if (onClose == null) onClear else null,
+        menu = menu,
+        showBack = onClose == null,
+        onClose = onClose,
+    )
 }
 
 @Composable

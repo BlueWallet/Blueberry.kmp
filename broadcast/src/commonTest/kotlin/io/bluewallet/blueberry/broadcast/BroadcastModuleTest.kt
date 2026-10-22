@@ -602,7 +602,7 @@ class BroadcastModuleTest {
         }
 
     @Test
-    fun second_request_is_rejected_while_in_progress() =
+    fun second_request_runs_beside_the_first() =
         runBlocking {
             val db = createSqliteDatabase(":memory:")
             val bus = createMessageBus()
@@ -619,12 +619,13 @@ class BroadcastModuleTest {
             mod.start()
             bus.emit(Event.BroadcastRequest, BroadcastRequestPayload("a", txHex()))
             bus.emit(Event.BroadcastRequest, BroadcastRequestPayload("b", txHex()))
-            delay(30)
-            assertEquals(1, done.size)
-            assertEquals("b", done[0].id)
-            assertTrue((done[0] as BroadcastDonePayload.Error).error.contains("already in progress"))
+            delay(40)
+            assertEquals(0, done.size)
             bus.emit(Event.BroadcastCancel, BroadcastCancelPayload("a"))
-            delay(30)
+            delay(40)
+            assertEquals(1, done.size)
+            assertEquals("a", done[0].id)
+            assertTrue((done[0] as BroadcastDonePayload.Error).error.contains("cancel", ignoreCase = true))
             mod.stop()
             db.close()
         }

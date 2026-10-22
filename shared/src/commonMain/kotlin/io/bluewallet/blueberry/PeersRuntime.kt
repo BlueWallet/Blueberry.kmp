@@ -1,5 +1,8 @@
 package io.bluewallet.blueberry
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import io.bluewallet.blueberry.blocks.modules.BlocksDownloadOptions
 import io.bluewallet.blueberry.blocks.modules.createBlocksDownloadModule
 import io.bluewallet.blueberry.boot.loadSyncFromYear
@@ -37,6 +40,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.concurrent.Volatile
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 fun bindPeerSocketEvents(
     bus: MessageBus,
@@ -63,31 +68,55 @@ class PeersRuntime(
     val walletTxsStore: WalletTxsStore = createWalletTxsStore()
     val broadcastStore: BroadcastStore = createBroadcastStore()
 
-    @Volatile var wallet: Wallet? = null
+    /** Bumps whenever [wallet] is set or cleared, so Compose can retry work that saw a null wallet. */
+    var walletRevision by mutableStateOf(0)
         private set
 
-    @Volatile private var pendingSendRow: SendRow? = null
+    @Volatile private var walletRef: Wallet? = null
 
-    @Volatile private var pendingPrivateSendRow: PrivateSendRow? = null
+    var wallet: Wallet?
+        get() = walletRef
+        private set(value) {
+            walletRef = value
+            walletRevision++
+        }
 
-    fun armSendPersist(row: SendRow) {
-        pendingSendRow = row
-        pendingPrivateSendRow = null
+    /** Test seam. Production assigns [wallet] from [start]. */
+    internal fun installWallet(next: Wallet?) {
+        wallet = next
     }
 
-    fun armPrivateSendPersist(row: PrivateSendRow) {
-        pendingPrivateSendRow = row
-        pendingSendRow = null
+    @OptIn(ExperimentalAtomicApi::class)
+    private val pendingSends = AtomicReference<Map<String, SendRow>>(emptyMap())
+
+    @OptIn(ExperimentalAtomicApi::class)
+    private val pendingPrivateSends = AtomicReference<Map<String, PrivateSendRow>>(emptyMap())
+
+    @OptIn(ExperimentalAtomicApi::class)
+    fun armSendPersist(
+        id: String,
+        row: SendRow,
+    ) {
+        putPending(pendingSends, id, row)
     }
 
-    fun persistArmedBroadcast() {
-        val snap = broadcastStore.get()
-        val send = pendingSendRow
-        val priv = pendingPrivateSendRow
+    @OptIn(ExperimentalAtomicApi::class)
+    fun armPrivateSendPersist(
+        id: String,
+        row: PrivateSendRow,
+    ) {
+        putPending(pendingPrivateSends, id, row)
+    }
+
+    @OptIn(ExperimentalAtomicApi::class)
+    fun persistArmedBroadcast(id: String) {
+        val snap = broadcastStore.get(id) ?: return
+        val send = pendingSends.load()[id]
+        val priv = pendingPrivateSends.load()[id]
         val wroteSend = send != null && persistSendAndRefresh(db, walletTxsStore, wallet, send, snap)
         val wrotePriv = priv != null && persistPrivateSendAndRefresh(db, walletTxsStore, wallet, priv, snap)
-        pendingSendRow = armedAfterPersist(pendingSendRow, send, wroteSend)
-        pendingPrivateSendRow = armedAfterPersist(pendingPrivateSendRow, priv, wrotePriv)
+        if (wroteSend) removePending(pendingSends, id)
+        if (wrotePriv) removePending(pendingPrivateSends, id)
     }
 
     private val net = createPlatformNet()
@@ -163,7 +192,7 @@ class PeersRuntime(
                 null
             }
         val unbindWallet = bindWalletTxsEvents(bus, db, walletTxsStore, sharedWallet)
-        val unbindBroadcast = bindBroadcastEvents(bus, broadcastStore) { persistArmedBroadcast() }
+        val unbindBroadcast = bindBroadcastEvents(bus, broadcastStore) { id -> persistArmedBroadcast(id) }
         unbind = {
             unbindPeers()
             unbindHeaders()
@@ -379,5 +408,28 @@ class PeersRuntime(
         unbind?.invoke()
         unbind = null
         wallet = null
+    }
+}
+
+@OptIn(ExperimentalAtomicApi::class)
+private fun <T> putPending(
+    map: AtomicReference<Map<String, T>>,
+    id: String,
+    row: T,
+) {
+    while (true) {
+        val cur = map.load()
+        if (map.compareAndSet(cur, cur + (id to row))) return
+    }
+}
+
+@OptIn(ExperimentalAtomicApi::class)
+private fun <T> removePending(
+    map: AtomicReference<Map<String, T>>,
+    id: String,
+) {
+    while (true) {
+        val cur = map.load()
+        if (id !in cur || map.compareAndSet(cur, cur - id)) return
     }
 }

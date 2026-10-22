@@ -40,6 +40,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -66,6 +67,10 @@ import io.bluewallet.blueberry.ui.platformHeaderClearance
 import io.bluewallet.blueberry.ui.rememberReducedMotion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+internal val LocalBroadcastSessions = staticCompositionLocalOf<List<BroadcastSession>> { emptyList() }
+
+internal val LocalOpenBroadcast = staticCompositionLocalOf<(String) -> Unit> { {} }
 
 @Composable
 fun PeersScreen(
@@ -206,6 +211,9 @@ fun PeersScreen(
                 showEdges = homeInFront,
             ) {
                 val dockVisible = showDock && !detailedSync
+                val broadcastRows =
+                    broadcastListRows(LocalBroadcastSessions.current, walletTxs.txs.map { it.txid }.toSet())
+                val openBroadcast = LocalOpenBroadcast.current
                 LazyColumn(
                     modifier =
                         Modifier
@@ -223,6 +231,7 @@ fun PeersScreen(
                 ) {
                     homeFeed(
                         walletTxs = walletTxs,
+                        broadcasts = broadcastRows,
                         open =
                             HomeOpen(
                                 receive = onOpenReceive,
@@ -230,6 +239,7 @@ fun PeersScreen(
                                 coins = onOpenCoins,
                                 tx = onOpenTx,
                             ),
+                        onOpenBroadcast = openBroadcast,
                         dockVisible = dockVisible,
                     )
                     alwaysBounceTail(listState)
@@ -383,10 +393,12 @@ private class HomeOpen(
 
 private fun LazyListScope.homeFeed(
     walletTxs: WalletTxsSnapshot,
+    broadcasts: List<BroadcastListRow>,
     open: HomeOpen,
+    onOpenBroadcast: (String) -> Unit,
     dockVisible: Boolean,
 ) {
-    if (walletTxs.txs.isEmpty()) {
+    if (walletTxs.txs.isEmpty() && broadcasts.isEmpty()) {
         item(key = "home-empty") {
             Column(Modifier.fillParentMaxHeight()) {
                 HomePinnedChrome(
@@ -421,6 +433,11 @@ private fun LazyListScope.homeFeed(
                 onOpenSend = open.send,
                 onOpenCoins = open.coins,
             )
+        }
+        items(broadcasts, key = { "broadcast-${it.id}" }) { row ->
+            Box(Modifier.padding(horizontal = BwSpace.ScreenX)) {
+                HomeBroadcastRow(row = row, onClick = { onOpenBroadcast(row.id) })
+            }
         }
         items(walletTxs.txs, key = { it.txid }) { tx ->
             Box(Modifier.padding(horizontal = BwSpace.ScreenX)) {
