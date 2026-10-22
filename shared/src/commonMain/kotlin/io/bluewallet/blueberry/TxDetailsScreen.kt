@@ -109,7 +109,17 @@ private fun ForgetOpenSend(
     onForgotten: () -> Unit,
 ) {
     val open = remember(txid, snap) { unconfirmedSendOpen(db, txid) }
+    var confirming by remember(txid) { mutableStateOf(false) }
     if (!open) return
+    if (confirming) {
+        ForgetSendDialog(
+            onForget = {
+                confirming = false
+                if (abandonUnconfirmedSend(db, runtime, txid)) onForgotten()
+            },
+            onKeep = { confirming = false },
+        )
+    }
     Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
         Text(
             text = "This payment was already given to Bitcoin nodes and may still confirm. Removing it does not pull it back, and a new spend of these coins conflicts with it.",
@@ -119,12 +129,39 @@ private fun ForgetOpenSend(
         )
         PlainPillButton(
             text = "Forget this payment",
-            onClick = {
-                if (abandonUnconfirmedSend(db, runtime, txid)) onForgotten()
-            },
+            onClick = { confirming = true },
             modifier = Modifier.fillMaxWidth(),
         )
     }
+}
+
+@Composable
+private fun ForgetSendDialog(
+    onForget: () -> Unit,
+    onKeep: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onKeep,
+        title = {
+            Text(
+                text = "Forget this payment?",
+                color = BwColors.Ink,
+                fontFamily = BwFontFamily,
+                fontWeight = BwType.Value,
+            )
+        },
+        text = {
+            Text(
+                text = "The original payment can still confirm and send these coins to its recipient. A new payment with the same coins may lose to it.",
+                color = BwColors.InkMuted,
+                fontFamily = BwFontFamily,
+                fontSize = BwType.BodySize,
+            )
+        },
+        confirmButton = { PillButton(text = "Forget", onClick = onForget) },
+        dismissButton = { TextAction(text = "Keep", onClick = onKeep) },
+        containerColor = BwColors.Card,
+    )
 }
 
 @Composable

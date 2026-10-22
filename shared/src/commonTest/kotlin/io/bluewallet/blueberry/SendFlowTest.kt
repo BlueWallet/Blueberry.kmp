@@ -191,6 +191,7 @@ class SendFlowTest {
                     coins = listOf(PrivateSendCoin(resting.txid, resting.vout, resting.valueSats)),
                 ),
             )
+            hydrateWallet(db, runtime.walletTxsStore, null, 0)
             prime(flow, live, resting)
             flow.updateSnap(flow.snap)
             assertTrue(flow.spendableRows.isEmpty())
@@ -277,7 +278,7 @@ class SendFlowTest {
         }
 
     @Test
-    fun forgetting_a_cancelled_broadcast_releases_its_coins() =
+    fun forgetting_a_stopped_broadcast_releases_its_coins() =
         runFlow { _, runtime, flow ->
             val held = coin("11", 100_000_000)
             prime(flow, held)
@@ -293,7 +294,7 @@ class SendFlowTest {
             runtime.broadcastStore.start("1", "aa")
             flow.updateSnap(flow.snap)
             assertTrue(flow.spendableRows.isEmpty())
-            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("1", "cancelled"))
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("1", "stopped"))
             flow.broadcast = checkNotNull(runtime.broadcastStore.get("1"))
             flow.updateSnap(flow.snap)
             assertEquals(listOf(held.key), flow.spendableRows.map { it.key })
@@ -388,6 +389,70 @@ class SendFlowTest {
         }
 
     @Test
+    fun a_private_send_in_flight_keeps_its_own_coins_selected() =
+        runFlow { _, runtime, flow ->
+            val first = coin("11", 100_000_000)
+            val second = coin("22", 100_000_000)
+            prime(flow, first, second)
+            val signed = signed()
+            flow.build = ReviewBuild.Built(signed, flow.draftStamp())
+            flow.privateSigned = signed
+            flow.step = SendStep.PrivateSend
+            runtime.armPrivateSendPersist(
+                "1",
+                PrivateSendRow(
+                    txid = signed.txid,
+                    partner = "rocketx",
+                    orderId = "order",
+                    txHex = signed.txHex,
+                    destination = ADDRESS,
+                    refundAddress = ADDRESS,
+                    coins = listOf(first, second).map { PrivateSendCoin(it.txid, it.vout, it.valueSats) },
+                ),
+            )
+            runtime.broadcastStore.start("1", signed.txHex)
+            flow.updateSnap(flow.snap)
+            assertEquals(setOf(first.key, second.key), flow.selectedKeys)
+            assertFalse(flow.selectionNeedsAck)
+            assertEquals(setOf(first.key, second.key), runtime.reservedOutpoints())
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("1", "no peers accepted"))
+            flow.goBack()
+            assertEquals(setOf(first.key, second.key), flow.selectedKeys)
+            assertFalse(flow.selectionNeedsAck)
+        }
+
+    @Test
+    fun a_hand_off_stores_the_send_until_the_job_fails() =
+        runFlow { db, runtime, _ ->
+            val held = coin("11", 100_000_000)
+            val txid = "ab".repeat(32)
+            runtime.armSendPersist(
+                "1",
+                SendRow(
+                    txid = txid,
+                    txHex = "aa",
+                    destination = ADDRESS,
+                    coins = listOf(PrivateSendCoin(held.txid, held.vout, held.valueSats)),
+                ),
+            )
+            runtime.broadcastStore.start("1", "aa")
+            runtime.persistArmedBroadcast("1", handedOff = true)
+            assertEquals(txid, db.sends.get(txid)?.txid)
+            assertEquals(setOf(held.key), runtime.reservedOutpoints())
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("1", "peer rejected transaction"))
+            runtime.persistArmedBroadcast("1")
+            assertNull(db.sends.get(txid))
+            assertTrue(runtime.reservedOutpoints().isEmpty())
+            runtime.broadcastStore.start("1", "aa")
+            runtime.persistArmedBroadcast("1", handedOff = true)
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Ok("1", "peer"))
+            runtime.persistArmedBroadcast("1")
+            runtime.broadcastStore.dismiss("1")
+            assertEquals(txid, db.sends.get(txid)?.txid)
+            assertEquals(setOf(held.key), runtime.reservedOutpoints())
+        }
+
+    @Test
     fun a_reservation_on_review_drops_the_signature() =
         runFlow { _, runtime, flow ->
             val held = coin("11", 100_000_000)
@@ -425,6 +490,7 @@ class SendFlowTest {
                 ),
             )
             db.sends.setConfirmedInBlock(txid, 0)
+            hydrateWallet(db, runtime.walletTxsStore, null, 0)
             flow.updateSnap(flow.snap)
             assertTrue(flow.spendableRows.isEmpty())
             assertTrue(abandonUnconfirmedSend(db, runtime, txid))

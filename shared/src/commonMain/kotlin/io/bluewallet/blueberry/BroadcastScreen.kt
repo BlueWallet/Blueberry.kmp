@@ -10,7 +10,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.backhandler.BackHandler
-import io.bluewallet.blueberry.bus.BroadcastCancelPayload
 import io.bluewallet.blueberry.bus.Event
 import kotlinx.coroutines.launch
 
@@ -22,7 +21,6 @@ fun BroadcastScreen(
     onClose: () -> Unit,
 ) {
     var session by remember(id) { mutableStateOf(runtime.broadcastStore.sessions().find { it.snapshot.id == id }) }
-    var cancelArmed by remember(id) { mutableStateOf(false) }
     var retryNote by remember(id) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     DisposableEffect(runtime.broadcastStore, id) {
@@ -48,8 +46,7 @@ fun BroadcastScreen(
         return
     }
     val receipt = SendReceipt(SendRecipient(stored.destination, stored.label), stored.paidSats, stored.feeSats, stored.txid)
-    val cancelling = cancelArmed && broadcastJobInFlight(snap.phase)
-    val status = ownedBroadcastStatus(snap, snap.txHex ?: stored.txid, cancelling)
+    val status = ownedBroadcastStatus(snap, snap.txHex ?: stored.txid)
     val shown = if (retryNote != null && status.tone == BroadcastTone.Failed) status.copy(line = retryNote!!) else status
     SendBroadcastStep(
         receipt = receipt,
@@ -59,18 +56,8 @@ fun BroadcastScreen(
                 finish =
                     BroadcastFinishActions(
                         onDone = { leave() },
-                        onRetry = {
-                            val note = retryBroadcast(runtime, id)
-                            retryNote = note
-                            if (note == null) cancelArmed = false
-                        },
+                        onRetry = { retryNote = retryBroadcast(runtime, id) },
                     ),
-                onCancel = {
-                    if (!broadcastJobInFlight(snap.phase)) return@SendBroadcastActions
-                    runtime.broadcastStore.requestStop(id)
-                    runtime.bus.emit(Event.BroadcastCancel, BroadcastCancelPayload(id))
-                    cancelArmed = true
-                },
                 onClose = { leave() },
                 onForget =
                     if (broadcastCanBeForgotten(snap.phase)) {

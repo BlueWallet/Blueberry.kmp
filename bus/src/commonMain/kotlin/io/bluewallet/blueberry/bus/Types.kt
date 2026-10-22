@@ -176,8 +176,8 @@ data class BroadcastRequestPayload(
     val excludePeers: Set<String> = emptySet(),
 )
 
-/** Cancel the broadcast job with this [id], if it is active. */
-data class BroadcastCancelPayload(
+/** A node was given the raw transaction for the job with this [id]. It may relay it from now on. */
+data class BroadcastHandedOffPayload(
     val id: String,
 )
 
@@ -327,8 +327,8 @@ sealed class Event<T>(
     /** Start broadcasting one raw transaction. */
     data object BroadcastRequest : Event<BroadcastRequestPayload>("broadcast:request")
 
-    /** Cancel the broadcast job with this `id`, if it is active. */
-    data object BroadcastCancel : Event<BroadcastCancelPayload>("broadcast:cancel")
+    /** A node was given the raw transaction for this `id`. Emitted before the ack wait. */
+    data object BroadcastHandedOff : Event<BroadcastHandedOffPayload>("broadcast:handed-off")
 
     /**
      * Broadcast job progress.

@@ -77,7 +77,8 @@ fun SendScreen(
                     val ids = liveBroadcastIds(runtime.broadcastStore)
                     if (ids == seenLive) return@launch
                     seenLive = ids
-                    val held = withContext(Dispatchers.Default) { runtime.reservedOutpoints() }
+                    val own = flow.ownTxid
+                    val held = withContext(Dispatchers.Default) { runtime.reservedOutpoints(own) }
                     flow.applyHeldOutpoints(held)
                 }
             }
@@ -228,7 +229,7 @@ private fun SendBroadcast(flow: SendFlow) {
         if (flow.sendError != null && (!owns || flow.broadcast.phase == "error")) {
             BroadcastStatusUi("Not sent yet", flow.sendError!!, null, BroadcastTone.Failed)
         } else {
-            ownedBroadcastStatus(flow.broadcast, sent.signed.txHex, flow.cancelling())
+            ownedBroadcastStatus(flow.broadcast, sent.signed.txHex)
         }
     SendBroadcastStep(
         receipt = sent.receipt,
@@ -236,7 +237,6 @@ private fun SendBroadcast(flow: SendFlow) {
         actions =
             SendBroadcastActions(
                 finish = BroadcastFinishActions(onDone = flow::finish, onRetry = flow::broadcastSent),
-                onCancel = flow::cancelBroadcast,
                 onClose = flow::goBack,
                 onForget = if (owns && broadcastCanBeForgotten(flow.broadcast.phase)) flow::forgetFailed else null,
             ),

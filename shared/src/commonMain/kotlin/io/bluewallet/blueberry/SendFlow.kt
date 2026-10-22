@@ -5,7 +5,6 @@ package io.bluewallet.blueberry
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import io.bluewallet.blueberry.bus.BroadcastCancelPayload
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.parse.SendBuildParams
 import io.bluewallet.blueberry.parse.buildActiveSendTx
@@ -95,7 +94,6 @@ internal class SendFlow(
     var build by mutableStateOf<ReviewBuild>(ReviewBuild.Idle)
     var sent by mutableStateOf<SentSend?>(null)
     var scanning by mutableStateOf(false)
-    var cancelArmedForId by mutableStateOf<String?>(null)
     private var broadcastId: String? = null
     private var privateBroadcastId: String? = null
     var privateSession by mutableStateOf<PrivateSendSession?>(null)
@@ -129,6 +127,9 @@ internal class SendFlow(
         runCatching { privateSendSigningError(parseWalletSecret(loadWalletSecret(db)).kind) }
             .getOrElse { "no wallet" }
             ?.let { "Needs a wallet that can sign." }
+
+    /** The transaction this flow signed. Its own coin hold is not a coin leaving the selection. */
+    val ownTxid: String? get() = privateSigned?.txid ?: sent?.signed?.txid
 
     val recipient: SendRecipient get() = SendRecipient(address.trim(), label.trim())
     val spendableRows: List<WalletUtxoRow>
@@ -319,7 +320,7 @@ internal class SendFlow(
     }
 
     fun refreshHeldOutpoints() {
-        heldOutpoints = runtime.reservedOutpoints()
+        heldOutpoints = runtime.reservedOutpoints(ownTxid)
     }
 
     /** Keeps the selection to coins the wallet still holds and can spend. */
@@ -428,7 +429,6 @@ internal class SendFlow(
         commit(result, rate)
         sent = SentSend(result, inputs, receipt)
         broadcastId = req.id
-        cancelArmedForId = null
         sendError = null
         pushStep(SendStep.Broadcast)
         refreshBroadcast()
@@ -458,7 +458,6 @@ internal class SendFlow(
             return
         }
         sendError = null
-        cancelArmedForId = null
         refreshBroadcast()
         runtime.bus.emit(Event.BroadcastRequest, req)
     }
@@ -486,16 +485,6 @@ internal class SendFlow(
             snap.utxosReady,
             runtime.reservedOutpoints(),
         )
-    }
-
-    /** Stops the broadcast on screen. Close leaves it running. */
-    fun cancelBroadcast() {
-        val id = broadcast.id ?: return
-        if (!broadcastJobInFlight(broadcast.phase)) return
-        runtime.broadcastStore.requestStop(id)
-        refreshBroadcast()
-        runtime.bus.emit(Event.BroadcastCancel, BroadcastCancelPayload(id))
-        cancelArmedForId = id
     }
 
     fun openPrivateSend() {
@@ -556,8 +545,6 @@ internal class SendFlow(
         refreshBroadcast()
         runtime.bus.emit(Event.BroadcastRequest, req)
     }
-
-    fun cancelling(): Boolean = cancelArmedForId != null && cancelArmedForId == broadcast.id && broadcastJobInFlight(broadcast.phase)
 
     /** Back or swipe. A live broadcast or private send closes and leaves its job running. */
     fun goBack() {

@@ -5,8 +5,8 @@ package io.bluewallet.blueberry.broadcast
 import io.bluewallet.bip324.ByteDuplex
 import io.bluewallet.bip324.bytesToHex
 import io.bluewallet.bip324.transactionId
-import io.bluewallet.blueberry.bus.BroadcastCancelPayload
 import io.bluewallet.blueberry.bus.BroadcastDonePayload
+import io.bluewallet.blueberry.bus.BroadcastHandedOffPayload
 import io.bluewallet.blueberry.bus.BroadcastPhase
 import io.bluewallet.blueberry.bus.BroadcastProgressPayload
 import io.bluewallet.blueberry.bus.BroadcastRequestPayload
@@ -73,13 +73,29 @@ private fun pickAlive(
 
 private fun formatError(err: Throwable): String = err.message?.takeIf { it.isNotBlank() } ?: err.toString()
 
-/** Peers that acknowledged the transaction, and peers that were already given the raw transaction. */
-private class PeerLedger {
+/**
+ * Peers that acknowledged the transaction, and peers that were given the raw transaction.
+ * Only an explicit reject takes a peer back off the handed list.
+ */
+private class PeerLedger(
+    private val onFirstHandOff: () -> Unit = {},
+) {
     val accepted = linkedSetOf<String>()
     val handed = linkedSetOf<String>()
 
-    fun any(): Set<String> = accepted + handed
+    fun hand(key: String) {
+        val first = handed.isEmpty() && accepted.isEmpty()
+        handed += key
+        if (first) onFirstHandOff()
+    }
+
+    fun summary(): String? = (accepted + handed).takeIf { it.isNotEmpty() }?.joinToString(", ")
 }
+
+private const val PEER_REJECTED = "peer rejected transaction"
+
+/** The error a job reports when the app stops before any node was given the transaction. */
+const val BROADCAST_STOPPED = "The app stopped before any node got it."
 
 private fun displayTxid(txHex: String): String = internalHexToDisplayHex(bytesToHex(transactionId(decodeBroadcastTx(txHex))))
 
@@ -95,7 +111,6 @@ fun createBroadcastModule(
 
     val stopped = AtomicBoolean(true)
     var unsubRequest: (() -> Unit)? = null
-    var unsubCancel: (() -> Unit)? = null
     val jobs = AtomicReference<Map<String, Job>>(emptyMap())
     var scope: CoroutineScope? = null
 
@@ -158,7 +173,7 @@ fun createBroadcastModule(
                 throw err
             }
         try {
-            withContext(HandedOff { ledger.handed += key }) {
+            withContext(HandedOff { ledger.hand(key) }) {
                 broadcastTxV2(
                     duplex,
                     txHex,
@@ -216,6 +231,7 @@ fun createBroadcastModule(
                 throw err
             } catch (err: Throwable) {
                 val detail = formatError(err)
+                if (detail == PEER_REJECTED) ledger.handed -= key
                 failures += "$key: $detail"
                 failed += key
                 emitProgress(BroadcastPhase.FAILED_ATTEMPT, key, detail, null, null)
@@ -342,7 +358,7 @@ fun createBroadcastModule(
             { phase, peer, detail, percent, stage ->
                 emitProgress(id, attemptBudget, attemptsUsed, phase, peer, detail, percent, stage)
             }
-        val ledger = PeerLedger()
+        val ledger = PeerLedger { ctx.bus.emit(Event.BroadcastHandedOff, BroadcastHandedOffPayload(id)) }
         val failures = mutableListOf<String>()
         try {
             log("broadcast", "start id=$id txid=${displayTxid(txHex)}")
@@ -362,22 +378,17 @@ fun createBroadcastModule(
                     } catch (err: CancellationException) {
                         throw err
                     } catch (err: Throwable) {
-                        val peers = ledger.any()
-                        if (peers.isNotEmpty()) {
-                            peers.joinToString(", ")
-                        } else {
-                            if (failures.isEmpty()) failures += formatError(err)
-                            null
-                        }
+                        if (failures.isEmpty()) failures += formatError(err)
+                        null
                     }
                 }
-            emitOutcome(id, successPeer, failures, attemptsUsed[0])
+            emitOutcome(id, successPeer ?: ledger.summary(), failures, attemptsUsed[0])
         } catch (err: CancellationException) {
-            val peers = ledger.any()
-            if (peers.isNotEmpty()) {
-                emitOutcome(id, peers.joinToString(", "), failures, attemptsUsed[0])
+            val peers = ledger.summary()
+            if (peers != null) {
+                emitOutcome(id, peers, failures, attemptsUsed[0])
             } else {
-                val message = formatError(err).ifBlank { "cancelled" }
+                val message = formatError(err).ifBlank { BROADCAST_STOPPED }
                 emit(BroadcastPhase.ERROR, null, message, null, null)
                 ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Error(id, message))
             }
@@ -413,20 +424,14 @@ fun createBroadcastModule(
                     putJob(payload.id, job)
                     job.invokeOnCompletion { takeJob(payload.id, job) }
                 }
-            unsubCancel =
-                ctx.bus.on(Event.BroadcastCancel) { payload: BroadcastCancelPayload ->
-                    jobs.load()[payload.id]?.cancel(CancellationException("cancelled"))
-                }
         }
 
         override fun stop() {
             stopped.store(true)
             unsubRequest?.invoke()
-            unsubCancel?.invoke()
             unsubRequest = null
-            unsubCancel = null
             val running = jobs.load().values.toList()
-            running.forEach { it.cancel(CancellationException("cancelled")) }
+            running.forEach { it.cancel(CancellationException(BROADCAST_STOPPED)) }
             runBlocking {
                 running.forEach { job ->
                     try {

@@ -109,52 +109,65 @@ class PeersRuntime(
         putPending(pendingPrivateSends, id, row)
     }
 
+    /** Unconfirmed stored sends as (txid, outpoint key). Cleared whenever the wallet store rebuilds from the database. */
+    @OptIn(ExperimentalAtomicApi::class)
+    private val storedHolds = AtomicReference<List<Pair<String, String>>?>(null)
+
     /**
      * Outpoints a live broadcast or an unconfirmed stored send still holds.
-     * A finished error, including cancel, keeps the row for Retry and no longer holds the coins.
+     * A finished error keeps the row for Retry and no longer holds the coins, since no node has it.
+     * [exceptTxid] leaves out one transaction's own hold, so a screen can tell its own coins from coins another payment took.
      */
     @OptIn(ExperimentalAtomicApi::class)
-    fun reservedOutpoints(): Set<String> {
+    fun reservedOutpoints(exceptTxid: String? = null): Set<String> {
         val live = liveBroadcastIds(broadcastStore)
         val armed =
             pendingSends
                 .load()
-                .filter { it.key in live }
+                .filter { it.key in live && it.value.txid != exceptTxid }
                 .values
                 .flatMap { it.coins } +
                 pendingPrivateSends
                     .load()
-                    .filter { it.key in live }
+                    .filter { it.key in live && it.value.txid != exceptTxid }
                     .values
                     .flatMap { it.coins }
         val stored =
-            db.sends
-                .list()
-                .filter { it.confirmedInBlock == 0L }
-                .flatMap { it.coins } +
-                db.privateSends
-                    .list()
-                    .filter { it.confirmedInBlock == 0L }
-                    .flatMap { it.coins }
-        return (armed + stored).map { outpointKey(it.txid, it.vout) }.toSet()
+            (storedHolds.load() ?: loadStoredHolds(db).also { storedHolds.store(it) })
+                .mapNotNull { (txid, key) -> if (txid == exceptTxid) null else key }
+        return armed.map { outpointKey(it.txid, it.vout) }.toSet() + stored
     }
 
-    /** Drops the in-memory record for a broadcast the user chose to forget. Nothing was written to the database. */
+    /** Drops the in-memory record for a broadcast the user chose to forget. */
     @OptIn(ExperimentalAtomicApi::class)
     fun dropArmedBroadcast(id: String) {
         removePending(pendingSends, id)
         removePending(pendingPrivateSends, id)
     }
 
+    /**
+     * Writes the send once a node was given it, so the coin hold survives the app dying mid-broadcast.
+     * Success writes it again and drops the armed record. An error means no node kept it, so the row goes.
+     */
     @OptIn(ExperimentalAtomicApi::class)
-    fun persistArmedBroadcast(id: String) {
+    fun persistArmedBroadcast(
+        id: String,
+        handedOff: Boolean = false,
+    ) {
         val snap = broadcastStore.get(id) ?: return
         val send = pendingSends.load()[id]
         val priv = pendingPrivateSends.load()[id]
-        val wroteSend = send != null && persistSendAndRefresh(db, walletTxsStore, wallet, send, snap)
-        val wrotePriv = priv != null && persistPrivateSendAndRefresh(db, walletTxsStore, wallet, priv, snap)
-        if (wroteSend) removePending(pendingSends, id)
-        if (wrotePriv) removePending(pendingPrivateSends, id)
+        storedHolds.store(null)
+        if (snap.phase == "error") {
+            (send?.txid ?: priv?.txid)?.let { dropUnsentSend(db, walletTxsStore, wallet, it) }
+        } else {
+            val sent = if (handedOff) snap.copy(phase = "success") else snap
+            val wroteSend = send != null && persistSendAndRefresh(db, walletTxsStore, wallet, send, sent)
+            val wrotePriv = priv != null && persistPrivateSendAndRefresh(db, walletTxsStore, wallet, priv, sent)
+            if (wroteSend && !handedOff) removePending(pendingSends, id)
+            if (wrotePriv && !handedOff) removePending(pendingPrivateSends, id)
+        }
+        storedHolds.store(null)
     }
 
     private val net = createPlatformNet()
@@ -177,6 +190,8 @@ class PeersRuntime(
     private val lifecycleMutex = Mutex()
 
     init {
+        @OptIn(ExperimentalAtomicApi::class)
+        walletTxsStore.subscribe { storedHolds.store(null) }
         hydratePeers(db, store)
         hydrateHeaders(db, headersStore)
         hydrateFilters(db, filtersStore)
@@ -230,7 +245,13 @@ class PeersRuntime(
                 null
             }
         val unbindWallet = bindWalletTxsEvents(bus, db, walletTxsStore, sharedWallet)
-        val unbindBroadcast = bindBroadcastEvents(bus, broadcastStore) { id -> persistArmedBroadcast(id) }
+        val unbindBroadcast =
+            bindBroadcastEvents(
+                bus,
+                broadcastStore,
+                onHandedOff = { id -> persistArmedBroadcast(id, handedOff = true) },
+                onDone = { id -> persistArmedBroadcast(id) },
+            )
         unbind = {
             unbindPeers()
             unbindHeaders()
@@ -448,6 +469,16 @@ class PeersRuntime(
         wallet = null
     }
 }
+
+private fun loadStoredHolds(db: Database): List<Pair<String, String>> =
+    db.sends
+        .list()
+        .filter { it.confirmedInBlock == 0L }
+        .flatMap { row -> row.coins.map { row.txid to outpointKey(it.txid, it.vout) } } +
+        db.privateSends
+            .list()
+            .filter { it.confirmedInBlock == 0L }
+            .flatMap { row -> row.coins.map { row.txid to outpointKey(it.txid, it.vout) } }
 
 @OptIn(ExperimentalAtomicApi::class)
 private fun <T> putPending(

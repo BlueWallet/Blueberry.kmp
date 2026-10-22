@@ -40,10 +40,9 @@ class BroadcastFinishActions(
 
 internal class SendBroadcastActions(
     val finish: BroadcastFinishActions,
-    /** Stops this broadcast. The header Close leaves it running. */
-    val onCancel: () -> Unit,
+    /** Leaves the screen. A running broadcast keeps going. */
     val onClose: () -> Unit,
-    /** Set only when this broadcast was cancelled, so it can be dropped from memory. */
+    /** Set only when this broadcast failed, so it can be dropped from memory. */
     val onForget: (() -> Unit)? = null,
 )
 
@@ -70,8 +69,7 @@ internal fun SendBroadcastStep(
                 BroadcastTone.Sent ->
                     TintedPillButton(text = "Done", onClick = actions.finish.onDone, modifier = Modifier.fillMaxWidth())
                 BroadcastTone.Failed -> FailedBroadcastActions(actions)
-                BroadcastTone.Working ->
-                    TintedPillButton(text = "Cancel", onClick = actions.onCancel, modifier = Modifier.fillMaxWidth())
+                BroadcastTone.Working -> HelperText("You can close this screen. Sending continues.")
             }
         },
     ) {

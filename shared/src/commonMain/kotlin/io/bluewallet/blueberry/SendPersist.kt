@@ -64,8 +64,6 @@ fun abandonUnconfirmedSend(
     txid: String,
 ): Boolean {
     if (!unconfirmedSendOpen(db, txid)) return false
-    if (db.sends.get(txid)?.confirmedInBlock == 0L) db.sends.delete(txid)
-    if (db.privateSends.get(txid)?.confirmedInBlock == 0L) db.privateSends.delete(txid)
     runtime.broadcastStore.sessions().forEach { session ->
         val id = session.snapshot.id
         if (session.receipt?.txid == txid && id != null) {
@@ -73,8 +71,21 @@ fun abandonUnconfirmedSend(
             runtime.broadcastStore.dismiss(id)
         }
     }
-    hydrateWallet(db, runtime.walletTxsStore, runtime.wallet, nowMillis())
+    dropUnsentSend(db, runtime.walletTxsStore, runtime.wallet, txid)
     return true
+}
+
+/** Deletes the unconfirmed rows for [txid]. A confirmed row stays. */
+fun dropUnsentSend(
+    db: Database,
+    store: WalletTxsStore,
+    wallet: Wallet?,
+    txid: String,
+) {
+    if (!unconfirmedSendOpen(db, txid)) return
+    if (db.sends.get(txid)?.confirmedInBlock == 0L) db.sends.delete(txid)
+    if (db.privateSends.get(txid)?.confirmedInBlock == 0L) db.privateSends.delete(txid)
+    hydrateWallet(db, store, wallet, nowMillis())
 }
 
 fun persistSendAndRefresh(

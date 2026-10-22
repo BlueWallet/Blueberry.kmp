@@ -20,8 +20,6 @@ data class BroadcastSnapshot(
     val percent: Int? = null,
     val stage: String? = null,
     val triedPeers: Set<String> = emptySet(),
-    /** The user asked this job to stop. Later circuit progress must not read as a new send. */
-    val stopRequested: Boolean = false,
 )
 
 /** What the transaction list and the broadcast screen need after Send has closed. */
@@ -53,9 +51,6 @@ interface BroadcastStore {
     fun applyProgress(payload: BroadcastProgressPayload)
 
     fun applyDone(payload: BroadcastDonePayload)
-
-    /** Remembers a cancel while the circuit it already opened is still closing. */
-    fun requestStop(id: String)
 
     fun dismiss(id: String)
 
@@ -128,14 +123,6 @@ private class BroadcastStoreImpl : BroadcastStore {
         }
     }
 
-    override fun requestStop(id: String) {
-        update { map ->
-            val cur = map[id] ?: return@update map
-            if (cur.snapshot.stopRequested || !broadcastJobInFlight(cur.snapshot.phase)) return@update map
-            map + (id to cur.copy(snapshot = cur.snapshot.copy(stopRequested = true)))
-        }
-    }
-
     override fun dismiss(id: String) {
         update { it - id }
     }
@@ -187,6 +174,7 @@ fun createBroadcastStore(): BroadcastStore = BroadcastStoreImpl()
 fun bindBroadcastEvents(
     bus: MessageBus,
     store: BroadcastStore,
+    onHandedOff: (String) -> Unit = {},
     onDone: (String) -> Unit = {},
 ): () -> Unit {
     val a = bus.on(Event.BroadcastProgress) { store.applyProgress(it) }
@@ -195,9 +183,11 @@ fun bindBroadcastEvents(
             store.applyDone(it)
             onDone(it.id)
         }
+    val c = bus.on(Event.BroadcastHandedOff) { onHandedOff(it.id) }
     return {
         a()
         b()
+        c()
     }
 }
 

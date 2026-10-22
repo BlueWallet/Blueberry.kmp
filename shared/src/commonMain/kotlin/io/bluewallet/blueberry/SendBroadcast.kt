@@ -13,12 +13,9 @@ private const val DONE_PERCENT = 100
 
 fun broadcastJobInFlight(phase: String?): Boolean = phase != null && phase != "success" && phase != "error"
 
-/** The user stopped this broadcast. Other failures still belong on screen so they can be retried. */
-fun broadcastCancelled(error: String?): Boolean = error?.trim()?.equals("cancelled", ignoreCase = true) == true
-
 fun broadcastTorCaption(stage: String?): String? = stage?.let { "Tor: $it" }
 
-/** Removes a cancelled broadcast from the list and releases the coins it was holding. */
+/** Removes a failed broadcast from the list. No node holds it, so nothing else needs undoing. */
 fun forgetBroadcast(
     runtime: PeersRuntime,
     id: String,
@@ -28,10 +25,7 @@ fun forgetBroadcast(
 }
 
 /** Plain-language status for the broadcast snapshot. Peers and attempts stay out of the main line. */
-fun broadcastStatus(
-    snap: BroadcastSnapshot,
-    cancelling: Boolean = false,
-): BroadcastStatusUi =
+fun broadcastStatus(snap: BroadcastSnapshot): BroadcastStatusUi =
     when {
         snap.phase == "success" ->
             BroadcastStatusUi(
@@ -44,15 +38,8 @@ fun broadcastStatus(
             BroadcastStatusUi(
                 "Not sent yet",
                 snap.error?.takeIf { it.isNotBlank() } ?: "No node accepted it.",
-                "Retrying sends the same transaction, so it can't pay twice.",
+                "No node took this transaction. Retry sends the same one again.",
                 BroadcastTone.Failed,
-            )
-        snap.stopRequested || cancelling ->
-            BroadcastStatusUi(
-                "Stopping",
-                "This send will not go out",
-                "The circuit it already opened is closing.",
-                BroadcastTone.Working,
             )
         else -> workingStatus(snap)
     }
@@ -83,10 +70,9 @@ private fun workingStatus(snap: BroadcastSnapshot): BroadcastStatusUi {
 fun ownedBroadcastStatus(
     snap: BroadcastSnapshot,
     txHex: String,
-    cancelling: Boolean = false,
 ): BroadcastStatusUi =
     if (snap.txHex == txHex) {
-        broadcastStatus(snap, cancelling)
+        broadcastStatus(snap)
     } else {
         BroadcastStatusUi(
             "Sending",
@@ -129,7 +115,6 @@ fun broadcastListRows(
                 when {
                     snap.phase == "error" -> "Not sent"
                     snap.phase == "success" -> "Sent"
-                    snap.stopRequested -> "Stopping"
                     else -> "Broadcasting"
                 },
         )
