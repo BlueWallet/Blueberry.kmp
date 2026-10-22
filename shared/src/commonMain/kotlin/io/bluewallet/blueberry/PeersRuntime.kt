@@ -115,13 +115,7 @@ class PeersRuntime(
      */
     @OptIn(ExperimentalAtomicApi::class)
     fun reservedOutpoints(): Set<String> {
-        val live =
-            broadcastStore
-                .sessions()
-                .mapNotNull { session ->
-                    val id = session.snapshot.id
-                    if (id != null && broadcastJobInFlight(session.snapshot.phase)) id else null
-                }.toSet()
+        val live = liveBroadcastIds(broadcastStore)
         val armed =
             pendingSends
                 .load()

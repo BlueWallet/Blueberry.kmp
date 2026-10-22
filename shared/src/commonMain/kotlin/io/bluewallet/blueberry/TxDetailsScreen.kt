@@ -112,7 +112,7 @@ private fun ForgetOpenSend(
     if (!open) return
     Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
         Text(
-            text = "This payment has not confirmed. Forgetting it lets you spend those coins again.",
+            text = "This payment was already given to Bitcoin nodes and may still confirm. Removing it does not pull it back, and a new spend of these coins conflicts with it.",
             color = BwColors.InkMuted,
             fontFamily = BwFontFamily,
             fontSize = BwType.LabelSize,

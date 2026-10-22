@@ -23,6 +23,7 @@ fun BroadcastScreen(
 ) {
     var session by remember(id) { mutableStateOf(runtime.broadcastStore.sessions().find { it.snapshot.id == id }) }
     var cancelArmed by remember(id) { mutableStateOf(false) }
+    var retryNote by remember(id) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     DisposableEffect(runtime.broadcastStore, id) {
         val off =
@@ -48,16 +49,20 @@ fun BroadcastScreen(
     }
     val receipt = SendReceipt(SendRecipient(stored.destination, stored.label), stored.paidSats, stored.feeSats, stored.txid)
     val cancelling = cancelArmed && broadcastJobInFlight(snap.phase)
+    val status = ownedBroadcastStatus(snap, snap.txHex ?: stored.txid, cancelling)
+    val shown = if (retryNote != null && status.tone == BroadcastTone.Failed) status.copy(line = retryNote!!) else status
     SendBroadcastStep(
         receipt = receipt,
-        status = ownedBroadcastStatus(snap, snap.txHex ?: stored.txid, cancelling),
+        status = shown,
         actions =
             SendBroadcastActions(
                 finish =
                     BroadcastFinishActions(
                         onDone = { leave() },
                         onRetry = {
-                            if (retryBroadcast(runtime, id)) cancelArmed = false
+                            val note = retryBroadcast(runtime, id)
+                            retryNote = note
+                            if (note == null) cancelArmed = false
                         },
                     ),
                 onCancel = {
@@ -68,7 +73,7 @@ fun BroadcastScreen(
                 },
                 onClose = { leave() },
                 onForget =
-                    if (broadcastCancelled(snap.error)) {
+                    if (broadcastCanBeForgotten(snap.phase)) {
                         {
                             forgetBroadcast(runtime, id)
                             onClose()
@@ -80,11 +85,21 @@ fun BroadcastScreen(
     )
 }
 
+/** Null when the same transaction is published again. A string is why Retry stopped. */
 private fun retryBroadcast(
     runtime: PeersRuntime,
     id: String,
-): Boolean {
-    val req = rebroadcast(runtime.broadcastStore, id) ?: return false
-    runtime.bus.emit(Event.BroadcastRequest, req)
-    return true
+): String? {
+    val session = runtime.broadcastStore.sessions().find { it.snapshot.id == id }
+    val wallet = runtime.walletTxsStore.get()
+    val blocked =
+        retryRefusal(
+            session?.snapshot?.txHex,
+            wallet.utxos.map { it.key }.toSet(),
+            wallet.utxosReady,
+            runtime.reservedOutpoints(),
+        )
+    val req = if (blocked != null) null else rebroadcast(runtime.broadcastStore, id)
+    if (blocked == null && req != null) runtime.bus.emit(Event.BroadcastRequest, req)
+    return blocked ?: if (req == null) BROADCAST_BUSY else null
 }

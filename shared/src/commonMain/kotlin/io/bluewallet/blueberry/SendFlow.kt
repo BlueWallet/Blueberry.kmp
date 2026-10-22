@@ -328,16 +328,25 @@ internal class SendFlow(
         val payable = amountSats
         val before = stampOrNull()
         snap = next
-        val spendable = spendableRows.map { it.key }.toSet()
-        val kept = selectedKeys.intersect(spendable)
-        if (kept != selectedKeys) {
-            selectedKeys = kept
-            selectionNeedsAck = true
-            dropBuild()
-        } else if (amountSats != payable || stampOrNull() != before) {
+        if (!trimToSpendable() && (amountSats != payable || stampOrNull() != before)) {
             dropBuild()
             reviewEpoch++
         }
+    }
+
+    /** Applies a reservation read off the UI thread, then drops a signature that no longer matches. */
+    fun applyHeldOutpoints(held: Set<String>) {
+        heldOutpoints = held
+        trimToSpendable()
+    }
+
+    private fun trimToSpendable(): Boolean {
+        val kept = selectedKeys.intersect(spendableRows.map { it.key }.toSet())
+        if (kept == selectedKeys) return false
+        selectedKeys = kept
+        selectionNeedsAck = true
+        dropBuild()
+        return true
     }
 
     fun toggleCoin(key: String) {
@@ -438,6 +447,11 @@ internal class SendFlow(
 
     fun broadcastSent() {
         val id = broadcastId
+        val blocked = id?.let { retryBlock(it) }
+        if (blocked != null) {
+            sendError = blocked
+            return
+        }
         val req = if (id == null) null else rebroadcast(runtime.broadcastStore, id)
         if (req == null) {
             if (id != null) sendError = BROADCAST_BUSY
@@ -455,13 +469,23 @@ internal class SendFlow(
         close()
     }
 
-    /** Drops a broadcast the user cancelled, and leaves the send. */
-    fun forgetCancelled() {
+    /** Drops a finished failure from the list. A live or sent job stays. */
+    fun forgetFailed() {
         val id = broadcast.id
-        if (id == null || !broadcastCancelled(broadcast.error)) return
+        if (id == null || !broadcastCanBeForgotten(broadcast.phase)) return
         forgetBroadcast(runtime, id)
         dropBuild()
         close()
+    }
+
+    private fun retryBlock(id: String): String? {
+        val txHex = runtime.broadcastStore.get(id)?.txHex
+        return retryRefusal(
+            txHex,
+            snap.utxos.map { it.key }.toSet(),
+            snap.utxosReady,
+            runtime.reservedOutpoints(),
+        )
     }
 
     /** Stops the broadcast on screen. Close leaves it running. */
@@ -517,6 +541,11 @@ internal class SendFlow(
 
     fun privateRetry() {
         val id = privateBroadcastId ?: sessionId(privateSigned?.txHex)
+        val blocked = id?.let { retryBlock(it) }
+        if (blocked != null) {
+            sendError = blocked
+            return
+        }
         val req = if (id == null) null else rebroadcast(runtime.broadcastStore, id)
         if (req == null) {
             if (privateSigned != null) sendError = BROADCAST_BUSY
@@ -554,12 +583,11 @@ internal class SendFlow(
         return true
     }
 
-    /** A failed private payment is no longer signed, and coins another send still holds leave the set. */
+    /** A failed private payment is no longer signed. A smaller set still needs a look before Send. */
     private fun releaseFailedPrivateSelection() {
         refreshHeldOutpoints()
         dropBuild()
-        selectedKeys = selectedKeys.intersect(spendableRows.map { it.key }.toSet())
-        selectionNeedsAck = false
+        trimToSpendable()
     }
 
     fun refreshBroadcast() {

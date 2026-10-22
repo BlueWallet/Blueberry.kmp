@@ -30,6 +30,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -626,6 +627,98 @@ class BroadcastModuleTest {
             assertEquals(1, done.size)
             assertEquals("a", done[0].id)
             assertTrue((done[0] as BroadcastDonePayload.Error).error.contains("cancel", ignoreCase = true))
+            mod.stop()
+            db.close()
+        }
+
+    @Test
+    fun cancel_after_a_peer_accepts_finishes_as_sent() =
+        runBlocking {
+            val db = createSqliteDatabase(":memory:")
+            upsertAlive(db, "1.1.1.1")
+            upsertAlive(db, "2.2.2.2")
+            val bus = createMessageBus()
+            val received = mutableListOf<Transaction>()
+            val accepting = connectAccepting(received)
+            var calls = 0
+            val done =
+                async {
+                    val deferred = kotlinx.coroutines.CompletableDeferred<BroadcastDonePayload>()
+                    bus.on(Event.BroadcastDone) { deferred.complete(it) }
+                    deferred.await()
+                }
+            val mod =
+                createBroadcastModule(
+                    ModuleContext(bus, db),
+                    BroadcastModuleOptions(
+                        peerWaitPollMs = 15,
+                        connect = { host, port, job ->
+                            calls += 1
+                            if (calls == 1) {
+                                accepting(host, port, job)
+                            } else {
+                                suspendCancellableCoroutine { }
+                            }
+                        },
+                    ),
+                )
+            mod.start()
+            bus.emit(Event.BroadcastRequest, BroadcastRequestPayload("handed", txHex()))
+            withTimeout(5_000) {
+                while (received.isEmpty()) delay(15)
+            }
+            bus.emit(Event.BroadcastCancel, BroadcastCancelPayload("handed"))
+            val result = withTimeout(5_000) { done.await() }
+            assertTrue(result is BroadcastDonePayload.Ok)
+            assertEquals("handed", result.id)
+            mod.stop()
+            db.close()
+        }
+
+    @Test
+    fun cancel_after_the_transaction_is_written_finishes_as_sent() =
+        runBlocking {
+            val db = createSqliteDatabase(":memory:")
+            upsertAlive(db, "1.1.1.1")
+            val bus = createMessageBus()
+            val wrote = kotlinx.coroutines.CompletableDeferred<Unit>()
+            val done =
+                async {
+                    val deferred = kotlinx.coroutines.CompletableDeferred<BroadcastDonePayload>()
+                    bus.on(Event.BroadcastDone) { deferred.complete(it) }
+                    deferred.await()
+                }
+            val mod =
+                createBroadcastModule(
+                    ModuleContext(bus, db),
+                    BroadcastModuleOptions(
+                        peerWaitPollMs = 15,
+                        ackTimeoutMs = 60_000,
+                        connect = { _, _, _ ->
+                            val (client, server) = pairedByteDuplexes()
+                            CoroutineScope(Job() + Dispatchers.Default).launch {
+                                try {
+                                    acceptTx(server)
+                                    wrote.complete(Unit)
+                                    suspendCancellableCoroutine<Unit> { }
+                                } finally {
+                                    try {
+                                        server.close()
+                                    } catch (_: Throwable) {
+                                    }
+                                }
+                            }
+                            client
+                        },
+                    ),
+                )
+            mod.start()
+            bus.emit(Event.BroadcastRequest, BroadcastRequestPayload("written", txHex()))
+            withTimeout(5_000) { wrote.await() }
+            bus.emit(Event.BroadcastCancel, BroadcastCancelPayload("written"))
+            val result = withTimeout(5_000) { done.await() }
+            assertTrue(result is BroadcastDonePayload.Ok)
+            assertEquals("written", result.id)
             mod.stop()
             db.close()
         }

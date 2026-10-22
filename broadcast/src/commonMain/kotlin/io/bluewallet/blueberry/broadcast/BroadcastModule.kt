@@ -32,6 +32,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicReference
@@ -71,6 +72,14 @@ private fun pickAlive(
 }
 
 private fun formatError(err: Throwable): String = err.message?.takeIf { it.isNotBlank() } ?: err.toString()
+
+/** Peers that acknowledged the transaction, and peers that were already given the raw transaction. */
+private class PeerLedger {
+    val accepted = linkedSetOf<String>()
+    val handed = linkedSetOf<String>()
+
+    fun any(): Set<String> = accepted + handed
+}
 
 private fun displayTxid(txHex: String): String = internalHexToDisplayHex(bytesToHex(transactionId(decodeBroadcastTx(txHex))))
 
@@ -131,6 +140,7 @@ fun createBroadcastModule(
         peer: Peer,
         txHex: String,
         job: Job,
+        ledger: PeerLedger,
     ) {
         job.ensureActive()
         val key = peerKey(peer)
@@ -148,17 +158,19 @@ fun createBroadcastModule(
                 throw err
             }
         try {
-            broadcastTxV2(
-                duplex,
-                txHex,
-                BroadcastTxV2Options(
-                    port = peer.port,
-                    name = APP_NAME,
-                    version = APP_VERSION,
-                    handshakeTimeoutMs = options.handshakeTimeoutMs,
-                    ackTimeoutMs = options.ackTimeoutMs,
-                ),
-            )
+            withContext(HandedOff { ledger.handed += key }) {
+                broadcastTxV2(
+                    duplex,
+                    txHex,
+                    BroadcastTxV2Options(
+                        port = peer.port,
+                        name = APP_NAME,
+                        version = APP_VERSION,
+                        handshakeTimeoutMs = options.handshakeTimeoutMs,
+                        ackTimeoutMs = options.ackTimeoutMs,
+                    ),
+                )
+            }
         } finally {
             try {
                 duplex.close()
@@ -173,33 +185,33 @@ fun createBroadcastModule(
         txHex: String,
         job: Job,
         emitProgress: (BroadcastPhase, String?, String?, Int?, String?) -> Unit,
-        successes: MutableSet<String> = linkedSetOf(),
+        ledger: PeerLedger = PeerLedger(),
         exclude: Set<String> = emptySet(),
         failed: MutableSet<String> = linkedSetOf(),
     ): Pair<String?, List<String>> {
         val failures = mutableListOf<String>()
 
-        fun accepted(): String? = if (successes.isNotEmpty()) successes.joinToString(", ") else null
+        fun accepted(): String? = if (ledger.accepted.isNotEmpty()) ledger.accepted.joinToString(", ") else null
         for (attempt in 1..maxAttempts) {
-            if (successes.size >= BROADCAST_SUCCESS_PEERS) {
+            if (ledger.accepted.size >= BROADCAST_SUCCESS_PEERS) {
                 break
             }
             job.ensureActive()
             val peers = alivePeers(ALIVE_PEER_PICK_LIMIT)
-            val tried = successes + failed + exclude
+            val tried = ledger.accepted + failed + exclude
             val peer =
                 pickAlive(peers, options.random, tried)
-                    ?: if (successes.isEmpty()) pickAlive(peers, options.random, successes + exclude) else null
+                    ?: if (ledger.accepted.isEmpty()) pickAlive(peers, options.random, ledger.accepted + exclude) else null
             if (peer == null) {
-                log("broadcast", "attempt $attempt/$maxAttempts no-unused-alive-peer ok=${successes.size}")
+                log("broadcast", "attempt $attempt/$maxAttempts no-unused-alive-peer ok=${ledger.accepted.size}")
                 return accepted() to failures
             }
             val key = peerKey(peer)
-            log("broadcast", "attempt $attempt/$maxAttempts peer=$key ok=${successes.size}/$BROADCAST_SUCCESS_PEERS")
+            log("broadcast", "attempt $attempt/$maxAttempts peer=$key ok=${ledger.accepted.size}/$BROADCAST_SUCCESS_PEERS")
             emitProgress(BroadcastPhase.ATTEMPT, key, null, null, null)
             try {
-                attemptOne(dial, peer, txHex, job)
-                successes += key
+                attemptOne(dial, peer, txHex, job, ledger)
+                ledger.accepted += key
             } catch (err: CancellationException) {
                 throw err
             } catch (err: Throwable) {
@@ -216,7 +228,7 @@ fun createBroadcastModule(
         txHex: String,
         job: Job,
         emitProgress: (BroadcastPhase, String?, String?, Int?, String?) -> Unit,
-        successes: MutableSet<String>,
+        ledger: PeerLedger,
         excludePeers: Set<String>,
     ): Pair<String?, List<String>> {
         val failures = mutableListOf<String>()
@@ -235,7 +247,7 @@ fun createBroadcastModule(
                             txHex,
                             job,
                             emitProgress,
-                            successes,
+                            ledger,
                             excludePeers,
                             cycleFailed,
                         )
@@ -243,12 +255,12 @@ fun createBroadcastModule(
                     val unusedAlive =
                         alivePeers(ALIVE_PEER_PICK_LIMIT).any { candidate ->
                             val key = peerKey(candidate)
-                            key !in successes && key !in cycleFailed && key !in excludePeers
+                            key !in ledger.accepted && key !in cycleFailed && key !in excludePeers
                         }
-                    if (successes.size >= BROADCAST_SUCCESS_PEERS ||
-                        (successes.isNotEmpty() && !unusedAlive)
+                    if (ledger.accepted.size >= BROADCAST_SUCCESS_PEERS ||
+                        (ledger.accepted.isNotEmpty() && !unusedAlive)
                     ) {
-                        accepted ?: successes.joinToString(", ")
+                        accepted ?: ledger.accepted.joinToString(", ")
                     } else {
                         throw IllegalStateException(
                             fails.takeLast(3).joinToString(" | ").ifEmpty { "no alive peers" },
@@ -330,28 +342,29 @@ fun createBroadcastModule(
             { phase, peer, detail, percent, stage ->
                 emitProgress(id, attemptBudget, attemptsUsed, phase, peer, detail, percent, stage)
             }
+        val ledger = PeerLedger()
+        val failures = mutableListOf<String>()
         try {
             log("broadcast", "start id=$id txid=${displayTxid(txHex)}")
             emit(BroadcastPhase.WAITING_PEERS, null, null, null, null)
             waitForAlivePeers(job)
-            val successes = linkedSetOf<String>()
-            val failures = mutableListOf<String>()
             val successPeer =
                 if (injectedConnect != null) {
                     val (peer, fails) =
-                        runPeerAttempts(injectedConnect, txHex, job, emit, successes, excludePeers)
+                        runPeerAttempts(injectedConnect, txHex, job, emit, ledger, excludePeers)
                     failures += fails
                     peer
                 } else {
                     try {
-                        val (peer, fails) = runTorAttempts(txHex, job, emit, successes, excludePeers)
+                        val (peer, fails) = runTorAttempts(txHex, job, emit, ledger, excludePeers)
                         failures += fails
                         peer
                     } catch (err: CancellationException) {
                         throw err
                     } catch (err: Throwable) {
-                        if (successes.isNotEmpty()) {
-                            successes.joinToString(", ")
+                        val peers = ledger.any()
+                        if (peers.isNotEmpty()) {
+                            peers.joinToString(", ")
                         } else {
                             if (failures.isEmpty()) failures += formatError(err)
                             null
@@ -360,9 +373,14 @@ fun createBroadcastModule(
                 }
             emitOutcome(id, successPeer, failures, attemptsUsed[0])
         } catch (err: CancellationException) {
-            val message = formatError(err).ifBlank { "cancelled" }
-            emit(BroadcastPhase.ERROR, null, message, null, null)
-            ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Error(id, message))
+            val peers = ledger.any()
+            if (peers.isNotEmpty()) {
+                emitOutcome(id, peers.joinToString(", "), failures, attemptsUsed[0])
+            } else {
+                val message = formatError(err).ifBlank { "cancelled" }
+                emit(BroadcastPhase.ERROR, null, message, null, null)
+                ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Error(id, message))
+            }
         } catch (err: Throwable) {
             val message = formatError(err)
             logError("broadcast", "aborted/error", err)

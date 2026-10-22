@@ -67,7 +67,9 @@ import io.bluewallet.blueberry.ui.PlatformScrollEdge
 import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.alwaysBounceTail
 import io.bluewallet.blueberry.ui.platformHeaderClearance
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Breathing room under the inline nav title before the summary. */
 private val TitleBelowHeaderGap = 12.dp
@@ -102,13 +104,22 @@ fun CoinsScreen(
             runtime.walletTxsStore.subscribe {
                 scope.launch {
                     snap = runtime.walletTxsStore.get()
-                    sendingKeys = runtime.reservedOutpoints()
+                    sendingKeys = withContext(Dispatchers.Default) { runtime.reservedOutpoints() }
                 }
             }
         onDispose { off() }
     }
     DisposableEffect(runtime.broadcastStore) {
-        val off = runtime.broadcastStore.subscribe { scope.launch { sendingKeys = runtime.reservedOutpoints() } }
+        var seenLive: Set<String>? = null
+        val off =
+            runtime.broadcastStore.subscribe {
+                scope.launch {
+                    val ids = liveBroadcastIds(runtime.broadcastStore)
+                    if (ids == seenLive) return@launch
+                    seenLive = ids
+                    sendingKeys = withContext(Dispatchers.Default) { runtime.reservedOutpoints() }
+                }
+            }
         onDispose { off() }
     }
     val control =

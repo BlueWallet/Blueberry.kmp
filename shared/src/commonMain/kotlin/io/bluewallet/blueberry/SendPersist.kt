@@ -57,7 +57,7 @@ fun unconfirmedSendOpen(
     return sendOpen || privateOpen
 }
 
-/** Drops a payment that never confirmed, so its coins can be spent again. A confirmed row stays. */
+/** Drops the local hold on a payment that has not confirmed. The network copy can still settle. */
 fun abandonUnconfirmedSend(
     db: Database,
     runtime: PeersRuntime,

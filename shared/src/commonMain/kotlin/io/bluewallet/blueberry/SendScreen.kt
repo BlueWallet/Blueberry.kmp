@@ -44,7 +44,9 @@ import io.bluewallet.blueberry.ui.overlayBackStack
 import io.bluewallet.blueberry.ui.screenPushTransform
 import io.bluewallet.blueberry.wallet.PsbtSendResult
 import io.bluewallet.blueberry.wallet.SignedSendResult
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 @Suppress("LongParameterList")
@@ -67,11 +69,16 @@ fun SendScreen(
     LaunchedEffect(flow.selectedKeys) { onSelectedKeysChange(flow.selectedKeys) }
     LaunchedEffect(flow.feeRate) { onFeeRateChange(flow.feeRate) }
     DisposableEffect(runtime.broadcastStore) {
+        var seenLive: Set<String>? = null
         val off =
             runtime.broadcastStore.subscribe {
                 scope.launch {
                     flow.refreshBroadcast()
-                    flow.refreshHeldOutpoints()
+                    val ids = liveBroadcastIds(runtime.broadcastStore)
+                    if (ids == seenLive) return@launch
+                    seenLive = ids
+                    val held = withContext(Dispatchers.Default) { runtime.reservedOutpoints() }
+                    flow.applyHeldOutpoints(held)
                 }
             }
         onDispose { off() }
@@ -218,8 +225,8 @@ private fun SendBroadcast(flow: SendFlow) {
     }
     val owns = broadcastOwns(flow.broadcast, sent.signed.txHex)
     val status =
-        if (flow.sendError != null && !owns) {
-            BroadcastStatusUi("Not sent yet", flow.sendError!!, BROADCAST_BUSY, BroadcastTone.Failed)
+        if (flow.sendError != null && (!owns || flow.broadcast.phase == "error")) {
+            BroadcastStatusUi("Not sent yet", flow.sendError!!, null, BroadcastTone.Failed)
         } else {
             ownedBroadcastStatus(flow.broadcast, sent.signed.txHex, flow.cancelling())
         }
@@ -231,7 +238,7 @@ private fun SendBroadcast(flow: SendFlow) {
                 finish = BroadcastFinishActions(onDone = flow::finish, onRetry = flow::broadcastSent),
                 onCancel = flow::cancelBroadcast,
                 onClose = flow::goBack,
-                onForget = if (owns && broadcastCancelled(flow.broadcast.error)) flow::forgetCancelled else null,
+                onForget = if (owns && broadcastCanBeForgotten(flow.broadcast.phase)) flow::forgetFailed else null,
             ),
     )
 }

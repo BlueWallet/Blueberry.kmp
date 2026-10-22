@@ -23,8 +23,11 @@ import io.bluewallet.blueberry.peers.logError
 import io.bluewallet.blueberry.peers.net.APP_NAME
 import io.bluewallet.blueberry.peers.net.APP_VERSION
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 
 private const val MSG_TX = 1u
 private const val MSG_WTX = 5u
@@ -37,6 +40,12 @@ data class BroadcastTxV2Options(
     val handshakeTimeoutMs: Long = 15_000,
     val ackTimeoutMs: Long = 15_000,
 )
+
+internal class HandedOff(
+    val mark: () -> Unit,
+) : AbstractCoroutineContextElement(Key) {
+    companion object Key : CoroutineContext.Key<HandedOff>
+}
 
 fun decodeBroadcastTx(txHex: String) =
     try {
@@ -118,6 +127,7 @@ suspend fun broadcastTxV2(
     try {
         log("broadcast", "v2 send-tx")
         session.writeMessage(Message.Tx(wireTx))
+        currentCoroutineContext()[HandedOff]?.mark?.invoke()
         try {
             withTimeout(options.ackTimeoutMs) {
                 while (true) {

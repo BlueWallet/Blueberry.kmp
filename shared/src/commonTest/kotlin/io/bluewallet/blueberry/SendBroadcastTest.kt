@@ -1,8 +1,16 @@
 package io.bluewallet.blueberry
 
+import io.bluewallet.bip324.OutPoint
+import io.bluewallet.bip324.Transaction
+import io.bluewallet.bip324.TxInput
+import io.bluewallet.bip324.TxOutput
+import io.bluewallet.bip324.bytesToHex
+import io.bluewallet.bip324.encodeTransaction
+import io.bluewallet.blueberry.wallet.hexToBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SendBroadcastTest {
@@ -38,6 +46,34 @@ class SendBroadcastTest {
         assertTrue(broadcastCancelled("  Cancelled  "))
         assertFalse(broadcastCancelled("no peers accepted"))
         assertFalse(broadcastCancelled(null))
+        assertTrue(broadcastCanBeForgotten("error"))
+        assertFalse(broadcastCanBeForgotten("success"))
+        assertFalse(broadcastCanBeForgotten("attempt"))
+    }
+
+    @Test
+    fun retry_refuses_a_missing_or_reserved_input() {
+        val display = "ab".repeat(32)
+        val tx =
+            Transaction(
+                version = 1u,
+                inputs =
+                    listOf(
+                        TxInput(
+                            previousOutput = OutPoint(hexToBytes(display).reversedArray(), 0u),
+                            scriptSig = ByteArray(0),
+                            sequence = 0xffffffffu,
+                        ),
+                    ),
+                outputs = listOf(TxOutput(value = 1000, scriptPubKey = byteArrayOf(0x51))),
+                lockTime = 0u,
+            )
+        val hex = bytesToHex(encodeTransaction(tx))
+        val key = "$display:0"
+        assertNull(retryRefusal(hex, setOf(key), utxosReady = true, reserved = emptySet()))
+        assertEquals(RETRY_COINS_GONE, retryRefusal(hex, emptySet(), utxosReady = true, reserved = emptySet()))
+        assertEquals(RETRY_COINS_HELD, retryRefusal(hex, setOf(key), utxosReady = true, reserved = setOf(key)))
+        assertEquals(RETRY_WALLET_LOADING, retryRefusal(hex, setOf(key), utxosReady = false, reserved = emptySet()))
     }
 
     @Test
