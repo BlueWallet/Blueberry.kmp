@@ -67,4 +67,10 @@ class SendDraftTest {
         val next = pickerSelection(abc, liveKeys = abc, visibleKeys = abc, frozenKeys = setOf("c"), showsAll = true)
         assertEquals(setOf("a", "b"), next)
     }
+
+    @Test
+    fun sending_coins_always_leave_the_picker_set() {
+        val next = pickerSelection(abc, liveKeys = abc, visibleKeys = abc, frozenKeys = setOf("b"), showsAll = true)
+        assertEquals(setOf("a", "c"), next)
+    }
 }

@@ -65,7 +65,7 @@ internal fun CoinWeightBar(
             val w = widths[index]
             val alpha =
                 when {
-                    coin.isFrozen -> FROZEN_BAR_ALPHA
+                    coin.isFrozen || coin.sending -> FROZEN_BAR_ALPHA
                     !hasSelection || coin.key in selectedKeys -> 1f
                     else -> 0.28f
                 }
@@ -177,7 +177,7 @@ internal fun CoinGroupSection(
                     .background(BwColors.Card),
         ) {
             group.coins.forEachIndexed { index, coin ->
-                key(coin.key, coin.isFrozen, coin.label, coin.privacyState) {
+                key(coin.key, coin.isFrozen, coin.sending, coin.label, coin.privacyState) {
                     if (index > 0) {
                         Box(
                             Modifier
@@ -208,28 +208,13 @@ internal fun CoinControlRow(
 ) {
     val subtitle = coinRowSubtitle(coin)
     val tag = coinRowTag(coin)
-    // The toggleable semantics announce the checked state and the hint; the label carries only the coin.
-    val selectA11y =
-        if (coin.isFrozen) {
-            "${formatBtc(coin.valueSats)}, frozen, not selectable"
-        } else {
-            formatBtc(coin.valueSats)
-        }
-    val detailsA11y =
-        buildString {
-            append(formatBtc(coin.valueSats))
-            append(", ")
-            if (coin.isFrozen) append("frozen, ")
-            append(subtitle)
-            append(", ")
-            append(coin.ageLabel)
-            append(", opens coin details")
-        }
+    val selectA11y = coinSelectDescription(coin)
+    val detailsA11y = coinDetailsDescription(coin, subtitle)
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .background(if (selected) BwColors.AccentSoft else Color.Transparent)
+                .background(if (selected && coin.canSelect) BwColors.AccentSoft else Color.Transparent)
                 .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -238,21 +223,21 @@ internal fun CoinControlRow(
                 Modifier
                     .clip(RoundedCornerShape(12.dp))
                     .then(
-                        if (coin.isFrozen) {
+                        if (coin.canSelect) {
+                            Modifier
+                                .semantics { contentDescription = selectA11y }
+                                .toggleable(value = selected, role = Role.Checkbox, onValueChange = { onToggle() })
+                        } else {
                             Modifier.semantics {
                                 contentDescription = selectA11y
                                 disabled()
                             }
-                        } else {
-                            Modifier
-                                .semantics { contentDescription = selectA11y }
-                                .toggleable(value = selected, role = Role.Checkbox, onValueChange = { onToggle() })
                         },
                     ).padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            CoinSelector(selected = selected, frozen = coin.isFrozen)
+            CoinSelector(selected = selected, frozen = coin.isFrozen, sending = coin.sending)
             Box(
                 modifier =
                     Modifier
@@ -272,7 +257,7 @@ internal fun CoinControlRow(
                                 Modifier
                                     .semantics { contentDescription = detailsA11y }
                                     .clickable(role = Role.Button, onClick = onOpenSheet)
-                            !coin.isFrozen -> Modifier.clickable(onClick = onToggle)
+                            coin.canSelect -> Modifier.clickable(onClick = onToggle)
                             else -> Modifier
                         },
                     ).padding(horizontal = 8.dp, vertical = 8.dp),
@@ -294,7 +279,7 @@ internal fun CoinControlRow(
                     if (tag != null) {
                         val (fg, bg) =
                             when (tag) {
-                                "Frozen" -> BwColors.InkSecondary to BwColors.Section
+                                "Frozen", "Sending" -> BwColors.InkSecondary to BwColors.Section
                                 "Near dust" -> BwColors.Warning to BwColors.Warning.copy(alpha = 0.16f)
                                 "Change" -> BwColors.Accent to BwColors.AccentSoft
                                 else -> BwColors.InkSecondary to BwColors.Section
@@ -336,10 +321,33 @@ internal fun CoinControlRow(
     }
 }
 
+private fun coinSelectDescription(coin: CoinControlCoin): String =
+    when {
+        coin.isFrozen -> "${formatBtc(coin.valueSats)}, frozen, not selectable"
+        coin.sending -> "${formatBtc(coin.valueSats)}, sending, not selectable"
+        else -> formatBtc(coin.valueSats)
+    }
+
+private fun coinDetailsDescription(
+    coin: CoinControlCoin,
+    subtitle: String,
+): String =
+    buildString {
+        append(formatBtc(coin.valueSats))
+        append(", ")
+        if (coin.isFrozen) append("frozen, ")
+        if (coin.sending) append("sending, ")
+        append(subtitle)
+        append(", ")
+        append(coin.ageLabel)
+        append(", opens coin details")
+    }
+
 @Composable
 internal fun CoinSelector(
     selected: Boolean,
     frozen: Boolean,
+    sending: Boolean = false,
 ) {
     if (frozen) {
         Box(
@@ -352,6 +360,15 @@ internal fun CoinSelector(
         ) {
             FrozenLockIcon(modifier = Modifier.size(12.dp), color = BwColors.InkMuted)
         }
+    } else if (sending) {
+        Box(
+            modifier =
+                Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(BwColors.Section)
+                    .border(2.dp, BwColors.InkMuted, CircleShape),
+        )
     } else {
         Box(
             modifier =

@@ -89,6 +89,7 @@ fun CoinsScreen(
     feeRateSatPerVb: Double? = null,
 ) {
     var snap by remember { mutableStateOf(runtime.walletTxsStore.get()) }
+    var sendingKeys by remember { mutableStateOf(runtime.reservedOutpoints()) }
     var selectedKeys by remember { mutableStateOf(initialSelectedKeys) }
     var filter by remember { mutableStateOf(CoinControlFilter.All) }
     var editingKey by remember { mutableStateOf<String?>(null) }
@@ -97,27 +98,37 @@ fun CoinsScreen(
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     DisposableEffect(runtime.walletTxsStore) {
-        val off = runtime.walletTxsStore.subscribe { scope.launch { snap = runtime.walletTxsStore.get() } }
+        val off =
+            runtime.walletTxsStore.subscribe {
+                scope.launch {
+                    snap = runtime.walletTxsStore.get()
+                    sendingKeys = runtime.reservedOutpoints()
+                }
+            }
+        onDispose { off() }
+    }
+    DisposableEffect(runtime.broadcastStore) {
+        val off = runtime.broadcastStore.subscribe { scope.launch { sendingKeys = runtime.reservedOutpoints() } }
         onDispose { off() }
     }
     val control =
-        remember(snap, feeRateSatPerVb) {
-            coinControlSnapshotFrom(snap, feeRateSatPerVb)
+        remember(snap, feeRateSatPerVb, sendingKeys) {
+            coinControlSnapshotFrom(snap, feeRateSatPerVb, sendingKeys)
         }
     val filtered = remember(control, filter) { filterCoinControlGroups(control, filter) }
     val visibleKeys =
         remember(filtered) { filtered.flatMap { group -> group.coins.map { it.key } }.toSet() }
     LaunchedEffect(control, visibleKeys) {
         val live = control.coins.map { it.key }.toSet()
-        val frozen =
+        val unavailable =
             control.coins
-                .filter { it.isFrozen }
+                .filter { !it.canSelect }
                 .map { it.key }
                 .toSet()
-        val next = pickerSelection(selectedKeys, live, visibleKeys, frozen, showsAll = filter == CoinControlFilter.All)
+        val next = pickerSelection(selectedKeys, live, visibleKeys, unavailable, showsAll = filter == CoinControlFilter.All)
         if (next != selectedKeys) selectedKeys = next
     }
-    val actionCoins = control.coins.filter { it.key in selectedKeys && !it.isFrozen }
+    val actionCoins = control.coins.filter { it.key in selectedKeys && it.canSelect }
     val notice = remember(actionCoins) { privacyNoticeForSelection(actionCoins) }
     val rowsByKey = remember(snap.utxos) { coinsRows(snap.utxos).associateBy { it.key } }
     LaunchedEffect(editingKey) {
@@ -210,7 +221,7 @@ fun CoinsScreen(
                             group = group,
                             selectedKeys = selectedKeys,
                             onToggle = { coin ->
-                                if (coin.isFrozen) return@CoinGroupSection
+                                if (!coin.canSelect) return@CoinGroupSection
                                 selectedKeys =
                                     if (coin.key in selectedKeys) {
                                         selectedKeys - coin.key

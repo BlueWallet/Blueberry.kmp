@@ -33,11 +33,21 @@ class SendBroadcastTest {
     }
 
     @Test
+    fun only_a_cancelled_broadcast_can_be_forgotten() {
+        assertTrue(broadcastCancelled("cancelled"))
+        assertTrue(broadcastCancelled("  Cancelled  "))
+        assertFalse(broadcastCancelled("no peers accepted"))
+        assertFalse(broadcastCancelled(null))
+    }
+
+    @Test
     fun cancelling_overrides_working_but_not_finished() {
-        val stopping = broadcastStatus(BroadcastSnapshot(phase = "attempt"), cancelling = true)
-        assertEquals("Stopping…", stopping.line)
-        assertEquals("Close to leave. Stopping continues.", stopping.caption)
-        assertEquals("Sent privately", broadcastStatus(BroadcastSnapshot(phase = "success"), cancelling = true).line)
+        val stopping = broadcastStatus(BroadcastSnapshot(phase = "attempt", percent = 40, stopRequested = true))
+        assertEquals("Stopping", stopping.title)
+        assertEquals("This send will not go out", stopping.line)
+        assertEquals("The circuit it already opened is closing.", stopping.caption)
+        assertEquals(BroadcastTone.Working, stopping.tone)
+        assertEquals("Sent privately", broadcastStatus(BroadcastSnapshot(phase = "success", stopRequested = true)).line)
     }
 
     @Test
@@ -66,6 +76,12 @@ class SendBroadcastTest {
         assertEquals("Not sent", rows[0].status)
         assertEquals("bc1qother", rows[0].title)
         assertEquals("Broadcasting", rows[1].status)
+        val stopping =
+            BroadcastSession(
+                BroadcastSnapshot(id = "4", txHex = "dd", phase = "attempt", percent = 40, stopRequested = true),
+                BroadcastReceipt("txid-stop", "bc1qstop", "Rent", 10_000, 200),
+            )
+        assertEquals("Stopping", broadcastListRows(listOf(stopping), emptySet()).single().status)
         assertEquals("Rent", rows[1].title)
         assertEquals(emptyList(), broadcastListRows(listOf(running), setOf("txid-run")))
         val sent =

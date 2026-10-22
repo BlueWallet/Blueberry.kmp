@@ -62,10 +62,20 @@ fun BroadcastScreen(
                     ),
                 onCancel = {
                     if (!broadcastJobInFlight(snap.phase)) return@SendBroadcastActions
+                    runtime.broadcastStore.requestStop(id)
                     runtime.bus.emit(Event.BroadcastCancel, BroadcastCancelPayload(id))
                     cancelArmed = true
                 },
                 onClose = { leave() },
+                onForget =
+                    if (broadcastCancelled(snap.error)) {
+                        {
+                            forgetBroadcast(runtime, id)
+                            onClose()
+                        }
+                    } else {
+                        null
+                    },
             ),
     )
 }

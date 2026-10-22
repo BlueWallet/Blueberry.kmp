@@ -67,6 +67,17 @@ class CoinControlModelsTest {
     }
 
     @Test
+    fun a_sending_coin_stays_visible_and_out_of_spendable() {
+        val key = "c1:0"
+        val snap = fixtureSnapshot(sending = setOf(key))
+        val coin = snap.coins.first { it.key == key }
+        assertTrue(coin.sending)
+        assertFalse(coin.canSelect)
+        assertEquals("Sending", coinRowTag(coin))
+        assertEquals(snap.totalSats - snap.frozenSats - coin.valueSats, snap.spendableSats)
+    }
+
+    @Test
     fun privacy_same_group_green() {
         val snap = fixtureSnapshot()
         val c1 = snap.coins.first { it.key == "c1:0" }
@@ -406,6 +417,7 @@ private fun fixtureSnapshot(
     feeRate: Double? = 10.0,
     provableLinks: Boolean = true,
     certainOverride: Map<String, String> = emptyMap(),
+    sending: Set<String> = emptySet(),
 ): CoinControlSnapshot {
     val p2wpkh =
         ByteArray(22) {
@@ -449,5 +461,5 @@ private fun fixtureSnapshot(
     val frozen = FIXTURE.filter { it.isFrozen }.map { "${it.id}:0" }.toSet()
     val ages = FIXTURE.associate { "${it.id}:0" to formatCoinAgeDays(it.ageDays) }
     val certain = (if (provableLinks) groupIds else groupIds.keys.associateWith { it }) + certainOverride
-    return buildCoinControlSnapshot(utxos, CoinLinkage(certain = certain, likely = groupIds), frozen, feeRate, ages)
+    return buildCoinControlSnapshot(utxos, CoinLinkage(certain = certain, likely = groupIds), frozen, feeRate, ages).markedSending(sending)
 }

@@ -125,6 +125,13 @@ class PeersRuntime(
         return (armed + stored).map { outpointKey(it.txid, it.vout) }.toSet()
     }
 
+    /** Drops the in-memory record for a broadcast the user chose to forget. Nothing was written to the database. */
+    @OptIn(ExperimentalAtomicApi::class)
+    fun dropArmedBroadcast(id: String) {
+        removePending(pendingSends, id)
+        removePending(pendingPrivateSends, id)
+    }
+
     @OptIn(ExperimentalAtomicApi::class)
     fun persistArmedBroadcast(id: String) {
         val snap = broadcastStore.get(id) ?: return

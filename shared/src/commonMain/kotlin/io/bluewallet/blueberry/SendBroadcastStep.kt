@@ -26,7 +26,9 @@ import io.bluewallet.blueberry.ui.AmountHero
 import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
+import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.PlainPillButton
 import io.bluewallet.blueberry.ui.TextAction
 import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.ToPill
@@ -41,6 +43,8 @@ internal class SendBroadcastActions(
     /** Stops this broadcast. The header Close leaves it running. */
     val onCancel: () -> Unit,
     val onClose: () -> Unit,
+    /** Set only when this broadcast was cancelled, so it can be dropped from memory. */
+    val onForget: (() -> Unit)? = null,
 )
 
 internal class SendReceipt(
@@ -65,8 +69,7 @@ internal fun SendBroadcastStep(
             when (status.tone) {
                 BroadcastTone.Sent ->
                     TintedPillButton(text = "Done", onClick = actions.finish.onDone, modifier = Modifier.fillMaxWidth())
-                BroadcastTone.Failed ->
-                    TintedPillButton(text = "Retry", onClick = actions.finish.onRetry, modifier = Modifier.fillMaxWidth())
+                BroadcastTone.Failed -> FailedBroadcastActions(actions)
                 BroadcastTone.Working ->
                     TintedPillButton(text = "Cancel", onClick = actions.onCancel, modifier = Modifier.fillMaxWidth())
             }
@@ -76,6 +79,21 @@ internal fun SendBroadcastStep(
         ToPill(label = receipt.to.label, address = receipt.to.address)
         BroadcastStatusCard(status)
         if (status.tone == BroadcastTone.Sent) ReceiptCard(receipt)
+    }
+}
+
+@Composable
+private fun FailedBroadcastActions(actions: SendBroadcastActions) {
+    val forget = actions.onForget
+    Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
+        TintedPillButton(text = "Retry", onClick = actions.finish.onRetry, modifier = Modifier.fillMaxWidth())
+        if (forget != null) {
+            PlainPillButton(
+                text = "Forget this transaction",
+                onClick = forget,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 

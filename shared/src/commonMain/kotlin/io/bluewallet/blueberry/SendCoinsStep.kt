@@ -63,21 +63,21 @@ internal fun SendCoinsStep(
     rate: Double?,
     actions: SendCoinsActions,
 ) {
-    val selected = utxos.filter { it.key in selectedKeys && !it.isFrozen }
+    val unavailable =
+        control.coins
+            .filter { !it.canSelect }
+            .map { it.key }
+            .toSet()
+    val selected = utxos.filter { it.key in selectedKeys && it.key !in unavailable }
     var filter by remember { mutableStateOf(CoinControlFilter.All) }
     val groups = remember(control, filter) { filterCoinControlGroups(control, filter) }
     val visibleKeys = remember(groups) { groups.flatMap { group -> group.coins.map { it.key } }.toSet() }
     LaunchedEffect(control, visibleKeys, filter) {
         val live = control.coins.map { it.key }.toSet()
-        val frozen =
-            control.coins
-                .filter { it.isFrozen }
-                .map { it.key }
-                .toSet()
-        val next = pickerSelection(selectedKeys, live, visibleKeys, frozen, showsAll = filter == CoinControlFilter.All)
+        val next = pickerSelection(selectedKeys, live, visibleKeys, unavailable, showsAll = filter == CoinControlFilter.All)
         if (next != selectedKeys) actions.onReplaceSelection(next)
     }
-    val selectedCoins = control.coins.filter { it.key in selectedKeys && !it.isFrozen }
+    val selectedCoins = control.coins.filter { it.key in selectedKeys && it.canSelect }
     val notice = remember(selectedCoins) { privacyNoticeForSelection(selectedCoins) }
     SendStepFrame(
         title = "Select Coins",
@@ -98,7 +98,7 @@ internal fun SendCoinsStep(
         ToPill(label = to.label, address = to.address)
         CoverageCard(selected = selected, coverage = coverage, rate = rate)
         Text(
-            text = "${selected.size} of ${utxos.count { !it.isFrozen }} coins",
+            text = "${selected.size} of ${control.coins.count { it.canSelect }} coins",
             color = BwColors.InkQuiet,
             fontFamily = BwFontFamily,
             fontSize = BwType.LabelSize,
@@ -116,7 +116,7 @@ internal fun SendCoinsStep(
                         CoinGroupSection(
                             group = group,
                             selectedKeys = selectedKeys,
-                            onToggle = { coin -> if (!coin.isFrozen) actions.onToggle(coin.key) },
+                            onToggle = { coin -> if (coin.canSelect) actions.onToggle(coin.key) },
                         )
                     }
                 }

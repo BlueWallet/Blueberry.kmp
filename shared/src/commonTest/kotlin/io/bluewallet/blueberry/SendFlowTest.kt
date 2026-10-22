@@ -274,6 +274,54 @@ class SendFlowTest {
         }
 
     @Test
+    fun forgetting_a_cancelled_broadcast_releases_its_coins() =
+        runFlow { _, runtime, flow ->
+            val held = coin("11", 100_000_000)
+            prime(flow, held)
+            runtime.armSendPersist(
+                "1",
+                SendRow(
+                    txid = "ab".repeat(32),
+                    txHex = "aa",
+                    destination = ADDRESS,
+                    coins = listOf(PrivateSendCoin(held.txid, held.vout, held.valueSats)),
+                ),
+            )
+            runtime.broadcastStore.start("1", "aa")
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("1", "cancelled"))
+            flow.broadcast = checkNotNull(runtime.broadcastStore.get("1"))
+            flow.updateSnap(flow.snap)
+            assertTrue(flow.spendableRows.isEmpty())
+            flow.forgetCancelled()
+            assertTrue(closed)
+            assertNull(runtime.broadcastStore.get("1"))
+            flow.updateSnap(flow.snap)
+            assertEquals(listOf(held.key), flow.spendableRows.map { it.key })
+        }
+
+    @Test
+    fun a_failed_broadcast_stays_until_it_is_cancelled() =
+        runFlow { _, runtime, flow ->
+            val held = coin("11", 100_000_000)
+            runtime.armSendPersist(
+                "1",
+                SendRow(
+                    txid = "ab".repeat(32),
+                    txHex = "aa",
+                    destination = ADDRESS,
+                    coins = listOf(PrivateSendCoin(held.txid, held.vout, held.valueSats)),
+                ),
+            )
+            runtime.broadcastStore.start("1", "aa")
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("1", "no peers accepted"))
+            flow.broadcast = checkNotNull(runtime.broadcastStore.get("1"))
+            flow.forgetCancelled()
+            assertFalse(closed)
+            assertEquals("error", runtime.broadcastStore.get("1")?.phase)
+            assertTrue(runtime.reservedOutpoints().isNotEmpty())
+        }
+
+    @Test
     fun a_dropped_build_does_not_touch_the_wallet() =
         runFlow { db, _, _ ->
             assertFailsWith<CancellationException> {

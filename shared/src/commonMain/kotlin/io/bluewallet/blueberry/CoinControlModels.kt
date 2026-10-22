@@ -41,7 +41,11 @@ data class CoinControlCoin(
     val ageLabel: String,
     val parentTxid: String,
     val scriptPubKey: ByteArray,
-)
+    /** Held by a broadcast that has not confirmed. The picker must not select it. */
+    val sending: Boolean = false,
+) {
+    val canSelect: Boolean get() = !isFrozen && !sending
+}
 
 data class CoinControlGroup(
     val groupId: String,
@@ -78,7 +82,8 @@ data class CoinControlSnapshot(
     val filterCounts: Map<CoinControlFilter, Int>,
     val frozenSats: Long = 0L,
 ) {
-    val spendableSats: Long get() = totalSats - frozenSats
+    /** Frozen and in-flight coins stay on screen and stay out of what can be spent. */
+    val spendableSats: Long get() = coins.filter { it.canSelect }.sumOf { it.valueSats }
 
     val availability: CoinAvailability
         get() = coinAvailability(coinCount = coins.size, frozenCount = coins.count { it.isFrozen })
@@ -591,9 +596,21 @@ fun coinRowSubtitle(coin: CoinControlCoin): String =
         else -> "No label"
     }
 
+/** Marks coins a broadcast still holds. They stay in the list and cannot be selected. */
+fun CoinControlSnapshot.markedSending(held: Set<String>): CoinControlSnapshot {
+    if (held.isEmpty()) return this
+
+    fun CoinControlCoin.hold() = if (key in held) copy(sending = true) else this
+    return copy(
+        coins = coins.map { it.hold() },
+        groups = groups.map { group -> group.copy(coins = group.coins.map { it.hold() }) },
+    )
+}
+
 fun coinRowTag(coin: CoinControlCoin): String? =
     when {
         coin.isFrozen -> "Frozen"
+        coin.sending -> "Sending"
         coin.nearDust -> "Near dust"
         coin.isChange -> "Change"
         else -> null

@@ -101,6 +101,8 @@ internal class SendFlow(
     var privateSession by mutableStateOf<PrivateSendSession?>(null)
     var privateSigned by mutableStateOf<SignedSendResult?>(null)
     var snap by mutableStateOf(runtime.walletTxsStore.get())
+    var heldOutpoints by mutableStateOf(runtime.reservedOutpoints())
+        private set
     var broadcast by mutableStateOf(BroadcastSnapshot())
     var changeScript by mutableStateOf(placeholderOutputScript(AddressScriptType.P2WPKH))
     var selectionNeedsAck by mutableStateOf(false)
@@ -317,8 +319,13 @@ internal class SendFlow(
         }
     }
 
+    fun refreshHeldOutpoints() {
+        heldOutpoints = runtime.reservedOutpoints()
+    }
+
     /** Keeps the selection to coins the wallet still holds and can spend. */
     fun updateSnap(next: WalletTxsSnapshot) {
+        refreshHeldOutpoints()
         val payable = amountSats
         val before = stampOrNull()
         snap = next
@@ -449,10 +456,21 @@ internal class SendFlow(
         close()
     }
 
+    /** Drops a broadcast the user cancelled, and leaves the send. */
+    fun forgetCancelled() {
+        val id = broadcast.id
+        if (id == null || !broadcastCancelled(broadcast.error)) return
+        forgetBroadcast(runtime, id)
+        dropBuild()
+        close()
+    }
+
     /** Stops the broadcast on screen. Close leaves it running. */
     fun cancelBroadcast() {
         val id = broadcast.id ?: return
         if (!broadcastJobInFlight(broadcast.phase)) return
+        runtime.broadcastStore.requestStop(id)
+        refreshBroadcast()
         runtime.bus.emit(Event.BroadcastCancel, BroadcastCancelPayload(id))
         cancelArmedForId = id
     }

@@ -67,7 +67,13 @@ fun SendScreen(
     LaunchedEffect(flow.selectedKeys) { onSelectedKeysChange(flow.selectedKeys) }
     LaunchedEffect(flow.feeRate) { onFeeRateChange(flow.feeRate) }
     DisposableEffect(runtime.broadcastStore) {
-        val off = runtime.broadcastStore.subscribe { scope.launch { flow.refreshBroadcast() } }
+        val off =
+            runtime.broadcastStore.subscribe {
+                scope.launch {
+                    flow.refreshBroadcast()
+                    flow.refreshHeldOutpoints()
+                }
+            }
         onDispose { off() }
     }
     LaunchedEffect(runtime.walletRevision) { flow.loadChangeScript() }
@@ -169,7 +175,7 @@ private fun SendScan(flow: SendFlow) {
 
 @Composable
 private fun SendCoins(flow: SendFlow) {
-    val control = remember(flow.snap, flow.feeRate) { coinControlSnapshotFrom(flow.snap, flow.feeRate) }
+    val control = remember(flow.snap, flow.feeRate, flow.heldOutpoints) { coinControlSnapshotFrom(flow.snap, flow.feeRate, flow.heldOutpoints) }
     SendCoinsStep(
         to = flow.recipient,
         utxos = flow.snap.utxos,
@@ -224,6 +230,7 @@ private fun SendBroadcast(flow: SendFlow) {
                 finish = BroadcastFinishActions(onDone = flow::finish, onRetry = flow::broadcastSent),
                 onCancel = flow::cancelBroadcast,
                 onClose = flow::goBack,
+                onForget = if (owns && broadcastCancelled(flow.broadcast.error)) flow::forgetCancelled else null,
             ),
     )
 }

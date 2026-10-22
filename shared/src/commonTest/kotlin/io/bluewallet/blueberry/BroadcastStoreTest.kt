@@ -41,6 +41,19 @@ class BroadcastStoreTest {
     }
 
     @Test
+    fun a_stop_stays_put_when_the_circuit_reports_more_progress() {
+        val store = createBroadcastStore()
+        store.start("1", "aa")
+        store.applyProgress(BroadcastProgressPayload("1", BroadcastPhase.ATTEMPT, percent = 20, stage = "Building circuit"))
+        store.requestStop("1")
+        store.applyProgress(BroadcastProgressPayload("1", BroadcastPhase.ATTEMPT, percent = 80, stage = "Building circuit"))
+        val snap = store.get("1")
+        assertEquals(true, snap?.stopRequested)
+        assertEquals("Stopping", broadcastStatus(checkNotNull(snap)).title)
+        assertEquals("This send will not go out", broadcastStatus(snap).line)
+    }
+
+    @Test
     fun progress_for_one_job_does_not_change_another() {
         val store = createBroadcastStore()
         store.start("1", "aa")

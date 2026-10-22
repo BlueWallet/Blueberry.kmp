@@ -13,7 +13,19 @@ private const val DONE_PERCENT = 100
 
 fun broadcastJobInFlight(phase: String?): Boolean = phase != null && phase != "success" && phase != "error"
 
+/** The user stopped this broadcast. Other failures still belong on screen so they can be retried. */
+fun broadcastCancelled(error: String?): Boolean = error?.trim()?.equals("cancelled", ignoreCase = true) == true
+
 fun broadcastTorCaption(stage: String?): String? = stage?.let { "Tor: $it" }
+
+/** Removes a cancelled broadcast from the list and releases the coins it was holding. */
+fun forgetBroadcast(
+    runtime: PeersRuntime,
+    id: String,
+) {
+    runtime.dropArmedBroadcast(id)
+    runtime.broadcastStore.dismiss(id)
+}
 
 /** Plain-language status for the broadcast snapshot. Peers and attempts stay out of the main line. */
 fun broadcastStatus(
@@ -35,11 +47,11 @@ fun broadcastStatus(
                 "Retrying sends the same transaction, so it can't pay twice.",
                 BroadcastTone.Failed,
             )
-        cancelling ->
+        snap.stopRequested || cancelling ->
             BroadcastStatusUi(
-                "Sending",
-                "Stopping…",
-                "Close to leave. Stopping continues.",
+                "Stopping",
+                "This send will not go out",
+                "The circuit it already opened is closing.",
                 BroadcastTone.Working,
             )
         else -> workingStatus(snap)
@@ -114,9 +126,10 @@ fun broadcastListRows(
             title = receipt.label.ifBlank { receipt.destination },
             paidSats = receipt.paidSats,
             status =
-                when (snap.phase) {
-                    "error" -> "Not sent"
-                    "success" -> "Sent"
+                when {
+                    snap.phase == "error" -> "Not sent"
+                    snap.phase == "success" -> "Sent"
+                    snap.stopRequested -> "Stopping"
                     else -> "Broadcasting"
                 },
         )

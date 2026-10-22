@@ -20,6 +20,8 @@ data class BroadcastSnapshot(
     val percent: Int? = null,
     val stage: String? = null,
     val triedPeers: Set<String> = emptySet(),
+    /** The user asked this job to stop. Later circuit progress must not read as a new send. */
+    val stopRequested: Boolean = false,
 )
 
 /** What the transaction list and the broadcast screen need after Send has closed. */
@@ -52,6 +54,9 @@ interface BroadcastStore {
 
     fun applyDone(payload: BroadcastDonePayload)
 
+    /** Remembers a cancel while the circuit it already opened is still closing. */
+    fun requestStop(id: String)
+
     fun dismiss(id: String)
 
     fun reset()
@@ -64,19 +69,8 @@ private class BroadcastStoreImpl : BroadcastStore {
     private val state = AtomicReference<Map<String, BroadcastSession>>(emptyMap())
     private val listeners = AtomicReference<List<() -> Unit>>(emptyList())
 
-    private fun emit() {
-        for (listener in listeners.load()) listener()
-    }
-
     private fun update(transform: (Map<String, BroadcastSession>) -> Map<String, BroadcastSession>) {
-        while (true) {
-            val cur = state.load()
-            val next = transform(cur)
-            if (next === cur || state.compareAndSet(cur, next)) {
-                if (next !== cur) emit()
-                return
-            }
-        }
+        updateSessions(state, listeners, transform)
     }
 
     override fun get(id: String): BroadcastSnapshot? = state.load()[id]?.snapshot
@@ -134,13 +128,21 @@ private class BroadcastStoreImpl : BroadcastStore {
         }
     }
 
+    override fun requestStop(id: String) {
+        update { map ->
+            val cur = map[id] ?: return@update map
+            if (cur.snapshot.stopRequested || !broadcastJobInFlight(cur.snapshot.phase)) return@update map
+            map + (id to cur.copy(snapshot = cur.snapshot.copy(stopRequested = true)))
+        }
+    }
+
     override fun dismiss(id: String) {
         update { it - id }
     }
 
     override fun reset() {
         state.store(emptyMap())
-        emit()
+        emitSessions(listeners)
     }
 
     override fun subscribe(listener: () -> Unit): () -> Unit {
@@ -155,6 +157,27 @@ private class BroadcastStoreImpl : BroadcastStore {
                 val next = cur - listener
                 if (next === cur || listeners.compareAndSet(cur, next)) break
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalAtomicApi::class)
+private fun emitSessions(listeners: AtomicReference<List<() -> Unit>>) {
+    for (listener in listeners.load()) listener()
+}
+
+@OptIn(ExperimentalAtomicApi::class)
+private fun updateSessions(
+    state: AtomicReference<Map<String, BroadcastSession>>,
+    listeners: AtomicReference<List<() -> Unit>>,
+    transform: (Map<String, BroadcastSession>) -> Map<String, BroadcastSession>,
+) {
+    while (true) {
+        val cur = state.load()
+        val next = transform(cur)
+        if (next === cur || state.compareAndSet(cur, next)) {
+            if (next !== cur) emitSessions(listeners)
+            return
         }
     }
 }
