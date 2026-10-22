@@ -5,6 +5,7 @@ import io.bluewallet.blueberry.parse.SendBuildParams
 import io.bluewallet.blueberry.parse.buildActiveSendTx
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
+import io.bluewallet.blueberry.storage.PrivateSendRow
 import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.BuildSendResult
@@ -172,6 +173,7 @@ class SendFlowTest {
         runFlow { db, runtime, flow ->
             val live = coin("11", 100_000_000)
             val resting = coin("22", 100_000_000)
+            runtime.broadcastStore.start("job", "aa")
             runtime.armSendPersist(
                 "job",
                 SendRow(
@@ -213,6 +215,7 @@ class SendFlowTest {
             flow.addCoins()
             flow.continueFromCoins()
             assertEquals(SendStep.Review, flow.step)
+            assertFalse(flow.navForward)
             assertFalse(flow.selectionNeedsAck)
         }
 
@@ -288,21 +291,22 @@ class SendFlowTest {
                 ),
             )
             runtime.broadcastStore.start("1", "aa")
+            flow.updateSnap(flow.snap)
+            assertTrue(flow.spendableRows.isEmpty())
             runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("1", "cancelled"))
             flow.broadcast = checkNotNull(runtime.broadcastStore.get("1"))
             flow.updateSnap(flow.snap)
-            assertTrue(flow.spendableRows.isEmpty())
+            assertEquals(listOf(held.key), flow.spendableRows.map { it.key })
             flow.forgetCancelled()
             assertTrue(closed)
             assertNull(runtime.broadcastStore.get("1"))
-            flow.updateSnap(flow.snap)
-            assertEquals(listOf(held.key), flow.spendableRows.map { it.key })
         }
 
     @Test
-    fun a_failed_broadcast_stays_until_it_is_cancelled() =
+    fun a_failed_broadcast_releases_its_coins_and_stays_for_retry() =
         runFlow { _, runtime, flow ->
             val held = coin("11", 100_000_000)
+            prime(flow, held)
             runtime.armSendPersist(
                 "1",
                 SendRow(
@@ -315,10 +319,76 @@ class SendFlowTest {
             runtime.broadcastStore.start("1", "aa")
             runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("1", "no peers accepted"))
             flow.broadcast = checkNotNull(runtime.broadcastStore.get("1"))
+            flow.updateSnap(flow.snap)
             flow.forgetCancelled()
             assertFalse(closed)
             assertEquals("error", runtime.broadcastStore.get("1")?.phase)
-            assertTrue(runtime.reservedOutpoints().isNotEmpty())
+            assertTrue(runtime.reservedOutpoints().isEmpty())
+            assertEquals(listOf(held.key), flow.spendableRows.map { it.key })
+        }
+
+    @Test
+    fun a_failed_private_send_drops_the_signature() =
+        runFlow { _, runtime, flow ->
+            val held = coin("11", 100_000_000)
+            prime(flow, held)
+            val signed = signed()
+            flow.build = ReviewBuild.Built(signed, flow.draftStamp())
+            flow.privateSigned = signed
+            flow.step = SendStep.PrivateSend
+            runtime.armPrivateSendPersist(
+                "1",
+                PrivateSendRow(
+                    txid = signed.txid,
+                    partner = "rocketx",
+                    orderId = "order",
+                    txHex = signed.txHex,
+                    destination = ADDRESS,
+                    refundAddress = ADDRESS,
+                    coins = listOf(PrivateSendCoin(held.txid, held.vout, held.valueSats)),
+                ),
+            )
+            runtime.broadcastStore.start("1", signed.txHex)
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("1", "no peers accepted"))
+            flow.goBack()
+            assertTrue(flow.build is ReviewBuild.Idle)
+            assertEquals(setOf(held.key), flow.selectedKeys)
+            assertFalse(flow.selectionNeedsAck)
+            assertTrue(runtime.reservedOutpoints().isEmpty())
+        }
+
+    @Test
+    fun forgetting_an_unconfirmed_send_releases_its_coins() =
+        runFlow { db, runtime, flow ->
+            val held = coin("11", 100_000_000)
+            val txid = "cd".repeat(32)
+            prime(flow, held)
+            db.sends.upsert(
+                SendRow(
+                    txid = txid,
+                    txHex = "bb",
+                    destination = ADDRESS,
+                    coins = listOf(PrivateSendCoin(held.txid, held.vout, held.valueSats)),
+                ),
+            )
+            db.sends.setConfirmedInBlock(txid, 0)
+            flow.updateSnap(flow.snap)
+            assertTrue(flow.spendableRows.isEmpty())
+            assertTrue(abandonUnconfirmedSend(db, runtime, txid))
+            flow.updateSnap(flow.snap)
+            assertNull(db.sends.get(txid))
+            assertEquals(listOf(held.key), flow.spendableRows.map { it.key })
+            db.sends.upsert(
+                SendRow(
+                    txid = txid,
+                    txHex = "bb",
+                    destination = ADDRESS,
+                    coins = listOf(PrivateSendCoin(held.txid, held.vout, held.valueSats)),
+                    confirmedInBlock = 10,
+                ),
+            )
+            assertFalse(abandonUnconfirmedSend(db, runtime, txid))
+            assertEquals(txid, db.sends.get(txid)?.txid)
         }
 
     @Test

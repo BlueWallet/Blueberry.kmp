@@ -161,6 +161,10 @@ internal class SqliteDatabase(
             ) {
                 storageDb.privateSendsQueries.setConfirmedInBlock(confirmed_in_block = height, txid = txid)
             }
+
+            override fun delete(txid: String) {
+                storageDb.privateSendsQueries.delete(txid)
+            }
         }
 
     override val sends =
@@ -193,6 +197,10 @@ internal class SqliteDatabase(
                 height: Long,
             ) {
                 storageDb.sendsQueries.setConfirmedInBlock(confirmed_in_block = height, txid = txid)
+            }
+
+            override fun delete(txid: String) {
+                storageDb.sendsQueries.delete(txid)
             }
         }
 

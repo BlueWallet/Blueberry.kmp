@@ -16,3 +16,6 @@ FROM sends ORDER BY txid;
 
 setConfirmedInBlock:
 UPDATE sends SET confirmed_in_block = ? WHERE txid = ?;
+
+delete:
+DELETE FROM sends WHERE txid = ?;

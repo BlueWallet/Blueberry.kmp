@@ -43,34 +43,26 @@ class SendDraftTest {
     }
 
     @Test
-    fun narrowed_filter_drops_hidden_coins_from_the_picker_set() {
-        val next =
-            pickerSelection(abc, liveKeys = abc, visibleKeys = setOf("a", "b"), frozenKeys = emptySet(), showsAll = false)
-        assertEquals(setOf("a", "b"), next)
-    }
-
-    @Test
-    fun all_filter_keeps_live_coins_outside_the_visible_set() {
-        val next = pickerSelection(abc, liveKeys = abc, visibleKeys = setOf("a"), frozenKeys = emptySet(), showsAll = true)
+    fun a_narrowed_filter_keeps_hidden_coins_in_the_picker_set() {
+        val next = pickerSelection(abc, liveKeys = abc, frozenKeys = emptySet())
         assertEquals(abc, next)
     }
 
     @Test
-    fun spent_coins_leave_the_picker_set_even_under_all() {
-        val next =
-            pickerSelection(abc, liveKeys = setOf("a", "b"), visibleKeys = setOf("a", "b"), frozenKeys = emptySet(), showsAll = true)
+    fun spent_coins_leave_the_picker_set() {
+        val next = pickerSelection(abc, liveKeys = setOf("a", "b"), frozenKeys = emptySet())
         assertEquals(setOf("a", "b"), next)
     }
 
     @Test
     fun frozen_coins_always_leave_the_picker_set() {
-        val next = pickerSelection(abc, liveKeys = abc, visibleKeys = abc, frozenKeys = setOf("c"), showsAll = true)
+        val next = pickerSelection(abc, liveKeys = abc, frozenKeys = setOf("c"))
         assertEquals(setOf("a", "b"), next)
     }
 
     @Test
     fun sending_coins_always_leave_the_picker_set() {
-        val next = pickerSelection(abc, liveKeys = abc, visibleKeys = abc, frozenKeys = setOf("b"), showsAll = true)
+        val next = pickerSelection(abc, liveKeys = abc, frozenKeys = setOf("b"))
         assertEquals(setOf("a", "c"), next)
     }
 }

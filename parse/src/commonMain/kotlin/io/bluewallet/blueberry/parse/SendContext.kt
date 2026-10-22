@@ -1,6 +1,7 @@
 package io.bluewallet.blueberry.parse
 
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.wallet.AddressScriptType
 import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.HD_SCRIPT_TYPES
 import io.bluewallet.blueberry.wallet.MAX_WATCH_COUNT
@@ -73,6 +74,33 @@ internal fun grownInternalCount(
     pickedIndex: Int,
 ): Int = minOf(maxOf(current, pickedIndex + 1), MAX_WATCH_COUNT)
 
+/**
+ * Grows one internal watch count inside a transaction, keeping whichever window is larger.
+ * A dropped build writes nothing. A stale snapshot cannot shrink a window parse already grew.
+ */
+internal fun growWatchGap(
+    db: Database,
+    scriptType: AddressScriptType,
+    index: Int,
+    accept: () -> Boolean,
+): Boolean {
+    if (!accept()) return false
+    var saved = false
+    db.transaction {
+        if (!accept()) return@transaction
+        val fresh = loadHdWatchGaps(db)
+        val current = fresh[scriptType]
+        val bumped =
+            fresh.with(
+                scriptType,
+                WatchGaps(current.external, grownInternalCount(current.internal, index)),
+            )
+        saveHdWatchGaps(db, fresh.mergeMax(bumped))
+        saved = true
+    }
+    return saved && accept()
+}
+
 internal fun findMnemonicChangeAddress(
     watch: WatchWallet,
     pick: MnemonicChangePick,
@@ -123,11 +151,8 @@ fun buildActiveSendTx(
                     existing.address
                 } else {
                     requireAccepted(accept)
-                    val gaps = loadHdWatchGaps(db)
-                    val current = gaps[pick.scriptType]
-                    val next = WatchGaps(current.external, grownInternalCount(current.internal, pick.index))
-                    saveHdWatchGaps(db, gaps.with(pick.scriptType, next))
-                    requireAccepted(accept)
+                    val saved = growWatchGap(db, pick.scriptType, pick.index, accept)
+                    requireAccepted { saved && accept() }
                     watch = wallet.refresh()
                     findMnemonicChangeAddress(watch, pick).address
                 }

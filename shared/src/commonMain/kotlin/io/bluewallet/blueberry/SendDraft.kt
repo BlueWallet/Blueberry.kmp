@@ -20,17 +20,11 @@ internal data class SendDraft(
 }
 
 /**
- * Picker selection after the filter or the snapshot changes. Only coins the wallet still holds and
- * can spend survive, and a narrowed filter also drops hidden coins, so the weight bar, Clear, the
- * notice, and the commit all read one set.
+ * Picker selection after the filter or the snapshot changes. Coins the wallet no longer holds,
+ * and coins that are frozen or already sending, leave the set. A filter only hides rows.
  */
 internal fun pickerSelection(
     selected: Set<String>,
     liveKeys: Set<String>,
-    visibleKeys: Set<String>,
     frozenKeys: Set<String>,
-    showsAll: Boolean,
-): Set<String> {
-    val held = selected.intersect(liveKeys) - frozenKeys
-    return if (showsAll) held else held.intersect(visibleKeys)
-}
+): Set<String> = selected.intersect(liveKeys) - frozenKeys

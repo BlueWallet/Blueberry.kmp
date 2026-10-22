@@ -116,16 +116,14 @@ fun CoinsScreen(
             coinControlSnapshotFrom(snap, feeRateSatPerVb, sendingKeys)
         }
     val filtered = remember(control, filter) { filterCoinControlGroups(control, filter) }
-    val visibleKeys =
-        remember(filtered) { filtered.flatMap { group -> group.coins.map { it.key } }.toSet() }
-    LaunchedEffect(control, visibleKeys) {
+    LaunchedEffect(control) {
         val live = control.coins.map { it.key }.toSet()
         val unavailable =
             control.coins
                 .filter { !it.canSelect }
                 .map { it.key }
                 .toSet()
-        val next = pickerSelection(selectedKeys, live, visibleKeys, unavailable, showsAll = filter == CoinControlFilter.All)
+        val next = pickerSelection(selectedKeys, live, unavailable)
         if (next != selectedKeys) selectedKeys = next
     }
     val actionCoins = control.coins.filter { it.key in selectedKeys && it.canSelect }

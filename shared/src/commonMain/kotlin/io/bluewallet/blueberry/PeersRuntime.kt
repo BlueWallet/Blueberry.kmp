@@ -109,10 +109,30 @@ class PeersRuntime(
         putPending(pendingPrivateSends, id, row)
     }
 
-    /** Outpoints of sends still broadcasting or not yet confirmed. The picker must not offer them. */
+    /**
+     * Outpoints a live broadcast or an unconfirmed stored send still holds.
+     * A finished error, including cancel, keeps the row for Retry and no longer holds the coins.
+     */
     @OptIn(ExperimentalAtomicApi::class)
     fun reservedOutpoints(): Set<String> {
-        val armed = pendingSends.load().values.flatMap { it.coins } + pendingPrivateSends.load().values.flatMap { it.coins }
+        val live =
+            broadcastStore
+                .sessions()
+                .mapNotNull { session ->
+                    val id = session.snapshot.id
+                    if (id != null && broadcastJobInFlight(session.snapshot.phase)) id else null
+                }.toSet()
+        val armed =
+            pendingSends
+                .load()
+                .filter { it.key in live }
+                .values
+                .flatMap { it.coins } +
+                pendingPrivateSends
+                    .load()
+                    .filter { it.key in live }
+                    .values
+                    .flatMap { it.coins }
         val stored =
             db.sends
                 .list()

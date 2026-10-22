@@ -132,11 +132,10 @@ internal class SendFlow(
 
     val recipient: SendRecipient get() = SendRecipient(address.trim(), label.trim())
     val spendableRows: List<WalletUtxoRow>
-        get() {
-            val reserved = runtime.reservedOutpoints()
-            return snap.utxos.filter { !it.isFrozen && it.key !in reserved }
-        }
+        get() = snap.utxos.filter { !it.isFrozen && it.key !in heldOutpoints }
     val walletTotalSats: Long get() = spendableRows.sumOf { it.valueSats }
+    val coinsAllFrozen: Boolean
+        get() = snap.utxos.isNotEmpty() && snap.utxos.all { it.isFrozen }
     val amountSats: SendAmount? get() = (checkSendAmount(amount, walletTotalSats) as? SendAmountCheck.Ok)?.amount
     val selectedRows: List<WalletUtxoRow> get() = spendableRows.filter { it.key in selectedKeys }
     val selectedInputs: List<SendInputUtxo>
@@ -312,7 +311,7 @@ internal class SendFlow(
         if (amountSats == null || !coverage().covered) return
         selectionNeedsAck = false
         if (backStack.lastOrNull() == SendStep.Review) {
-            navForward = true
+            navForward = false
             step = backStack.removeLast()
         } else {
             pushStep(SendStep.Review)
@@ -346,7 +345,7 @@ internal class SendFlow(
         selectedKeys = if (key in selectedKeys) selectedKeys - key else selectedKeys + key
     }
 
-    /** Filter and snapshot trimming. The chip already told the user hidden coins leave the set. */
+    /** Filter and snapshot trimming. A filter only hides rows; the selection stays. */
     fun replaceSelection(keys: Set<String>) {
         if (keys == selectedKeys) return
         selectedKeys = keys
@@ -546,11 +545,21 @@ internal class SendFlow(
         refreshBroadcast()
         val id = privateBroadcastId ?: sessionId(ownedHex())
         val phase = if (id == null) null else runtime.broadcastStore.get(id)?.phase
-        if (phase == null || phase == "error") return false
+        val backToReview = phase == null || phase == "error"
+        if (phase == "error") releaseFailedPrivateSelection()
+        if (backToReview) return false
         leaveBroadcast(id)
         dropBuild()
         close()
         return true
+    }
+
+    /** A failed private payment is no longer signed, and coins another send still holds leave the set. */
+    private fun releaseFailedPrivateSelection() {
+        refreshHeldOutpoints()
+        dropBuild()
+        selectedKeys = selectedKeys.intersect(spendableRows.map { it.key }.toSet())
+        selectionNeedsAck = false
     }
 
     fun refreshBroadcast() {

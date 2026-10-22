@@ -71,10 +71,9 @@ internal fun SendCoinsStep(
     val selected = utxos.filter { it.key in selectedKeys && it.key !in unavailable }
     var filter by remember { mutableStateOf(CoinControlFilter.All) }
     val groups = remember(control, filter) { filterCoinControlGroups(control, filter) }
-    val visibleKeys = remember(groups) { groups.flatMap { group -> group.coins.map { it.key } }.toSet() }
-    LaunchedEffect(control, visibleKeys, filter) {
+    LaunchedEffect(control) {
         val live = control.coins.map { it.key }.toSet()
-        val next = pickerSelection(selectedKeys, live, visibleKeys, unavailable, showsAll = filter == CoinControlFilter.All)
+        val next = pickerSelection(selectedKeys, live, unavailable)
         if (next != selectedKeys) actions.onReplaceSelection(next)
     }
     val selectedCoins = control.coins.filter { it.key in selectedKeys && it.canSelect }

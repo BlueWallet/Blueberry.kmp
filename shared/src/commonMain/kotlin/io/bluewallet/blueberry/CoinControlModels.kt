@@ -555,14 +555,14 @@ fun coinControlSummaryLine(control: CoinControlSnapshot): String {
     return parts.joinToString(" · ")
 }
 
-/** Screen-reader action for a filter chip; narrowing also drops hidden coins from the selection. */
+/** Screen-reader action for a filter chip. Filtering hides rows and leaves the selection alone. */
 fun coinFilterClickLabel(
     label: String,
     count: Int,
     narrows: Boolean,
 ): String {
     val coins = if (count == 1) "1 coin" else "$count coins"
-    return if (narrows) "Show $label, $coins. Deselects hidden coins" else "Show all $coins"
+    return if (narrows) "Show $label, $coins" else "Show all $coins"
 }
 
 private fun accessibilityGroupPhrase(

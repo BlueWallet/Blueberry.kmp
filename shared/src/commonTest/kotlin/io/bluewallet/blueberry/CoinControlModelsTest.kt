@@ -264,7 +264,7 @@ class CoinControlModelsTest {
     @Test
     fun filter_chip_action_names_the_count_and_the_deselect() {
         assertEquals("Show all 11 coins", coinFilterClickLabel("All", 11, narrows = false))
-        assertEquals("Show Frozen, 1 coin. Deselects hidden coins", coinFilterClickLabel("Frozen", 1, narrows = true))
+        assertEquals("Show Frozen, 1 coin", coinFilterClickLabel("Frozen", 1, narrows = true))
     }
 
     @Test

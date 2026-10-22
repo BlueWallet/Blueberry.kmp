@@ -145,6 +145,7 @@ private fun SendStepScreen(
                 to = flow.recipient,
                 amount = flow.amount,
                 walletTotalSats = flow.walletTotalSats,
+                coinsAllFrozen = flow.coinsAllFrozen,
                 actions =
                     SendAmountActions(
                         onAmount = { flow.amount = it },
@@ -238,7 +239,7 @@ private fun SendBroadcast(flow: SendFlow) {
 @Composable
 private fun SendReview(flow: SendFlow) {
     val amount = flow.amountSats
-    val blocked = sendAmountUnavailable(flow.amount, flow.walletTotalSats)
+    val blocked = sendAmountUnavailable(flow.amount, flow.walletTotalSats, flow.coinsAllFrozen)
     if (amount == null || blocked != null) {
         SendStepFrame(
             title = "Review",

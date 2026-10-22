@@ -30,6 +30,7 @@ import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.PillButton
+import io.bluewallet.blueberry.ui.PlainPillButton
 import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.ui.TextAction
 import io.bluewallet.blueberry.ui.alwaysBounceVerticalScroll
@@ -82,6 +83,7 @@ fun TxDetailsScreen(
                         },
                     )
                 }
+                ForgetOpenSend(db = db, runtime = runtime, txid = txid, snap = snap, onForgotten = onBack)
             }
         }
     }
@@ -96,6 +98,33 @@ fun TxDetailsScreen(
         },
         onCancel = { editing = false },
     )
+}
+
+@Composable
+private fun ForgetOpenSend(
+    db: Database,
+    runtime: PeersRuntime,
+    txid: String,
+    snap: WalletTxsSnapshot,
+    onForgotten: () -> Unit,
+) {
+    val open = remember(txid, snap) { unconfirmedSendOpen(db, txid) }
+    if (!open) return
+    Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
+        Text(
+            text = "This payment has not confirmed. Forgetting it lets you spend those coins again.",
+            color = BwColors.InkMuted,
+            fontFamily = BwFontFamily,
+            fontSize = BwType.LabelSize,
+        )
+        PlainPillButton(
+            text = "Forget this payment",
+            onClick = {
+                if (abandonUnconfirmedSend(db, runtime, txid)) onForgotten()
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }
 
 @Composable

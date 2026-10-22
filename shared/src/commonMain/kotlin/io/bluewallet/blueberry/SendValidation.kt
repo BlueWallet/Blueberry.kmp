@@ -81,10 +81,12 @@ fun parseFeeRateSatPerVb(input: String): Double? {
 fun amountContinueLabel(
     input: String,
     walletTotalSats: Long,
+    coinsAllFrozen: Boolean = false,
 ): String {
     val check = checkSendAmount(input, walletTotalSats)
     return when {
         check is SendAmountCheck.Ok -> "Continue"
+        coinsAllFrozen -> "Every coin is frozen"
         walletTotalSats <= 0L -> "No spendable coins left"
         else -> "Enter an amount"
     }
@@ -94,12 +96,17 @@ fun amountContinueLabel(
 fun sendAmountUnavailable(
     input: String,
     walletTotalSats: Long,
+    coinsAllFrozen: Boolean = false,
 ): String? =
     when (checkSendAmount(input, walletTotalSats)) {
         is SendAmountCheck.Ok -> null
         SendAmountCheck.MoreThanWallet -> "The wallet can no longer cover this amount."
         SendAmountCheck.Empty ->
-            if (walletTotalSats <= 0L) "No spendable coins left." else "Enter an amount."
+            when {
+                coinsAllFrozen -> ALL_FROZEN_NOTICE
+                walletTotalSats <= 0L -> "No spendable coins left."
+                else -> "Enter an amount."
+            }
     }
 
 /** True when build/send failed because the fixed coin set cannot cover amount + fee. */

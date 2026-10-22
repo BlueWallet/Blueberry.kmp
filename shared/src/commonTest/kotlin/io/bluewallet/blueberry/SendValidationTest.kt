@@ -21,6 +21,8 @@ class SendValidationTest {
         assertEquals("No spendable coins left", amountContinueLabel("0.5", 0))
         assertEquals("Enter an amount", amountContinueLabel("", 50_000))
         assertEquals("Continue", amountContinueLabel("0.0001", 50_000))
+        assertEquals("Every coin is frozen", amountContinueLabel("0.5", 0, coinsAllFrozen = true))
+        assertEquals(ALL_FROZEN_NOTICE, sendAmountUnavailable("0.5", 0, coinsAllFrozen = true))
     }
 
     @Test
