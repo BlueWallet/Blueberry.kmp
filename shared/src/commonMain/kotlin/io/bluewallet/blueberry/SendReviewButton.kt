@@ -58,6 +58,6 @@ internal fun ReviewPrimaryButton(
 
 @Composable
 internal fun ReviewAlertText(alerts: ReviewAlerts) {
-    if (alerts.selectionNeedsAck) HelperText(SELECTION_CHANGED, error = true)
+    if (alerts.selectionNeedsAck) HelperText(alerts.selectionNotice, error = true)
     alerts.sendError?.let { HelperText(it, error = true) }
 }

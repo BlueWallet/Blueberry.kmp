@@ -62,8 +62,15 @@ fun SendScreen(
     val latestOnBack by rememberUpdatedState(onBack)
     val flow = remember { SendFlow(runtime, db, scope, close = { latestOnBack() }, initialSelectedKeys = initialSelectedKeys) }
     DisposableEffect(runtime.walletTxsStore) {
-        flow.updateSnap(runtime.walletTxsStore.get())
-        val off = runtime.walletTxsStore.subscribe { scope.launch { flow.updateSnap(runtime.walletTxsStore.get()) } }
+        val applySnap = {
+            scope.launch {
+                val own = flow.ownTxid
+                val held = withContext(Dispatchers.Default) { runtime.reservedOutpoints(own) }
+                flow.updateSnap(runtime.walletTxsStore.get(), held)
+            }
+        }
+        applySnap()
+        val off = runtime.walletTxsStore.subscribe { applySnap() }
         onDispose { off() }
     }
     LaunchedEffect(flow.selectedKeys) { onSelectedKeysChange(flow.selectedKeys) }
@@ -236,7 +243,12 @@ private fun SendBroadcast(flow: SendFlow) {
         status = status,
         actions =
             SendBroadcastActions(
-                finish = BroadcastFinishActions(onDone = flow::finish, onRetry = flow::broadcastSent),
+                finish =
+                    BroadcastFinishActions(
+                        onDone = flow::finish,
+                        onRetry = flow::broadcastSent,
+                        onStop = if (owns && broadcastCanBeStopped(flow.broadcast)) flow::stopSending else null,
+                    ),
                 onClose = flow::goBack,
                 onForget = if (owns && broadcastCanBeForgotten(flow.broadcast.phase)) flow::forgetFailed else null,
             ),
@@ -273,6 +285,7 @@ private fun SendReview(flow: SendFlow) {
                     ReviewAlerts(
                         privateSendBlock = flow.privateSendBlock,
                         selectionNeedsAck = flow.selectionNeedsAck,
+                        selectionNotice = flow.selectionNotice,
                         sendError = flow.sendError,
                     ),
             ),
@@ -317,7 +330,12 @@ private fun SendPrivate(flow: SendFlow) {
                         PrivateSendCallbacks(
                             onSigned = { flow.privateSigned = it },
                             onBroadcast = flow::privateBroadcast,
-                            finish = BroadcastFinishActions(onDone = flow::finish, onRetry = flow::privateRetry),
+                            finish =
+                                BroadcastFinishActions(
+                                    onDone = flow::finish,
+                                    onRetry = flow::privateRetry,
+                                    onStop = if (broadcastCanBeStopped(flow.broadcast)) flow::stopSending else null,
+                                ),
                             sign = flow::signPrivate,
                         ),
                 ),

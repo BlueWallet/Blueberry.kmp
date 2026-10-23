@@ -10,6 +10,7 @@ import io.bluewallet.blueberry.bus.BroadcastHandedOffPayload
 import io.bluewallet.blueberry.bus.BroadcastPhase
 import io.bluewallet.blueberry.bus.BroadcastProgressPayload
 import io.bluewallet.blueberry.bus.BroadcastRequestPayload
+import io.bluewallet.blueberry.bus.BroadcastStopPayload
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.ModuleStatus
 import io.bluewallet.blueberry.bus.ModuleStatusPayload
@@ -53,6 +54,7 @@ data class BroadcastModuleOptions(
     val maxAttempts: Int = MAX_ATTEMPTS_DEFAULT,
     val dialerAttempts: Int = DIALER_ATTEMPTS_DEFAULT,
     val peerWaitPollMs: Long = 500,
+    val peerWaitTimeoutMs: Long = 120_000,
     val dialTimeoutMs: Long = 45_000,
     val handshakeTimeoutMs: Long = 15_000,
     val ackTimeoutMs: Long = 15_000,
@@ -97,6 +99,12 @@ private const val PEER_REJECTED = "peer rejected transaction"
 /** The error a job reports when the app stops before any node was given the transaction. */
 const val BROADCAST_STOPPED = "The app stopped before any node got it."
 
+/** The error a job reports when the user stops it before any node was given the transaction. */
+const val BROADCAST_CANCELLED = "Stopped before any node got it."
+
+/** The error a job reports when no BIP324 node shows up within the wait. */
+const val BROADCAST_NO_PEERS = "No Bitcoin nodes found. Check the connection and retry."
+
 private fun displayTxid(txHex: String): String = internalHexToDisplayHex(bytesToHex(transactionId(decodeBroadcastTx(txHex))))
 
 fun createBroadcastModule(
@@ -111,7 +119,16 @@ fun createBroadcastModule(
 
     val stopped = AtomicBoolean(true)
     var unsubRequest: (() -> Unit)? = null
+    var unsubStop: (() -> Unit)? = null
     val jobs = AtomicReference<Map<String, Job>>(emptyMap())
+    val handedIds = AtomicReference<Set<String>>(emptySet())
+
+    fun updateHanded(transform: (Set<String>) -> Set<String>) {
+        while (true) {
+            val cur = handedIds.load()
+            if (handedIds.compareAndSet(cur, transform(cur))) return
+        }
+    }
     var scope: CoroutineScope? = null
 
     fun putJob(
@@ -138,14 +155,13 @@ fun createBroadcastModule(
     fun alivePeers(limit: Int): List<Peer> = ctx.db.peers.listAliveWithServices(NODE_P2P_V2, limit)
 
     suspend fun waitForAlivePeers(job: Job): Int {
-        var loggedWait = false
+        var waitedMs = 0L
         while (alivePeers(1).isEmpty()) {
             job.ensureActive()
-            if (!loggedWait) {
-                log("broadcast", "waiting-peers")
-                loggedWait = true
-            }
+            if (waitedMs == 0L) log("broadcast", "waiting-peers")
+            check(waitedMs < options.peerWaitTimeoutMs) { BROADCAST_NO_PEERS }
             delay(options.peerWaitPollMs)
+            waitedMs += options.peerWaitPollMs
         }
         return alivePeers(ALIVE_PEER_PICK_LIMIT).size
     }
@@ -358,7 +374,11 @@ fun createBroadcastModule(
             { phase, peer, detail, percent, stage ->
                 emitProgress(id, attemptBudget, attemptsUsed, phase, peer, detail, percent, stage)
             }
-        val ledger = PeerLedger { ctx.bus.emit(Event.BroadcastHandedOff, BroadcastHandedOffPayload(id)) }
+        val ledger =
+            PeerLedger {
+                updateHanded { it + id }
+                ctx.bus.emit(Event.BroadcastHandedOff, BroadcastHandedOffPayload(id))
+            }
         val failures = mutableListOf<String>()
         try {
             log("broadcast", "start id=$id txid=${displayTxid(txHex)}")
@@ -412,7 +432,10 @@ fun createBroadcastModule(
             )
             unsubRequest =
                 ctx.bus.on(Event.BroadcastRequest) { payload: BroadcastRequestPayload ->
-                    if (stopped.load()) return@on
+                    if (stopped.load()) {
+                        ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Error(payload.id, BROADCAST_STOPPED))
+                        return@on
+                    }
                     if (jobs.load()[payload.id]?.isActive == true) {
                         log("broadcast", "reject id=${payload.id} already-in-progress")
                         return@on
@@ -421,8 +444,19 @@ fun createBroadcastModule(
                         checkNotNull(scope).launch {
                             runBroadcast(payload.id, payload.txHex, payload.excludePeers)
                         }
+                    updateHanded { it - payload.id }
                     putJob(payload.id, job)
                     job.invokeOnCompletion { takeJob(payload.id, job) }
+                }
+            unsubStop =
+                ctx.bus.on(Event.BroadcastStop) { payload: BroadcastStopPayload ->
+                    val job = jobs.load()[payload.id]
+                    if (job == null || payload.id in handedIds.load()) {
+                        log("broadcast", "stop ignored id=${payload.id}")
+                        return@on
+                    }
+                    log("broadcast", "stop id=${payload.id}")
+                    job.cancel(CancellationException(BROADCAST_CANCELLED))
                 }
         }
 
@@ -430,6 +464,8 @@ fun createBroadcastModule(
             stopped.store(true)
             unsubRequest?.invoke()
             unsubRequest = null
+            unsubStop?.invoke()
+            unsubStop = null
             val running = jobs.load().values.toList()
             running.forEach { it.cancel(CancellationException(BROADCAST_STOPPED)) }
             runBlocking {

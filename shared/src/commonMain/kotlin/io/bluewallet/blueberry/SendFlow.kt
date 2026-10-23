@@ -5,7 +5,6 @@ package io.bluewallet.blueberry
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.parse.SendBuildParams
 import io.bluewallet.blueberry.parse.buildActiveSendTx
 import io.bluewallet.blueberry.parse.savePaymentLabel
@@ -43,6 +42,7 @@ internal fun stepAfterAmount(
 ): SendStep = if (selectedKeys.isNotEmpty() && covered) SendStep.Review else SendStep.Coins
 
 internal const val SELECTION_CHANGED = "Some selected coins are frozen or no longer available. Review the selection."
+internal const val SELECTION_HELD = "Some selected coins are in another payment that is still sending. Review the selection."
 internal const val WALLET_NOT_LOADED = "Wallet isn't loaded yet."
 internal const val BROADCAST_BUSY = "A broadcast is already running. Wait for it to finish."
 internal const val DRAFT_MISMATCH = "This transaction no longer matches the coins, amount, or fee on screen."
@@ -99,11 +99,15 @@ internal class SendFlow(
     var privateSession by mutableStateOf<PrivateSendSession?>(null)
     var privateSigned by mutableStateOf<SignedSendResult?>(null)
     var snap by mutableStateOf(runtime.walletTxsStore.get())
-    var heldOutpoints by mutableStateOf(runtime.reservedOutpoints())
+    var heldOutpoints by mutableStateOf(emptySet<String>())
         private set
     var broadcast by mutableStateOf(BroadcastSnapshot())
     var changeScript by mutableStateOf(placeholderOutputScript(AddressScriptType.P2WPKH))
     var selectionNeedsAck by mutableStateOf(false)
+        private set
+
+    /** Why the selection shrank: another payment took coins, or they were frozen or spent. */
+    var selectionNotice by mutableStateOf(SELECTION_CHANGED)
         private set
     var sendError by mutableStateOf<String?>(null)
         private set
@@ -323,9 +327,12 @@ internal class SendFlow(
         heldOutpoints = runtime.reservedOutpoints(ownTxid)
     }
 
-    /** Keeps the selection to coins the wallet still holds and can spend. */
-    fun updateSnap(next: WalletTxsSnapshot) {
-        refreshHeldOutpoints()
+    /** Keeps the selection to coins the wallet still holds and can spend. The screen reads [held] off the UI thread. */
+    fun updateSnap(
+        next: WalletTxsSnapshot,
+        held: Set<String> = runtime.reservedOutpoints(ownTxid),
+    ) {
+        heldOutpoints = held
         val payable = amountSats
         val before = stampOrNull()
         snap = next
@@ -344,6 +351,7 @@ internal class SendFlow(
     private fun trimToSpendable(): Boolean {
         val kept = selectedKeys.intersect(spendableRows.map { it.key }.toSet())
         if (kept == selectedKeys) return false
+        selectionNotice = if ((selectedKeys - kept).any { it in heldOutpoints }) SELECTION_HELD else SELECTION_CHANGED
         selectedKeys = kept
         selectionNeedsAck = true
         dropBuild()
@@ -431,8 +439,8 @@ internal class SendFlow(
         broadcastId = req.id
         sendError = null
         pushStep(SendStep.Broadcast)
+        requestBroadcast(runtime, req)
         refreshBroadcast()
-        runtime.bus.emit(Event.BroadcastRequest, req)
     }
 
     private fun commit(
@@ -454,18 +462,25 @@ internal class SendFlow(
         }
         val req = if (id == null) null else rebroadcast(runtime.broadcastStore, id)
         if (req == null) {
-            if (id != null) sendError = BROADCAST_BUSY
+            refreshBroadcast()
+            if (id != null && broadcast.phase == null) sendError = BROADCAST_BUSY
             return
         }
         sendError = null
+        requestBroadcast(runtime, req)
         refreshBroadcast()
-        runtime.bus.emit(Event.BroadcastRequest, req)
     }
 
     fun finish() {
         leaveBroadcast(if (step == SendStep.PrivateSend) privateBroadcastId else broadcastId)
         if (step == SendStep.PrivateSend) dropBuild()
         close()
+    }
+
+    /** Stops this screen's broadcast while no node has it. It then fails, freeing its coins for Retry or Forget. */
+    fun stopSending() {
+        broadcast.id?.let { stopBroadcast(runtime, it) }
+        refreshBroadcast()
     }
 
     /** Drops a finished failure from the list. A live or sent job stays. */
@@ -518,14 +533,15 @@ internal class SendFlow(
                 runtime.armPrivateSendPersist(id, row)
             }
         if (req == null) {
-            sendError = BROADCAST_BUSY
+            privateBroadcastId = sessionId(signed.txHex) ?: privateBroadcastId
+            refreshBroadcast()
             return
         }
         privateBroadcastId = req.id
         feeRate?.let { saveSendFeeRate(db, it) }
         sendError = null
+        requestBroadcast(runtime, req)
         refreshBroadcast()
-        runtime.bus.emit(Event.BroadcastRequest, req)
     }
 
     fun privateRetry() {
@@ -537,13 +553,14 @@ internal class SendFlow(
         }
         val req = if (id == null) null else rebroadcast(runtime.broadcastStore, id)
         if (req == null) {
-            if (privateSigned != null) sendError = BROADCAST_BUSY
+            refreshBroadcast()
+            if (privateSigned != null && broadcast.phase == null) sendError = BROADCAST_BUSY
             return
         }
         privateBroadcastId = req.id
         sendError = null
+        requestBroadcast(runtime, req)
         refreshBroadcast()
-        runtime.bus.emit(Event.BroadcastRequest, req)
     }
 
     /** Back or swipe. A live broadcast or private send closes and leaves its job running. */

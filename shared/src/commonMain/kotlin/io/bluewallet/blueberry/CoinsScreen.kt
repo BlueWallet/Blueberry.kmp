@@ -91,7 +91,7 @@ fun CoinsScreen(
     feeRateSatPerVb: Double? = null,
 ) {
     var snap by remember { mutableStateOf(runtime.walletTxsStore.get()) }
-    var sendingKeys by remember { mutableStateOf(runtime.reservedOutpoints()) }
+    var sendingKeys by remember { mutableStateOf(emptySet<String>()) }
     var selectedKeys by remember { mutableStateOf(initialSelectedKeys) }
     var filter by remember { mutableStateOf(CoinControlFilter.All) }
     var editingKey by remember { mutableStateOf<String?>(null) }
@@ -100,13 +100,15 @@ fun CoinsScreen(
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     DisposableEffect(runtime.walletTxsStore) {
-        val off =
-            runtime.walletTxsStore.subscribe {
-                scope.launch {
-                    snap = runtime.walletTxsStore.get()
-                    sendingKeys = withContext(Dispatchers.Default) { runtime.reservedOutpoints() }
-                }
+        val refresh = {
+            scope.launch {
+                val held = withContext(Dispatchers.Default) { runtime.reservedOutpoints() }
+                snap = runtime.walletTxsStore.get()
+                sendingKeys = held
             }
+        }
+        refresh()
+        val off = runtime.walletTxsStore.subscribe { refresh() }
         onDispose { off() }
     }
     DisposableEffect(runtime.broadcastStore) {

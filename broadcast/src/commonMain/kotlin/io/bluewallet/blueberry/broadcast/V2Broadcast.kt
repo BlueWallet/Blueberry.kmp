@@ -71,6 +71,50 @@ private fun inventoryMentionsTx(
         base == MSG_TX && equalBytes(item.hash, txidInternal)
     }
 
+/** BIP61 `duplicate`: the peer already holds the transaction. */
+private const val REJECT_DUPLICATE = 0x12
+private const val COMPACT_SIZE_MAX_INLINE = 0xfd
+private const val HASH_BYTES = 32
+
+internal enum class RejectVerdict { Refused, AlreadyHave, Unrelated }
+
+private class WireReader(
+    private val bytes: ByteArray,
+) {
+    private var at = 0
+
+    fun byte(): Int? =
+        bytes
+            .getOrNull(at)
+            ?.toInt()
+            ?.and(0xff)
+            ?.also { at++ }
+
+    fun take(n: Int): ByteArray? = if (n in 0..bytes.size - at) bytes.copyOfRange(at, at + n).also { at += n } else null
+
+    fun varStr(): String? = byte()?.takeIf { it < COMPACT_SIZE_MAX_INLINE }?.let { take(it) }?.decodeToString()
+}
+
+/** Reads a `reject` payload: message, code, reason, then the txid it refers to. */
+internal fun rejectVerdict(
+    payload: ByteArray,
+    txidInternal: ByteArray,
+): RejectVerdict {
+    val reader = WireReader(payload)
+    val message = reader.varStr()
+    val code = reader.byte()
+    reader.varStr()
+    val hash = reader.take(HASH_BYTES)
+    val aboutTx = message == "tx" && code != null && (hash == null || equalBytes(hash, txidInternal))
+    return when {
+        !aboutTx -> RejectVerdict.Unrelated
+        code == REJECT_DUPLICATE -> RejectVerdict.AlreadyHave
+        else -> RejectVerdict.Refused
+    }
+}
+
+private fun rejectPayload(msg: Message): ByteArray? = (msg as? Message.Opaque)?.takeIf { (it.type as? WireMessageType.Long)?.command == "reject" }?.payload
+
 private fun describeV2Command(msg: Message): String {
     if (msg !is Message.Opaque) return msg.command
     return when (val type = msg.type) {
@@ -134,12 +178,14 @@ suspend fun broadcastTxV2(
                     yield()
                     val msg = session.readMessage()
                     log("broadcast", "v2 recv command=${describeV2Command(msg)}")
-                    if (msg is Message.Opaque &&
-                        msg.type is WireMessageType.Long &&
-                        (msg.type as WireMessageType.Long).command == "reject"
-                    ) {
+                    val verdict = rejectPayload(msg)?.let { rejectVerdict(it, txidInternal) }
+                    if (verdict == RejectVerdict.Refused) {
                         logError("broadcast", "v2 reject")
                         throw IllegalStateException("peer rejected transaction")
+                    }
+                    if (verdict == RejectVerdict.AlreadyHave) {
+                        log("broadcast", "v2 reject duplicate (accepted)")
+                        return@withTimeout
                     }
                     if ((msg is Message.Inv || msg is Message.GetData)) {
                         val inventory =

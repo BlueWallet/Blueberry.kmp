@@ -10,7 +10,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.backhandler.BackHandler
-import io.bluewallet.blueberry.bus.Event
 import kotlinx.coroutines.launch
 
 /** The broadcast screen opened from the transaction list, with no send wizard under it. */
@@ -57,6 +56,7 @@ fun BroadcastScreen(
                     BroadcastFinishActions(
                         onDone = { leave() },
                         onRetry = { retryNote = retryBroadcast(runtime, id) },
+                        onStop = if (broadcastCanBeStopped(snap)) ({ stopBroadcast(runtime, id) }) else null,
                     ),
                 onClose = { leave() },
                 onForget =
@@ -87,6 +87,7 @@ private fun retryBroadcast(
             runtime.reservedOutpoints(),
         )
     val req = if (blocked != null) null else rebroadcast(runtime.broadcastStore, id)
-    if (blocked == null && req != null) runtime.bus.emit(Event.BroadcastRequest, req)
-    return blocked ?: if (req == null) BROADCAST_BUSY else null
+    if (blocked == null && req != null) requestBroadcast(runtime, req)
+    val alreadyRunning = runtime.broadcastStore.get(id)?.phase != null
+    return blocked ?: if (req == null && !alreadyRunning) BROADCAST_BUSY else null
 }

@@ -19,6 +19,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.bluewallet.blueberry.parse.shortTxid
@@ -36,6 +37,8 @@ import io.bluewallet.blueberry.ui.ToPill
 class BroadcastFinishActions(
     val onDone: () -> Unit,
     val onRetry: () -> Unit,
+    /** Set only while the job runs and no node has been given the transaction. */
+    val onStop: (() -> Unit)? = null,
 )
 
 internal class SendBroadcastActions(
@@ -69,7 +72,7 @@ internal fun SendBroadcastStep(
                 BroadcastTone.Sent ->
                     TintedPillButton(text = "Done", onClick = actions.finish.onDone, modifier = Modifier.fillMaxWidth())
                 BroadcastTone.Failed -> FailedBroadcastActions(actions)
-                BroadcastTone.Working -> HelperText("You can close this screen. Sending continues.")
+                BroadcastTone.Working -> WorkingBroadcastActions(actions.finish.onStop)
             }
         },
     ) {
@@ -78,6 +81,24 @@ internal fun SendBroadcastStep(
         BroadcastStatusCard(status)
         if (status.tone == BroadcastTone.Sent) ReceiptCard(receipt)
     }
+}
+
+@Composable
+private fun WorkingBroadcastActions(onStop: (() -> Unit)?) {
+    Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
+        HelperText(
+            "You can close this screen. Sending continues.",
+            modifier = Modifier.fillMaxWidth(),
+            align = TextAlign.Center,
+        )
+        if (onStop != null) StopSendingButton(onStop)
+    }
+}
+
+/** Stops a broadcast before any node has it. Shared by Send and Private Send. */
+@Composable
+internal fun StopSendingButton(onStop: () -> Unit) {
+    TintedPillButton(text = "Stop sending", onClick = onStop, modifier = Modifier.fillMaxWidth())
 }
 
 @Composable

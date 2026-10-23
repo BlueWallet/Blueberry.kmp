@@ -131,7 +131,7 @@ class V2BroadcastTest {
             val peer =
                 async {
                     val (protocol, tx) = handshakeThenTx(server)
-                    protocol.writeMessage(Message.Opaque(WireMessageType.Long("reject"), byteArrayOf(0)))
+                    protocol.writeMessage(Message.Opaque(WireMessageType.Long("reject"), txRejectPayload(txHex())))
                     tx
                 }
             val error =
@@ -139,6 +139,26 @@ class V2BroadcastTest {
                     broadcastTxV2(client, txHex(), BroadcastTxV2Options(port = 8333, name = APP_NAME, version = APP_VERSION))
                 }
             assertTrue(error.message.orEmpty().contains("reject", ignoreCase = true))
+            peer.await()
+            client.close()
+            server.close()
+        }
+
+    @Test
+    fun a_duplicate_reject_counts_as_accepted() =
+        runBlocking {
+            val (client, server) = pairedByteDuplexes()
+            val peer =
+                async {
+                    val (protocol, tx) = handshakeThenTx(server)
+                    protocol.writeMessage(Message.Opaque(WireMessageType.Long("reject"), txRejectPayload(txHex(), 0x12)))
+                    tx
+                }
+            broadcastTxV2(
+                client,
+                txHex(),
+                BroadcastTxV2Options(port = 8333, name = APP_NAME, version = APP_VERSION, ackTimeoutMs = 60_000),
+            )
             peer.await()
             client.close()
             server.close()

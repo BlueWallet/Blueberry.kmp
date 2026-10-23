@@ -90,7 +90,7 @@ internal fun PrivateSendDeposit(
                     PillButton(text = "Done", onClick = finish.onDone, modifier = Modifier.fillMaxWidth(), pressable = true)
                 BroadcastTone.Failed ->
                     PillButton(text = "Retry", onClick = finish.onRetry, modifier = Modifier.fillMaxWidth(), pressable = true)
-                BroadcastTone.Working -> {}
+                BroadcastTone.Working -> finish.onStop?.let { StopSendingButton(it) }
             }
         }
         return

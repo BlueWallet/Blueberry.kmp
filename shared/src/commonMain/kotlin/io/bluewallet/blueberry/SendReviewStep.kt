@@ -67,6 +67,17 @@ internal sealed class ReviewBuild {
     ) : ReviewBuild()
 }
 
+/** Until the build prices the fee, Max shows the selected coins it will spend rather than zero. */
+internal fun reviewHeroSats(
+    paidSats: Long?,
+    amount: SendAmount,
+    coins: List<WalletUtxoRow>,
+): Long =
+    paidSats ?: when (amount) {
+        is SendAmount.Exact -> amount.sats
+        SendAmount.Max -> coins.sumOf { it.valueSats }
+    }
+
 internal fun ReviewBuild.isShort(): Boolean = this is ReviewBuild.Failed && message.contains("insufficient", ignoreCase = true)
 
 internal class SendReviewActions(
@@ -91,6 +102,7 @@ internal class ReviewAlerts(
     /** Why RocketX can't be used with this wallet, or null when it can. */
     val privateSendBlock: String? = null,
     val selectionNeedsAck: Boolean = false,
+    val selectionNotice: String = SELECTION_CHANGED,
     val sendError: String? = null,
 )
 
@@ -117,7 +129,7 @@ internal fun SendReviewStep(
     ) {
         if (state.to.label.isNotBlank()) ToPill(label = state.to.label, address = "")
         Box(modifier = Modifier.alpha(if (summary == null) 0.4f else 1f)) {
-            AmountHero(sats = summary?.paidSats ?: (state.amount as? SendAmount.Exact)?.sats ?: 0L)
+            AmountHero(sats = reviewHeroSats(summary?.paidSats, state.amount, state.coins))
         }
         AddressGroups(
             address = state.to.address,

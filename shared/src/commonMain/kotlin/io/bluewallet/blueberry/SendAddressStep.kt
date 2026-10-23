@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.bluewallet.blueberry.ui.AddressGroups
 import io.bluewallet.blueberry.ui.BwColors
@@ -91,10 +92,12 @@ internal fun HelperText(
     text: String,
     modifier: Modifier = Modifier,
     error: Boolean = false,
+    align: TextAlign = TextAlign.Start,
 ) {
     Text(
         text = text,
         modifier = modifier,
+        textAlign = align,
         color = if (error) BwColors.Danger else BwColors.InkQuiet,
         fontFamily = BwFontFamily,
         fontSize = BwType.LabelSize,

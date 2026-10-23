@@ -1,6 +1,8 @@
 package io.bluewallet.blueberry
 
 import io.bluewallet.blueberry.bus.BroadcastDonePayload
+import io.bluewallet.blueberry.bus.BroadcastRequestPayload
+import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.parse.SendBuildParams
 import io.bluewallet.blueberry.parse.buildActiveSendTx
 import io.bluewallet.blueberry.storage.Database
@@ -66,11 +68,13 @@ class SendFlowTest {
     @Test
     fun close_on_the_broadcast_step_leaves_the_job_running() =
         runFlow { _, runtime, flow ->
+            val requests = listenForRequests(runtime)
             prime(flow, coin("11", 100_000_000))
             flow.build = ReviewBuild.Built(signed("aa"), flow.draftStamp())
             flow.send()
             assertEquals(SendStep.Broadcast, flow.step)
             val id = flow.broadcast.id
+            assertEquals(listOf(id), requests.map { it.id })
             flow.goBack()
             assertTrue(closed)
             assertEquals("starting", runtime.broadcastStore.get(id!!)?.phase)
@@ -526,11 +530,18 @@ class SendFlowTest {
 
 private const val ADDRESS = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
 
-private class CloseGate {
+internal class CloseGate {
     var closed = false
 }
 
-private fun runFlow(body: suspend CloseGate.(Database, PeersRuntime, SendFlow) -> Unit) {
+/** Stands in for the broadcast module: takes every request without running it. */
+internal fun listenForRequests(runtime: PeersRuntime): List<BroadcastRequestPayload> {
+    val requests = mutableListOf<BroadcastRequestPayload>()
+    runtime.bus.on(Event.BroadcastRequest) { requests += it }
+    return requests
+}
+
+internal fun runFlow(body: suspend CloseGate.(Database, PeersRuntime, SendFlow) -> Unit) {
     val db = createSqliteDatabase(":memory:")
     val runtime = PeersRuntime(db)
     val gate = CloseGate()
@@ -545,7 +556,7 @@ private fun runFlow(body: suspend CloseGate.(Database, PeersRuntime, SendFlow) -
     }
 }
 
-private fun prime(
+internal fun prime(
     flow: SendFlow,
     vararg coins: WalletUtxoRow,
 ) {
@@ -557,7 +568,7 @@ private fun prime(
     flow.selectedKeys = coins.map { it.key }.toSet()
 }
 
-private fun coin(
+internal fun coin(
     id: String,
     sats: Long,
 ): WalletUtxoRow {
@@ -578,7 +589,7 @@ private fun coin(
     )
 }
 
-private fun signed(hex: String = "aa") = SignedSendResult(hex, "ab".repeat(32), 100, 110, 0, emptyList())
+internal fun signed(hex: String = "aa") = SignedSendResult(hex, "ab".repeat(32), 100, 110, 0, emptyList())
 
 private class IdleWallet : Wallet {
     override fun snapshot(): WatchWallet = error("unused")

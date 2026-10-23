@@ -20,6 +20,8 @@ data class BroadcastSnapshot(
     val percent: Int? = null,
     val stage: String? = null,
     val triedPeers: Set<String> = emptySet(),
+    /** A node was given the transaction during this run, so it can no longer be stopped. */
+    val handedOff: Boolean = false,
 )
 
 /** What the transaction list and the broadcast screen need after Send has closed. */
@@ -51,6 +53,8 @@ interface BroadcastStore {
     fun applyProgress(payload: BroadcastProgressPayload)
 
     fun applyDone(payload: BroadcastDonePayload)
+
+    fun markHandedOff(id: String)
 
     fun dismiss(id: String)
 
@@ -123,6 +127,14 @@ private class BroadcastStoreImpl : BroadcastStore {
         }
     }
 
+    override fun markHandedOff(id: String) {
+        update { map ->
+            val cur = map[id] ?: return@update map
+            if (cur.snapshot.handedOff) return@update map
+            map + (id to cur.copy(snapshot = cur.snapshot.copy(handedOff = true)))
+        }
+    }
+
     override fun dismiss(id: String) {
         update { it - id }
     }
@@ -183,7 +195,11 @@ fun bindBroadcastEvents(
             store.applyDone(it)
             onDone(it.id)
         }
-    val c = bus.on(Event.BroadcastHandedOff) { onHandedOff(it.id) }
+    val c =
+        bus.on(Event.BroadcastHandedOff) {
+            store.markHandedOff(it.id)
+            onHandedOff(it.id)
+        }
     return {
         a()
         b()

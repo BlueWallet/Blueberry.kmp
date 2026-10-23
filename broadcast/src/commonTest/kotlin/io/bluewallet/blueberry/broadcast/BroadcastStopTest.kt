@@ -6,6 +6,7 @@ import io.bluewallet.bip324.WireMessageType
 import io.bluewallet.bip324.pairedByteDuplexes
 import io.bluewallet.blueberry.bus.BroadcastDonePayload
 import io.bluewallet.blueberry.bus.BroadcastRequestPayload
+import io.bluewallet.blueberry.bus.BroadcastStopPayload
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.createMessageBus
 import io.bluewallet.blueberry.peers.modules.ModuleContext
@@ -20,11 +21,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /** A stop only fails a job when no node was given the transaction. */
+@OptIn(ExperimentalAtomicApi::class)
 class BroadcastStopTest {
     @Test
     fun stop_while_waiting_for_alive_peers() =
@@ -60,12 +64,103 @@ class BroadcastStopTest {
         }
 
     @Test
+    fun stop_before_any_node_has_it_fails_the_job() =
+        runBlocking {
+            val db = createSqliteDatabase(":memory:")
+            val bus = createMessageBus()
+            val done = CompletableDeferred<BroadcastDonePayload>()
+            bus.on(Event.BroadcastDone) { done.complete(it) }
+            val mod =
+                createBroadcastModule(
+                    ModuleContext(bus, db),
+                    BroadcastModuleOptions(peerWaitPollMs = 10, connect = { _, _, _ -> error("should not dial") }),
+                )
+            mod.start()
+            bus.emit(Event.BroadcastRequest, BroadcastRequestPayload("early", sampleTxHex()))
+            delay(25)
+            assertTrue(bus.emit(Event.BroadcastStop, BroadcastStopPayload("early")))
+            val result = withTimeout(5_000) { done.await() } as BroadcastDonePayload.Error
+            assertEquals("early", result.id)
+            assertEquals(BROADCAST_CANCELLED, result.error)
+            mod.stop()
+            db.close()
+        }
+
+    @Test
+    fun stop_after_a_hand_off_is_ignored() =
+        runBlocking {
+            val db = createSqliteDatabase(":memory:")
+            upsertAlive(db, "1.1.1.1")
+            val bus = createMessageBus()
+            val done = CompletableDeferred<BroadcastDonePayload>()
+            bus.on(Event.BroadcastDone) { done.complete(it) }
+            val handed = CompletableDeferred<Unit>()
+            bus.on(Event.BroadcastHandedOff) { handed.complete(Unit) }
+            val mod =
+                createBroadcastModule(
+                    ModuleContext(bus, db),
+                    BroadcastModuleOptions(
+                        peerWaitPollMs = 10,
+                        ackTimeoutMs = 60_000,
+                        connect = { _, _, _ ->
+                            val (client, server) = pairedByteDuplexes()
+                            CoroutineScope(Job() + Dispatchers.Default).launch {
+                                acceptTx(server)
+                                suspendCancellableCoroutine<Unit> { }
+                            }
+                            client
+                        },
+                    ),
+                )
+            mod.start()
+            bus.emit(Event.BroadcastRequest, BroadcastRequestPayload("late", sampleTxHex()))
+            withTimeout(5_000) { handed.await() }
+            bus.emit(Event.BroadcastStop, BroadcastStopPayload("late"))
+            delay(50)
+            assertTrue(!done.isCompleted)
+            mod.stop()
+            val result = withTimeout(5_000) { done.await() }
+            assertTrue(result is BroadcastDonePayload.Ok)
+            db.close()
+        }
+
+    @Test
+    fun no_v2_peer_within_the_wait_fails_the_job() =
+        runBlocking {
+            val db = createSqliteDatabase(":memory:")
+            val bus = createMessageBus()
+            val done = CompletableDeferred<BroadcastDonePayload>()
+            bus.on(Event.BroadcastDone) { done.complete(it) }
+            val mod =
+                createBroadcastModule(
+                    ModuleContext(bus, db),
+                    BroadcastModuleOptions(
+                        peerWaitPollMs = 10,
+                        peerWaitTimeoutMs = 30,
+                        connect = { _, _, _ -> error("should not dial") },
+                    ),
+                )
+            mod.start()
+            bus.emit(Event.BroadcastRequest, BroadcastRequestPayload("lonely", sampleTxHex()))
+            val result = withTimeout(5_000) { done.await() } as BroadcastDonePayload.Error
+            assertEquals("lonely", result.id)
+            assertEquals(BROADCAST_NO_PEERS, result.error)
+            mod.stop()
+            db.close()
+        }
+
+    @Test
     fun second_request_runs_beside_the_first() =
         runBlocking {
             val db = createSqliteDatabase(":memory:")
             val bus = createMessageBus()
-            val done = mutableListOf<BroadcastDonePayload>()
-            bus.on(Event.BroadcastDone) { done += it }
+            val done = AtomicReference<List<BroadcastDonePayload>>(emptyList())
+            bus.on(Event.BroadcastDone) { payload ->
+                while (true) {
+                    val cur = done.load()
+                    if (done.compareAndSet(cur, cur + payload)) break
+                }
+            }
             val mod =
                 createBroadcastModule(
                     ModuleContext(bus, db),
@@ -78,9 +173,9 @@ class BroadcastStopTest {
             bus.emit(Event.BroadcastRequest, BroadcastRequestPayload("a", sampleTxHex()))
             bus.emit(Event.BroadcastRequest, BroadcastRequestPayload("b", sampleTxHex()))
             delay(40)
-            assertEquals(0, done.size)
+            assertEquals(0, done.load().size)
             mod.stop()
-            assertEquals(setOf("a", "b"), done.map { it.id }.toSet())
+            assertEquals(setOf("a", "b"), done.load().map { it.id }.toSet())
             db.close()
         }
 
@@ -202,7 +297,9 @@ class BroadcastStopTest {
                             val (client, server) = pairedByteDuplexes()
                             CoroutineScope(Job() + Dispatchers.Default).launch {
                                 acceptTx(server) { protocol ->
-                                    protocol.writeMessage(Message.Opaque(WireMessageType.Long("reject"), byteArrayOf(0)))
+                                    protocol.writeMessage(
+                                        Message.Opaque(WireMessageType.Long("reject"), txRejectPayload(sampleTxHex())),
+                                    )
                                 }
                             }
                             client
