@@ -91,7 +91,9 @@ fun CoinsScreen(
     feeRateSatPerVb: Double? = null,
 ) {
     var snap by remember { mutableStateOf(runtime.walletTxsStore.get()) }
-    var sendingKeys by remember { mutableStateOf(emptySet<String>()) }
+    val heldAtOpen = remember { runtime.reservedOutpointsNow() }
+    var sendingKeys by remember { mutableStateOf(heldAtOpen.keys) }
+    var sendingReady by remember { mutableStateOf(heldAtOpen.complete) }
     var selectedKeys by remember { mutableStateOf(initialSelectedKeys) }
     var filter by remember { mutableStateOf(CoinControlFilter.All) }
     var editingKey by remember { mutableStateOf<String?>(null) }
@@ -105,6 +107,7 @@ fun CoinsScreen(
                 val held = withContext(Dispatchers.Default) { runtime.reservedOutpoints() }
                 snap = runtime.walletTxsStore.get()
                 sendingKeys = held
+                sendingReady = true
             }
         }
         refresh()
@@ -120,6 +123,7 @@ fun CoinsScreen(
                     if (ids == seenLive) return@launch
                     seenLive = ids
                     sendingKeys = withContext(Dispatchers.Default) { runtime.reservedOutpoints() }
+                    sendingReady = true
                 }
             }
         onDispose { off() }
@@ -304,7 +308,8 @@ fun CoinsScreen(
                             },
                     notice = notice,
                     selectedCoins = actionCoins,
-                    onPrimary = { onSendWithCoins(actionCoins.map { it.key }.toSet()) },
+                    ready = sendingReady,
+                    onPrimary = { if (sendingReady) onSendWithCoins(actionCoins.map { it.key }.toSet()) },
                 )
             }
             AnimatedVisibility(
@@ -396,6 +401,7 @@ private fun CoinControlSummary(control: CoinControlSnapshot) {
 private fun CoinControlBottomBar(
     notice: PrivacyNotice,
     selectedCoins: List<CoinControlCoin>,
+    ready: Boolean,
     onPrimary: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -412,7 +418,7 @@ private fun CoinControlBottomBar(
         TintedPillButton(
             text = "Send $k $word · $amount",
             onClick = onPrimary,
-            enabled = k > 0,
+            enabled = k > 0 && ready,
             modifier = Modifier.fillMaxWidth(),
         )
     }

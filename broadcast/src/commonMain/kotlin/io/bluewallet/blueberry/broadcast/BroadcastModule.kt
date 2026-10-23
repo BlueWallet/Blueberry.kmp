@@ -77,7 +77,8 @@ private fun formatError(err: Throwable): String = err.message?.takeIf { it.isNot
 
 /**
  * Peers that acknowledged the transaction, and peers that were given the raw transaction.
- * Only an explicit reject takes a peer back off the handed list.
+ * A peer stays on the handed list even if it rejects: a policy reject does not prove the transaction is gone,
+ * so once written it may still relay and confirm.
  */
 private class PeerLedger(
     private val onFirstHandOff: () -> Unit = {},
@@ -93,8 +94,6 @@ private class PeerLedger(
 
     fun summary(): String? = (accepted + handed).takeIf { it.isNotEmpty() }?.joinToString(", ")
 }
-
-private const val PEER_REJECTED = "peer rejected transaction"
 
 /** The error a job reports when the app stops before any node was given the transaction. */
 const val BROADCAST_STOPPED = "The app stopped before any node got it."
@@ -247,7 +246,6 @@ fun createBroadcastModule(
                 throw err
             } catch (err: Throwable) {
                 val detail = formatError(err)
-                if (detail == PEER_REJECTED) ledger.handed -= key
                 failures += "$key: $detail"
                 failed += key
                 emitProgress(BroadcastPhase.FAILED_ATTEMPT, key, detail, null, null)
@@ -415,8 +413,13 @@ fun createBroadcastModule(
         } catch (err: Throwable) {
             val message = formatError(err)
             logError("broadcast", "aborted/error", err)
-            emit(BroadcastPhase.ERROR, null, message, null, null)
-            ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Error(id, message))
+            val peers = ledger.summary()
+            if (peers != null) {
+                emitOutcome(id, peers, failures + message, attemptsUsed[0])
+            } else {
+                emit(BroadcastPhase.ERROR, null, message, null, null)
+                ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Error(id, message))
+            }
         }
     }
 

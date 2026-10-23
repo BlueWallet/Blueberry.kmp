@@ -166,6 +166,7 @@ private fun SendStepScreen(
                         onAmount = { flow.amount = it },
                         onContinue = flow::continueFromAmount,
                         onBack = flow::goBack,
+                        ready = flow.heldReady,
                     ),
             )
         SendStep.Coins -> SendCoins(flow)
@@ -206,6 +207,7 @@ private fun SendCoins(flow: SendFlow) {
                 onReplaceSelection = flow::replaceSelection,
                 onContinue = flow::continueFromCoins,
                 onBack = flow::goBack,
+                ready = flow.heldReady,
             ),
     )
 }

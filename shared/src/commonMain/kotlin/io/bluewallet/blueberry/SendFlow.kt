@@ -18,6 +18,7 @@ import io.bluewallet.blueberry.wallet.SendInputUtxo
 import io.bluewallet.blueberry.wallet.SignedSendResult
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.loadWalletSecret
+import io.bluewallet.blueberry.wallet.outpointKey
 import io.bluewallet.blueberry.wallet.outputScriptFromAddress
 import io.bluewallet.blueberry.wallet.parseWalletSecret
 import kotlinx.coroutines.CoroutineScope
@@ -44,6 +45,7 @@ internal fun stepAfterAmount(
 internal const val SELECTION_CHANGED = "Some selected coins are frozen or no longer available. Review the selection."
 internal const val SELECTION_HELD = "Some selected coins are in another payment that is still sending. Review the selection."
 internal const val WALLET_NOT_LOADED = "Wallet isn't loaded yet."
+internal const val HOLDS_LOADING = "Checking which coins other payments are using…"
 internal const val BROADCAST_BUSY = "A broadcast is already running. Wait for it to finish."
 internal const val DRAFT_MISMATCH = "This transaction no longer matches the coins, amount, or fee on screen."
 
@@ -99,7 +101,12 @@ internal class SendFlow(
     var privateSession by mutableStateOf<PrivateSendSession?>(null)
     var privateSigned by mutableStateOf<SignedSendResult?>(null)
     var snap by mutableStateOf(runtime.walletTxsStore.get())
-    var heldOutpoints by mutableStateOf(emptySet<String>())
+    private val heldAtOpen = runtime.reservedOutpointsNow()
+    var heldOutpoints by mutableStateOf(heldAtOpen.keys)
+        private set
+
+    /** False until stored sends were read; until then [heldOutpoints] may miss coins, so nothing commits. */
+    var heldReady by mutableStateOf(heldAtOpen.complete)
         private set
     var broadcast by mutableStateOf(BroadcastSnapshot())
     var changeScript by mutableStateOf(placeholderOutputScript(AddressScriptType.P2WPKH))
@@ -308,12 +315,12 @@ internal class SendFlow(
     }
 
     fun continueFromAmount() {
-        if (amountSats == null) return
+        if (amountSats == null || !heldReady) return
         pushStep(stepAfterAmount(selectedKeys, coverage().covered))
     }
 
     fun continueFromCoins() {
-        if (amountSats == null || !coverage().covered) return
+        if (amountSats == null || !coverage().covered || !heldReady) return
         selectionNeedsAck = false
         if (backStack.lastOrNull() == SendStep.Review) {
             navForward = false
@@ -325,6 +332,7 @@ internal class SendFlow(
 
     fun refreshHeldOutpoints() {
         heldOutpoints = runtime.reservedOutpoints(ownTxid)
+        heldReady = true
     }
 
     /** Keeps the selection to coins the wallet still holds and can spend. The screen reads [held] off the UI thread. */
@@ -333,6 +341,7 @@ internal class SendFlow(
         held: Set<String> = runtime.reservedOutpoints(ownTxid),
     ) {
         heldOutpoints = held
+        heldReady = true
         val payable = amountSats
         val before = stampOrNull()
         snap = next
@@ -345,7 +354,28 @@ internal class SendFlow(
     /** Applies a reservation read off the UI thread, then drops a signature that no longer matches. */
     fun applyHeldOutpoints(held: Set<String>) {
         heldOutpoints = held
+        heldReady = true
         trimToSpendable()
+    }
+
+    /**
+     * Last check before a broadcast claims coins: live jobs from memory plus the stored holds already read.
+     * Refuses while the stored read is pending, or when another payment holds an input.
+     */
+    private fun inputsFree(
+        inputs: List<SendInputUtxo>,
+        ownTxid: String?,
+    ): Boolean {
+        val reserved = heldOutpoints + runtime.reservedOutpointsNow(ownTxid).keys
+        val taken = inputs.any { outpointKey(it.txid, it.vout) in reserved }
+        when {
+            !heldReady -> sendError = HOLDS_LOADING
+            taken -> {
+                applyHeldOutpoints(reserved)
+                sendError = SELECTION_HELD
+            }
+        }
+        return heldReady && !taken
     }
 
     private fun trimToSpendable(): Boolean {
@@ -359,7 +389,7 @@ internal class SendFlow(
     }
 
     fun toggleCoin(key: String) {
-        if (spendableRows.none { it.key == key }) return
+        if (key !in selectedKeys && (!heldReady || spendableRows.none { it.key == key })) return
         selectedKeys = if (key in selectedKeys) selectedKeys - key else selectedKeys + key
     }
 
@@ -424,6 +454,7 @@ internal class SendFlow(
         rate: Double,
     ) {
         val inputs = selectedInputs
+        if (!inputsFree(inputs, result.txid)) return
         val priced = builtSend(result)
         val paid = sendPaidSats(amt, inputs.sumOf { it.valueSats }, priced.feeSats, priced.changeSats)
         val receipt = SendReceipt(recipient, paid, priced.feeSats, priced.txid)
@@ -524,7 +555,7 @@ internal class SendFlow(
         signed: SignedSendResult,
         row: PrivateSendRow,
     ) {
-        val session = privateSession ?: return
+        val session = privateSession?.takeIf { inputsFree(it.utxos, signed.txid) } ?: return
         val priced = builtSend(signed)
         val paid = sendPaidSats(session.amountSats, session.utxos.sumOf { it.valueSats }, priced.feeSats, priced.changeSats)
         val receipt = SendReceipt(SendRecipient(session.destination, session.label), paid, priced.feeSats, priced.txid)

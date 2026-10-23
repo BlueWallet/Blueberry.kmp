@@ -48,6 +48,8 @@ internal class SendAmountActions(
     val onAmount: (String) -> Unit,
     val onContinue: () -> Unit,
     val onBack: () -> Unit,
+    /** False while coins held by other payments are still loading. */
+    val ready: Boolean = true,
 )
 
 @Composable
@@ -68,7 +70,7 @@ internal fun SendAmountStep(
             TintedPillButton(
                 text = amountContinueLabel(amount, walletTotalSats, coinsAllFrozen),
                 onClick = actions.onContinue,
-                enabled = check is SendAmountCheck.Ok,
+                enabled = check is SendAmountCheck.Ok && actions.ready,
                 modifier = Modifier.fillMaxWidth(),
             )
         },

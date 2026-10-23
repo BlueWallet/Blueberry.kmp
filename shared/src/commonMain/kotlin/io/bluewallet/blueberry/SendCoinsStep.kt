@@ -38,6 +38,8 @@ internal class SendCoinsActions(
     val onReplaceSelection: (Set<String>) -> Unit,
     val onContinue: () -> Unit,
     val onBack: () -> Unit,
+    /** False while coins held by other payments are still loading. */
+    val ready: Boolean = true,
 )
 
 /** Primary button label for the Coins step. */
@@ -88,7 +90,7 @@ internal fun SendCoinsStep(
                 TintedPillButton(
                     text = sendCoinsButtonLabel(selected.size, coverage),
                     onClick = actions.onContinue,
-                    enabled = selected.isNotEmpty() && coverage.covered,
+                    enabled = selected.isNotEmpty() && coverage.covered && actions.ready,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

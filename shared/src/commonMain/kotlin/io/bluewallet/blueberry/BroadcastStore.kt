@@ -121,7 +121,11 @@ private class BroadcastStoreImpl : BroadcastStore {
                             triedPeers = rememberTriedPeers(cur.snapshot.triedPeers, payload.peer),
                         )
                     is BroadcastDonePayload.Error ->
-                        cur.snapshot.copy(phase = "error", error = payload.error)
+                        if (cur.snapshot.handedOff) {
+                            cur.snapshot.copy(phase = "success", error = null, detail = payload.error)
+                        } else {
+                            cur.snapshot.copy(phase = "error", error = payload.error)
+                        }
                 }
             map + (payload.id to cur.copy(snapshot = snap))
         }

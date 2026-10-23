@@ -276,7 +276,7 @@ class BroadcastStopTest {
         }
 
     @Test
-    fun a_rejected_hand_off_still_fails() =
+    fun a_reject_after_the_hand_off_finishes_as_sent() =
         runBlocking {
             val db = createSqliteDatabase(":memory:")
             upsertAlive(db, "1.1.1.1")
@@ -309,8 +309,8 @@ class BroadcastStopTest {
             mod.start()
             bus.emit(Event.BroadcastRequest, BroadcastRequestPayload("refused", sampleTxHex()))
             val result = withTimeout(5_000) { done.await() }
-            assertTrue(result is BroadcastDonePayload.Error)
-            assertTrue(result.error.contains("rejected"))
+            assertTrue(result is BroadcastDonePayload.Ok)
+            assertEquals("refused", result.id)
             mod.stop()
             db.close()
         }

@@ -118,7 +118,10 @@ class PeersRuntime(
      * [exceptTxid] leaves out one transaction's own hold, so a screen can tell its own coins from coins another payment took.
      */
     @OptIn(ExperimentalAtomicApi::class)
-    fun reservedOutpoints(exceptTxid: String? = null): Set<String> {
+    fun reservedOutpoints(
+        exceptTxid: String? = null,
+        stored: List<Pair<String, String>> = storedHolds.get(),
+    ): Set<String> {
         val live = liveBroadcastIds(broadcastStore)
         val armed =
             pendingSends
@@ -131,12 +134,12 @@ class PeersRuntime(
                     .filter { it.key in live && it.value.txid != exceptTxid }
                     .values
                     .flatMap { it.coins }
-        val stored =
-            storedHolds
-                .get()
-                .mapNotNull { (txid, key) -> if (txid == exceptTxid) null else key }
-        return armed.map { outpointKey(it.txid, it.vout) }.toSet() + stored
+        val held = stored.mapNotNull { (txid, key) -> if (txid == exceptTxid) null else key }
+        return armed.map { outpointKey(it.txid, it.vout) }.toSet() + held
     }
+
+    /** Stored holds if already read, without touching the database. */
+    internal val cachedStoredHolds: List<Pair<String, String>>? get() = storedHolds.peek()
 
     /** Drops the in-memory record for a broadcast the user chose to forget. */
     @OptIn(ExperimentalAtomicApi::class)
@@ -147,8 +150,8 @@ class PeersRuntime(
 
     /**
      * Writes the send once a node was given it, so the coin hold survives the app dying mid-broadcast.
-     * Success writes it again and drops the armed record. A job only ends in error when no node was given the
-     * transaction, or every node that got it refused it as invalid, so the row goes.
+     * Success writes it again and drops the armed record. Only an error before any node was given the
+     * transaction drops the row; once handed off, a node may still relay it, so the send stays stored.
      */
     @OptIn(ExperimentalAtomicApi::class)
     fun persistArmedBroadcast(
@@ -159,10 +162,10 @@ class PeersRuntime(
         val send = pendingSends.load()[id]
         val priv = pendingPrivateSends.load()[id]
         storedHolds.clear()
-        if (snap.phase == "error") {
+        if (snap.phase == "error" && !snap.handedOff) {
             (send?.txid ?: priv?.txid)?.let { dropUnsentSend(db, walletTxsStore, wallet, it) }
         } else {
-            val sent = if (handedOff) snap.copy(phase = "success") else snap
+            val sent = if (handedOff || snap.phase == "error") snap.copy(phase = "success") else snap
             val wroteSend = send != null && persistSendAndRefresh(db, walletTxsStore, wallet, send, sent)
             val wrotePriv = priv != null && persistPrivateSendAndRefresh(db, walletTxsStore, wallet, priv, sent)
             if (wroteSend && !handedOff) removePending(pendingSends, id)
@@ -470,6 +473,21 @@ class PeersRuntime(
     }
 }
 
+/** Reserved outpoints; [complete] is false until stored sends have been read. */
+data class HeldOutpoints(
+    val keys: Set<String>,
+    val complete: Boolean,
+)
+
+/**
+ * Live broadcasts from memory plus stored holds only if already cached, so it never touches the database
+ * and is safe on the UI thread.
+ */
+fun PeersRuntime.reservedOutpointsNow(exceptTxid: String? = null): HeldOutpoints {
+    val stored = cachedStoredHolds
+    return HeldOutpoints(reservedOutpoints(exceptTxid, stored.orEmpty()), complete = stored != null)
+}
+
 /**
  * Unconfirmed stored sends as (txid, outpoint key). Each clear installs a new slot, and a read only
  * publishes into the slot it started from, so a read that raced a clear cannot bring back stale holds.
@@ -487,6 +505,8 @@ internal class StoredHoldsCache(
     fun clear() {
         slot.store(Slot(null))
     }
+
+    fun peek(): List<Pair<String, String>>? = slot.load().holds
 
     fun get(): List<Pair<String, String>> {
         val cur = slot.load()
