@@ -508,12 +508,14 @@ internal class StoredHoldsCache(
 
     fun peek(): List<Pair<String, String>>? = slot.load().holds
 
+    /** A load that raced a clear may predate the write that caused it, so it is read again. */
     fun get(): List<Pair<String, String>> {
-        val cur = slot.load()
-        cur.holds?.let { return it }
-        val fresh = load()
-        slot.compareAndSet(cur, Slot(fresh))
-        return fresh
+        while (true) {
+            val cur = slot.load()
+            cur.holds?.let { return it }
+            val fresh = load()
+            if (slot.compareAndSet(cur, Slot(fresh))) return fresh
+        }
     }
 }
 

@@ -52,23 +52,31 @@ internal class SendAmountActions(
     val ready: Boolean = true,
 )
 
+/** Spendable total, value held by payments still sending, and why nothing may be spendable. */
+internal class SendAmountBalance(
+    val spendableSats: Long,
+    val sendingSats: Long,
+    val availability: CoinAvailability,
+)
+
 @Composable
 internal fun SendAmountStep(
     to: SendRecipient,
     amount: String,
-    walletTotalSats: Long,
-    coinsAllFrozen: Boolean,
+    balance: SendAmountBalance,
     actions: SendAmountActions,
 ) {
+    val walletTotalSats = balance.spendableSats
     val max = isSendMaxAmount(amount)
     val check = checkSendAmount(amount, walletTotalSats)
+    val emptyNotice = noSpendableNotice(walletTotalSats, balance.availability)
     SendStepFrame(
         title = "Amount",
         caption = "Step 2 of 4",
         onBack = actions.onBack,
         bottom = {
             TintedPillButton(
-                text = amountContinueLabel(amount, walletTotalSats, coinsAllFrozen),
+                text = amountContinueLabel(amount, walletTotalSats, balance.availability),
                 onClick = actions.onContinue,
                 enabled = check is SendAmountCheck.Ok && actions.ready,
                 modifier = Modifier.fillMaxWidth(),
@@ -78,10 +86,8 @@ internal fun SendAmountStep(
         ToPill(label = to.label, address = to.address)
         TypedAmount(amount = amount, max = max)
         if (max) HelperText("Everything you pick next, minus the fee.", Modifier.fillMaxWidth())
-        if (coinsAllFrozen) {
-            HelperText(ALL_FROZEN_NOTICE, Modifier.fillMaxWidth(), error = true)
-        } else if (walletTotalSats <= 0L) {
-            HelperText("No spendable coins left.", Modifier.fillMaxWidth(), error = true)
+        if (emptyNotice != null) {
+            HelperText(emptyNotice, Modifier.fillMaxWidth(), error = true)
         } else if (check is SendAmountCheck.MoreThanWallet) {
             HelperText("More than your wallet holds.", Modifier.fillMaxWidth(), error = true)
         }
@@ -92,6 +98,11 @@ internal fun SendAmountStep(
             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 BtcAmountText(sats = walletTotalSats, color = BwColors.InkQuiet, fontSize = BwType.LabelSize)
                 Text(" in your wallet", color = BwColors.InkQuiet, fontFamily = BwFontFamily, fontSize = BwType.LabelSize)
+                if (balance.sendingSats > 0L) {
+                    Text(" · ", color = BwColors.InkQuiet, fontFamily = BwFontFamily, fontSize = BwType.LabelSize)
+                    BtcAmountText(sats = balance.sendingSats, color = BwColors.InkQuiet, fontSize = BwType.LabelSize)
+                    Text(" sending", color = BwColors.InkQuiet, fontFamily = BwFontFamily, fontSize = BwType.LabelSize)
+                }
             }
             MaxChip(selected = max, onClick = { actions.onAmount(if (max) "" else "MAX") })
         }

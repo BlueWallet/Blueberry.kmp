@@ -215,11 +215,15 @@ sealed class BroadcastDonePayload {
     data class Ok(
         override val id: String,
         val peer: String,
+        /** False when nodes were given the transaction but none confirmed taking it. */
+        val acknowledged: Boolean = true,
     ) : BroadcastDonePayload()
 
     data class Error(
         override val id: String,
         val error: String,
+        /** Every node that was given the transaction explicitly refused it, so none holds it. */
+        val refused: Boolean = false,
     ) : BroadcastDonePayload()
 }
 

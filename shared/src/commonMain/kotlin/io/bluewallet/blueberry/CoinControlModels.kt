@@ -85,8 +85,16 @@ data class CoinControlSnapshot(
     /** Frozen and in-flight coins stay on screen and stay out of what can be spent. */
     val spendableSats: Long get() = coins.filter { it.canSelect }.sumOf { it.valueSats }
 
+    /** Unfrozen value held by payments that are still sending. */
+    val sendingSats: Long get() = coins.filter { it.sending && !it.isFrozen }.sumOf { it.valueSats }
+
     val availability: CoinAvailability
-        get() = coinAvailability(coinCount = coins.size, frozenCount = coins.count { it.isFrozen })
+        get() =
+            coinAvailability(
+                coinCount = coins.size,
+                frozenCount = coins.count { it.isFrozen },
+                sendingCount = coins.count { it.sending && !it.isFrozen },
+            )
 }
 
 enum class PrivacyNoticeKind {

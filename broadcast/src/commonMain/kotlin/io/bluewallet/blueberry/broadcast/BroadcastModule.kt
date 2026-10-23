@@ -76,15 +76,15 @@ private fun pickAlive(
 private fun formatError(err: Throwable): String = err.message?.takeIf { it.isNotBlank() } ?: err.toString()
 
 /**
- * Peers that acknowledged the transaction, and peers that were given the raw transaction.
- * A peer stays on the handed list even if it rejects: a policy reject does not prove the transaction is gone,
- * so once written it may still relay and confirm.
+ * Peers that acknowledged the transaction, peers that were given the raw transaction, and handed peers that
+ * then sent an explicit `reject`. A handed peer that neither acked nor refused may still hold and relay it.
  */
 private class PeerLedger(
     private val onFirstHandOff: () -> Unit = {},
 ) {
     val accepted = linkedSetOf<String>()
     val handed = linkedSetOf<String>()
+    val refused = linkedSetOf<String>()
 
     fun hand(key: String) {
         val first = handed.isEmpty() && accepted.isEmpty()
@@ -92,8 +92,14 @@ private class PeerLedger(
         if (first) onFirstHandOff()
     }
 
-    fun summary(): String? = (accepted + handed).takeIf { it.isNotEmpty() }?.joinToString(", ")
+    /** Peers that may hold the transaction: acked, or handed without a refusal. */
+    fun holders(): Set<String> = accepted + (handed - refused)
+
+    /** Every node that was given the transaction refused it, so none of them holds it. */
+    fun allRefused(): Boolean = holders().isEmpty() && refused.isNotEmpty()
 }
+
+private const val PEER_REJECTED = "peer rejected transaction"
 
 /** The error a job reports when the app stops before any node was given the transaction. */
 const val BROADCAST_STOPPED = "The app stopped before any node got it."
@@ -103,6 +109,19 @@ const val BROADCAST_CANCELLED = "Stopped before any node got it."
 
 /** The error a job reports when no BIP324 node shows up within the wait. */
 const val BROADCAST_NO_PEERS = "No Bitcoin nodes found. Check the connection and retry."
+
+/** The error a job reports when every node that got the transaction refused it. */
+const val BROADCAST_REFUSED = "Every node that got it refused it."
+
+private fun failedSummary(
+    failures: List<String>,
+    attemptsUsed: Int,
+): String {
+    val summary = if (failures.isNotEmpty()) failures.takeLast(3).joinToString(" | ") else "no alive peers"
+    val error = if (attemptsUsed > 0) "broadcast failed after $attemptsUsed attempts: $summary" else "broadcast failed: $summary"
+    log("broadcast", error)
+    return error
+}
 
 private fun displayTxid(txHex: String): String = internalHexToDisplayHex(bytesToHex(transactionId(decodeBroadcastTx(txHex))))
 
@@ -246,6 +265,7 @@ fun createBroadcastModule(
                 throw err
             } catch (err: Throwable) {
                 val detail = formatError(err)
+                if (detail == PEER_REJECTED && key in ledger.handed) ledger.refused += key
                 failures += "$key: $detail"
                 failed += key
                 emitProgress(BroadcastPhase.FAILED_ATTEMPT, key, detail, null, null)
@@ -333,31 +353,35 @@ fun createBroadcastModule(
         )
     }
 
+    /**
+     * Sent while any node may hold the transaction. Failed when none was given it, or every node that was
+     * explicitly refused it. [abortMessage] is the reason a job ended early without a hand-off.
+     */
     fun emitOutcome(
         id: String,
-        successPeer: String?,
+        ledger: PeerLedger,
         failures: List<String>,
         attemptsUsed: Int,
+        abortMessage: String? = null,
     ) {
-        if (successPeer != null) {
-            log("broadcast", "done ok peer=$successPeer")
-            ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Ok(id, successPeer))
-            return
-        }
-        val summary =
-            if (failures.isNotEmpty()) {
-                failures.takeLast(3).joinToString(" | ")
-            } else {
-                "no alive peers"
+        val holders = ledger.holders()
+        val done =
+            when {
+                holders.isNotEmpty() -> {
+                    log("broadcast", "done ok peer=$holders acked=${ledger.accepted.size}")
+                    BroadcastDonePayload.Ok(id, holders.joinToString(", "), acknowledged = ledger.accepted.isNotEmpty())
+                }
+                ledger.allRefused() -> {
+                    log("broadcast", "done refused by=${ledger.refused}")
+                    BroadcastDonePayload.Error(id, BROADCAST_REFUSED, refused = true)
+                }
+                abortMessage != null -> {
+                    emitProgress(id, 0, intArrayOf(attemptsUsed), BroadcastPhase.ERROR, detail = abortMessage)
+                    BroadcastDonePayload.Error(id, abortMessage)
+                }
+                else -> BroadcastDonePayload.Error(id, failedSummary(failures, attemptsUsed))
             }
-        val error =
-            if (attemptsUsed > 0) {
-                "broadcast failed after $attemptsUsed attempts: $summary"
-            } else {
-                "broadcast failed: $summary"
-            }
-        log("broadcast", error)
-        ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Error(id, error))
+        ctx.bus.emit(Event.BroadcastDone, done)
     }
 
     suspend fun runBroadcast(
@@ -382,44 +406,23 @@ fun createBroadcastModule(
             log("broadcast", "start id=$id txid=${displayTxid(txHex)}")
             emit(BroadcastPhase.WAITING_PEERS, null, null, null, null)
             waitForAlivePeers(job)
-            val successPeer =
-                if (injectedConnect != null) {
-                    val (peer, fails) =
-                        runPeerAttempts(injectedConnect, txHex, job, emit, ledger, excludePeers)
-                    failures += fails
-                    peer
-                } else {
-                    try {
-                        val (peer, fails) = runTorAttempts(txHex, job, emit, ledger, excludePeers)
-                        failures += fails
-                        peer
-                    } catch (err: CancellationException) {
-                        throw err
-                    } catch (err: Throwable) {
-                        if (failures.isEmpty()) failures += formatError(err)
-                        null
-                    }
+            if (injectedConnect != null) {
+                failures += runPeerAttempts(injectedConnect, txHex, job, emit, ledger, excludePeers).second
+            } else {
+                try {
+                    failures += runTorAttempts(txHex, job, emit, ledger, excludePeers).second
+                } catch (err: CancellationException) {
+                    throw err
+                } catch (err: Throwable) {
+                    if (failures.isEmpty()) failures += formatError(err)
                 }
-            emitOutcome(id, successPeer ?: ledger.summary(), failures, attemptsUsed[0])
+            }
+            emitOutcome(id, ledger, failures, attemptsUsed[0])
         } catch (err: CancellationException) {
-            val peers = ledger.summary()
-            if (peers != null) {
-                emitOutcome(id, peers, failures, attemptsUsed[0])
-            } else {
-                val message = formatError(err).ifBlank { BROADCAST_STOPPED }
-                emit(BroadcastPhase.ERROR, null, message, null, null)
-                ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Error(id, message))
-            }
+            emitOutcome(id, ledger, failures, attemptsUsed[0], formatError(err).ifBlank { BROADCAST_STOPPED })
         } catch (err: Throwable) {
-            val message = formatError(err)
             logError("broadcast", "aborted/error", err)
-            val peers = ledger.summary()
-            if (peers != null) {
-                emitOutcome(id, peers, failures + message, attemptsUsed[0])
-            } else {
-                emit(BroadcastPhase.ERROR, null, message, null, null)
-                ctx.bus.emit(Event.BroadcastDone, BroadcastDonePayload.Error(id, message))
-            }
+            emitOutcome(id, ledger, failures, attemptsUsed[0], formatError(err))
         }
     }
 

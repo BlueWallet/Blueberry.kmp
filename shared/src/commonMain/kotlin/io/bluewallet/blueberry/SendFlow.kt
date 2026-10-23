@@ -25,6 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -146,8 +147,10 @@ internal class SendFlow(
     val spendableRows: List<WalletUtxoRow>
         get() = snap.utxos.filter { !it.isFrozen && it.key !in heldOutpoints }
     val walletTotalSats: Long get() = spendableRows.sumOf { it.valueSats }
-    val coinsAllFrozen: Boolean
-        get() = snap.utxos.isNotEmpty() && snap.utxos.all { it.isFrozen }
+    val coinAvailability: CoinAvailability get() = coinAvailability(snap.utxos, heldOutpoints)
+
+    /** Unfrozen value held by other payments that are still sending. */
+    val sendingSats: Long get() = snap.utxos.filter { !it.isFrozen && it.key in heldOutpoints }.sumOf { it.valueSats }
     val amountSats: SendAmount? get() = (checkSendAmount(amount, walletTotalSats) as? SendAmountCheck.Ok)?.amount
     val selectedRows: List<WalletUtxoRow> get() = spendableRows.filter { it.key in selectedKeys }
     val selectedInputs: List<SendInputUtxo>
@@ -366,16 +369,36 @@ internal class SendFlow(
         inputs: List<SendInputUtxo>,
         ownTxid: String?,
     ): Boolean {
-        val reserved = heldOutpoints + runtime.reservedOutpointsNow(ownTxid).keys
+        val now = runtime.reservedOutpointsNow(ownTxid)
+        val reserved = heldOutpoints + now.keys
         val taken = inputs.any { outpointKey(it.txid, it.vout) in reserved }
+        val known = heldReady && now.complete
         when {
-            !heldReady -> sendError = HOLDS_LOADING
+            !known -> {
+                sendError = HOLDS_LOADING
+                scope.launch { reloadHeld() }
+            }
             taken -> {
                 applyHeldOutpoints(reserved)
                 sendError = SELECTION_HELD
             }
         }
-        return heldReady && !taken
+        return known && !taken
+    }
+
+    private var holdsGen = 0
+
+    /**
+     * Reads holds off the UI thread, then applies them with the latest wallet snapshot. A read overtaken by a
+     * later one is dropped, so an older hold set never replaces a newer one.
+     */
+    suspend fun reloadHeld() {
+        val gen = ++holdsGen
+        val own = ownTxid
+        val held = withContext(Dispatchers.Default) { runtime.reservedOutpoints(own) }
+        if (gen != holdsGen) return
+        updateSnap(runtime.walletTxsStore.get(), held)
+        if (sendError == HOLDS_LOADING) sendError = null
     }
 
     private fun trimToSpendable(): Boolean {
@@ -603,6 +626,14 @@ internal class SendFlow(
             popStep()
         }
     }
+
+    /** A private payment that is sending or sent: leaving closes the flow and the job keeps going. */
+    val privateSendLive: Boolean
+        get() {
+            val hex = privateSigned?.txHex
+            val phase = broadcast.phase
+            return step == SendStep.PrivateSend && hex != null && broadcast.txHex == hex && phase != null && phase != "error"
+        }
 
     /** An in-flight or sent private payment closes. A failed one returns to Review. */
     private fun closeLivePrivateSend(): Boolean {

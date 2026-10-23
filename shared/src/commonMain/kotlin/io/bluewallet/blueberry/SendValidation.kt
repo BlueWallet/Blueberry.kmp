@@ -81,32 +81,40 @@ fun parseFeeRateSatPerVb(input: String): Double? {
 fun amountContinueLabel(
     input: String,
     walletTotalSats: Long,
-    coinsAllFrozen: Boolean = false,
+    availability: CoinAvailability = CoinAvailability.Spendable,
 ): String {
     val check = checkSendAmount(input, walletTotalSats)
     return when {
         check is SendAmountCheck.Ok -> "Continue"
-        coinsAllFrozen -> "Every coin is frozen"
+        availability == CoinAvailability.AllFrozen -> "Every coin is frozen"
+        availability == CoinAvailability.AllSending -> "Every coin is sending"
         walletTotalSats <= 0L -> "No spendable coins left"
         else -> "Enter an amount"
     }
 }
 
+/** Why the wallet has nothing to spend, or null when it has spendable coins. */
+fun noSpendableNotice(
+    walletTotalSats: Long,
+    availability: CoinAvailability,
+): String? =
+    when {
+        availability == CoinAvailability.AllFrozen -> ALL_FROZEN_NOTICE
+        availability == CoinAvailability.AllSending -> ALL_SENDING_NOTICE
+        walletTotalSats <= 0L -> "No spendable coins left."
+        else -> null
+    }
+
 /** Why Review cannot price this payment, or null when [checkSendAmount] is ok. */
 fun sendAmountUnavailable(
     input: String,
     walletTotalSats: Long,
-    coinsAllFrozen: Boolean = false,
+    availability: CoinAvailability = CoinAvailability.Spendable,
 ): String? =
     when (checkSendAmount(input, walletTotalSats)) {
         is SendAmountCheck.Ok -> null
         SendAmountCheck.MoreThanWallet -> "The wallet can no longer cover this amount."
-        SendAmountCheck.Empty ->
-            when {
-                coinsAllFrozen -> ALL_FROZEN_NOTICE
-                walletTotalSats <= 0L -> "No spendable coins left."
-                else -> "Enter an amount."
-            }
+        SendAmountCheck.Empty -> noSpendableNotice(walletTotalSats, availability) ?: "Enter an amount."
     }
 
 /** True when build/send failed because the fixed coin set cannot cover amount + fee. */

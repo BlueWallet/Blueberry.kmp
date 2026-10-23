@@ -44,9 +44,7 @@ import io.bluewallet.blueberry.ui.overlayBackStack
 import io.bluewallet.blueberry.ui.screenPushTransform
 import io.bluewallet.blueberry.wallet.PsbtSendResult
 import io.bluewallet.blueberry.wallet.SignedSendResult
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 @Suppress("LongParameterList")
@@ -62,13 +60,7 @@ fun SendScreen(
     val latestOnBack by rememberUpdatedState(onBack)
     val flow = remember { SendFlow(runtime, db, scope, close = { latestOnBack() }, initialSelectedKeys = initialSelectedKeys) }
     DisposableEffect(runtime.walletTxsStore) {
-        val applySnap = {
-            scope.launch {
-                val own = flow.ownTxid
-                val held = withContext(Dispatchers.Default) { runtime.reservedOutpoints(own) }
-                flow.updateSnap(runtime.walletTxsStore.get(), held)
-            }
-        }
+        val applySnap = { scope.launch { flow.reloadHeld() } }
         applySnap()
         val off = runtime.walletTxsStore.subscribe { applySnap() }
         onDispose { off() }
@@ -84,9 +76,7 @@ fun SendScreen(
                     val ids = liveBroadcastIds(runtime.broadcastStore)
                     if (ids == seenLive) return@launch
                     seenLive = ids
-                    val own = flow.ownTxid
-                    val held = withContext(Dispatchers.Default) { runtime.reservedOutpoints(own) }
-                    flow.applyHeldOutpoints(held)
+                    flow.reloadHeld()
                 }
             }
         onDispose { off() }
@@ -159,8 +149,7 @@ private fun SendStepScreen(
             SendAmountStep(
                 to = flow.recipient,
                 amount = flow.amount,
-                walletTotalSats = flow.walletTotalSats,
-                coinsAllFrozen = flow.coinsAllFrozen,
+                balance = SendAmountBalance(flow.walletTotalSats, flow.sendingSats, flow.coinAvailability),
                 actions =
                     SendAmountActions(
                         onAmount = { flow.amount = it },
@@ -260,7 +249,7 @@ private fun SendBroadcast(flow: SendFlow) {
 @Composable
 private fun SendReview(flow: SendFlow) {
     val amount = flow.amountSats
-    val blocked = sendAmountUnavailable(flow.amount, flow.walletTotalSats, flow.coinsAllFrozen)
+    val blocked = sendAmountUnavailable(flow.amount, flow.walletTotalSats, flow.coinAvailability)
     if (amount == null || blocked != null) {
         SendStepFrame(
             title = "Review",
@@ -318,7 +307,7 @@ private fun SendPrivate(flow: SendFlow) {
                 .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
         verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
     ) {
-        ScreenHeader(title = "Private Send", onBack = flow::goBack)
+        ScreenHeader(title = "Private Send", onBack = flow::goBack, action = if (flow.privateSendLive) "Close" else "Back")
         flow.sendError?.let { HelperText(it, error = true) }
         PrivateSendStep(
             session = session,

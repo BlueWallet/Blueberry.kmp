@@ -107,6 +107,7 @@ internal fun SendCoinsStep(
         when (control.availability) {
             CoinAvailability.NoCoins -> HelperText("No coins in this wallet yet.")
             CoinAvailability.AllFrozen -> HelperText(ALL_FROZEN_NOTICE, error = true)
+            CoinAvailability.AllSending -> HelperText(ALL_SENDING_NOTICE, error = true)
             CoinAvailability.Spendable -> {}
         }
         if (control.coins.isNotEmpty()) {

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
@@ -101,15 +102,19 @@ fun CoinsScreen(
     var sheetRow by remember { mutableStateOf<CoinsRowModel?>(null) }
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
-    DisposableEffect(runtime.walletTxsStore) {
-        val refresh = {
-            scope.launch {
-                val held = withContext(Dispatchers.Default) { runtime.reservedOutpoints() }
+    val holdsGen = remember { intArrayOf(0) }
+    val refresh = {
+        scope.launch {
+            val gen = ++holdsGen[0]
+            val held = withContext(Dispatchers.Default) { runtime.reservedOutpoints() }
+            if (gen == holdsGen[0]) {
                 snap = runtime.walletTxsStore.get()
                 sendingKeys = held
                 sendingReady = true
             }
         }
+    }
+    DisposableEffect(runtime.walletTxsStore) {
         refresh()
         val off = runtime.walletTxsStore.subscribe { refresh() }
         onDispose { off() }
@@ -122,8 +127,7 @@ fun CoinsScreen(
                     val ids = liveBroadcastIds(runtime.broadcastStore)
                     if (ids == seenLive) return@launch
                     seenLive = ids
-                    sendingKeys = withContext(Dispatchers.Default) { runtime.reservedOutpoints() }
-                    sendingReady = true
+                    refresh()
                 }
             }
         onDispose { off() }
@@ -309,7 +313,13 @@ fun CoinsScreen(
                     notice = notice,
                     selectedCoins = actionCoins,
                     ready = sendingReady,
-                    onPrimary = { if (sendingReady) onSendWithCoins(actionCoins.map { it.key }.toSet()) },
+                    onPrimary = {
+                        if (sendingReady && runtime.reservedOutpointsNow().complete) {
+                            onSendWithCoins(actionCoins.map { it.key }.toSet())
+                        } else {
+                            refresh()
+                        }
+                    },
                 )
             }
             AnimatedVisibility(
@@ -385,10 +395,19 @@ private fun CoinControlSummary(control: CoinControlSnapshot) {
             letterSpacing = (-0.55).sp,
             roundedDigits = true,
         )
-        FrozenBalancePill(control.frozenSats)
-        if (control.availability == CoinAvailability.AllFrozen) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FrozenBalancePill(control.frozenSats)
+            SendingBalancePill(control.sendingSats)
+        }
+        val notice =
+            when (control.availability) {
+                CoinAvailability.AllFrozen -> ALL_FROZEN_NOTICE
+                CoinAvailability.AllSending -> ALL_SENDING_NOTICE
+                else -> null
+            }
+        if (notice != null) {
             Text(
-                text = ALL_FROZEN_NOTICE,
+                text = notice,
                 color = BwColors.Warning,
                 fontFamily = BwFontFamily,
                 fontSize = 15.sp,

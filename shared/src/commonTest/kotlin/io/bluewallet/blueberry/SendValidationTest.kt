@@ -21,8 +21,16 @@ class SendValidationTest {
         assertEquals("No spendable coins left", amountContinueLabel("0.5", 0))
         assertEquals("Enter an amount", amountContinueLabel("", 50_000))
         assertEquals("Continue", amountContinueLabel("0.0001", 50_000))
-        assertEquals("Every coin is frozen", amountContinueLabel("0.5", 0, coinsAllFrozen = true))
-        assertEquals(ALL_FROZEN_NOTICE, sendAmountUnavailable("0.5", 0, coinsAllFrozen = true))
+        assertEquals("Every coin is frozen", amountContinueLabel("0.5", 0, CoinAvailability.AllFrozen))
+        assertEquals(ALL_FROZEN_NOTICE, sendAmountUnavailable("0.5", 0, CoinAvailability.AllFrozen))
+    }
+
+    @Test
+    fun a_wallet_whose_coins_are_all_sending_says_so() {
+        assertEquals("Every coin is sending", amountContinueLabel("0.5", 0, CoinAvailability.AllSending))
+        assertEquals(ALL_SENDING_NOTICE, sendAmountUnavailable("0.5", 0, CoinAvailability.AllSending))
+        assertEquals(ALL_SENDING_NOTICE, noSpendableNotice(0, CoinAvailability.AllSending))
+        assertNull(noSpendableNotice(50_000, CoinAvailability.Spendable))
     }
 
     @Test

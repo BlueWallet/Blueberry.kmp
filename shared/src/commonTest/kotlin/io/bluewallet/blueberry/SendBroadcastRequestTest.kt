@@ -141,7 +141,7 @@ class SendBroadcastRequestTest {
     }
 
     @Test
-    fun a_read_that_raced_a_clear_is_not_kept() {
+    fun a_read_that_raced_a_clear_is_read_again() {
         var loads = 0
         lateinit var cache: StoredHoldsCache
         cache =
@@ -150,9 +150,9 @@ class SendBroadcastRequestTest {
                 if (loads == 1) cache.clear()
                 listOf("tx" to "key$loads")
             }
-        assertEquals(listOf("tx" to "key1"), cache.get())
         assertEquals(listOf("tx" to "key2"), cache.get())
         assertEquals(listOf("tx" to "key2"), cache.get())
         assertEquals(2, loads)
+        assertEquals(listOf("tx" to "key2"), cache.peek())
     }
 }

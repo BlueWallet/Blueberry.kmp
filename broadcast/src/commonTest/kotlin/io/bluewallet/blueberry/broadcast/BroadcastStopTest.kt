@@ -25,6 +25,7 @@ import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** A stop only fails a job when no node was given the transaction. */
@@ -271,12 +272,13 @@ class BroadcastStopTest {
             val result = withTimeout(5_000) { done.await() }
             assertTrue(result is BroadcastDonePayload.Ok)
             assertEquals("written", result.id)
+            assertFalse(result.acknowledged)
             assertEquals(listOf("written"), handedOff)
             db.close()
         }
 
     @Test
-    fun a_reject_after_the_hand_off_finishes_as_sent() =
+    fun a_job_every_node_refused_fails_as_refused() =
         runBlocking {
             val db = createSqliteDatabase(":memory:")
             upsertAlive(db, "1.1.1.1")
@@ -309,8 +311,10 @@ class BroadcastStopTest {
             mod.start()
             bus.emit(Event.BroadcastRequest, BroadcastRequestPayload("refused", sampleTxHex()))
             val result = withTimeout(5_000) { done.await() }
-            assertTrue(result is BroadcastDonePayload.Ok)
+            assertTrue(result is BroadcastDonePayload.Error)
             assertEquals("refused", result.id)
+            assertTrue(result.refused)
+            assertEquals(BROADCAST_REFUSED, result.error)
             mod.stop()
             db.close()
         }

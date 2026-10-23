@@ -27,6 +27,13 @@ fun forgetBroadcast(
 /** Plain-language status for the broadcast snapshot. Peers and attempts stay out of the main line. */
 fun broadcastStatus(snap: BroadcastSnapshot): BroadcastStatusUi =
     when {
+        snap.phase == "success" && !snap.acknowledged ->
+            BroadcastStatusUi(
+                "Sent",
+                "Given to Bitcoin nodes",
+                "No node confirmed it took it, but one may still pass it on, so its coins stay locked until it confirms.",
+                BroadcastTone.Sent,
+            )
         snap.phase == "success" ->
             BroadcastStatusUi(
                 "Sent",
@@ -38,7 +45,7 @@ fun broadcastStatus(snap: BroadcastSnapshot): BroadcastStatusUi =
             BroadcastStatusUi(
                 "Not sent yet",
                 snap.error?.takeIf { it.isNotBlank() } ?: "No node accepted it.",
-                "No node took this transaction. Retry sends the same one again.",
+                "No node kept this transaction. Retry sends the same one again.",
                 BroadcastTone.Failed,
             )
         else -> workingStatus(snap)

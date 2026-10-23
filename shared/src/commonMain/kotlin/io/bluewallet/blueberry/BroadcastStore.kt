@@ -20,8 +20,13 @@ data class BroadcastSnapshot(
     val percent: Int? = null,
     val stage: String? = null,
     val triedPeers: Set<String> = emptySet(),
-    /** A node was given the transaction during this run, so it can no longer be stopped. */
+    /**
+     * A node may hold the transaction from this run, so it can no longer be stopped. Cleared when every
+     * node that got it refused it.
+     */
     val handedOff: Boolean = false,
+    /** False for a success where nodes were given the transaction but none confirmed taking it. */
+    val acknowledged: Boolean = true,
 )
 
 /** What the transaction list and the broadcast screen need after Send has closed. */
@@ -118,13 +123,15 @@ private class BroadcastStoreImpl : BroadcastStore {
                             phase = "success",
                             peer = payload.peer,
                             error = null,
+                            acknowledged = payload.acknowledged,
                             triedPeers = rememberTriedPeers(cur.snapshot.triedPeers, payload.peer),
                         )
                     is BroadcastDonePayload.Error ->
-                        if (cur.snapshot.handedOff) {
-                            cur.snapshot.copy(phase = "success", error = null, detail = payload.error)
-                        } else {
-                            cur.snapshot.copy(phase = "error", error = payload.error)
+                        when {
+                            payload.refused -> cur.snapshot.copy(phase = "error", error = payload.error, handedOff = false)
+                            cur.snapshot.handedOff ->
+                                cur.snapshot.copy(phase = "success", error = null, detail = payload.error, acknowledged = false)
+                            else -> cur.snapshot.copy(phase = "error", error = payload.error)
                         }
                 }
             map + (payload.id to cur.copy(snapshot = snap))

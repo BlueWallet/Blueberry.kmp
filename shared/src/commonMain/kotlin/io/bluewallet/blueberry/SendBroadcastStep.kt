@@ -83,8 +83,9 @@ internal fun SendBroadcastStep(
     }
 }
 
+/** A running job keeps going when the screen closes. Shared by Send and Private Send. */
 @Composable
-private fun WorkingBroadcastActions(onStop: (() -> Unit)?) {
+internal fun WorkingBroadcastActions(onStop: (() -> Unit)?) {
     Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
         HelperText(
             "You can close this screen. Sending continues.",
