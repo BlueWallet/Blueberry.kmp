@@ -69,8 +69,7 @@ internal fun SendBroadcastStep(
         onClose = actions.onClose,
         bottom = {
             when (status.tone) {
-                BroadcastTone.Sent ->
-                    TintedPillButton(text = "Done", onClick = actions.finish.onDone, modifier = Modifier.fillMaxWidth())
+                BroadcastTone.Sent -> SentBroadcastActions(actions.finish, status.resend)
                 BroadcastTone.Failed -> FailedBroadcastActions(actions)
                 BroadcastTone.Working -> WorkingBroadcastActions(actions.finish.onStop)
             }
@@ -94,6 +93,24 @@ internal fun WorkingBroadcastActions(onStop: (() -> Unit)?) {
         )
         if (onStop != null) StopSendingButton(onStop)
     }
+}
+
+/** Done, plus Send again while no node has confirmed the transaction. */
+@Composable
+private fun SentBroadcastActions(
+    finish: BroadcastFinishActions,
+    resend: Boolean,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
+        TintedPillButton(text = "Done", onClick = finish.onDone, modifier = Modifier.fillMaxWidth())
+        if (resend) SendAgainButton(finish.onRetry)
+    }
+}
+
+/** Gives the same signed transaction to nodes again. Shared by Send and Private Send. */
+@Composable
+internal fun SendAgainButton(onRetry: () -> Unit) {
+    PlainPillButton(text = "Send again", onClick = onRetry, modifier = Modifier.fillMaxWidth())
 }
 
 /** Stops a broadcast before any node has it. Shared by Send and Private Send. */

@@ -99,7 +99,10 @@ fun SendScreen(
     DisposableEffect(flow) {
         val cb: () -> Unit = { flow.goBack() }
         overlayBackStack.push(cb)
-        onDispose { overlayBackStack.pop(cb) }
+        onDispose {
+            overlayBackStack.pop(cb)
+            flow.releasePsbt()
+        }
     }
     Box(modifier = Modifier.fillMaxSize().background(BwColors.Paper)) {
         SendStepContent(flow)
@@ -223,11 +226,13 @@ private fun SendBroadcast(flow: SendFlow) {
         return
     }
     val owns = broadcastOwns(flow.broadcast, sent.signed.txHex)
+    val owned = ownedBroadcastStatus(flow.broadcast, sent.signed.txHex)
+    val error = flow.sendError
     val status =
-        if (flow.sendError != null && (!owns || flow.broadcast.phase == "error")) {
-            BroadcastStatusUi("Not sent yet", flow.sendError!!, null, BroadcastTone.Failed)
-        } else {
-            ownedBroadcastStatus(flow.broadcast, sent.signed.txHex)
+        when {
+            error != null && (!owns || flow.broadcast.phase == "error") -> BroadcastStatusUi("Not sent yet", error, null, BroadcastTone.Failed)
+            error != null && owned.resend -> owned.copy(line = error)
+            else -> owned
         }
     SendBroadcastStep(
         receipt = sent.receipt,

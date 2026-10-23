@@ -314,8 +314,10 @@ fun CoinsScreen(
                     selectedCoins = actionCoins,
                     ready = sendingReady,
                     onPrimary = {
-                        if (sendingReady && runtime.reservedOutpointsNow().complete) {
-                            onSendWithCoins(actionCoins.map { it.key }.toSet())
+                        val now = runtime.reservedOutpointsNow()
+                        val keys = actionCoins.map { it.key }.toSet()
+                        if (sendingReady && now.complete && keys.none { it in now.keys }) {
+                            onSendWithCoins(keys)
                         } else {
                             refresh()
                         }

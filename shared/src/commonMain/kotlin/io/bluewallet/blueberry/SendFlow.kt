@@ -140,8 +140,11 @@ internal class SendFlow(
             .getOrElse { "no wallet" }
             ?.let { "Needs a wallet that can sign." }
 
-    /** The transaction this flow signed. Its own coin hold is not a coin leaving the selection. */
-    val ownTxid: String? get() = privateSigned?.txid ?: sent?.signed?.txid
+    /** The PSBT on screen. Its coins stay reserved until the PSBT step is left. */
+    private var psbtTxid: String? = null
+
+    /** The transaction this flow signed or exported. Its own coin hold is not a coin leaving the selection. */
+    val ownTxid: String? get() = privateSigned?.txid ?: sent?.signed?.txid ?: psbtTxid
 
     val recipient: SendRecipient get() = SendRecipient(address.trim(), label.trim())
     val spendableRows: List<WalletUtxoRow>
@@ -319,6 +322,7 @@ internal class SendFlow(
 
     fun continueFromAmount() {
         if (amountSats == null || !heldReady) return
+        trimToSpendable()
         pushStep(stepAfterAmount(selectedKeys, coverage().covered))
     }
 
@@ -452,12 +456,23 @@ internal class SendFlow(
             return
         }
         when (val result = ready.built.result) {
-            is PsbtSendResult -> {
-                commit(result, ready.rate)
-                pushStep(SendStep.Psbt)
-            }
+            is PsbtSendResult -> sendPsbt(result, ready.rate)
             is SignedSendResult -> sendSigned(result, ready.amount, ready.rate)
         }
+    }
+
+    /** Signing happens elsewhere, so the coins are held here while the PSBT is on screen. */
+    private fun sendPsbt(
+        result: PsbtSendResult,
+        rate: Double,
+    ) {
+        val inputs = selectedInputs
+        if (!inputsFree(inputs, result.txid)) return
+        runtime.psbtHolds.hold(result.txid, inputs.map { outpointKey(it.txid, it.vout) }.toSet())
+        psbtTxid = result.txid
+        commit(result, rate)
+        sendError = null
+        pushStep(SendStep.Psbt)
     }
 
     private fun readySend(): ReadySend? {
@@ -525,7 +540,14 @@ internal class SendFlow(
         refreshBroadcast()
     }
 
+    /** Frees the PSBT's coins. Called when the PSBT step is left or the send screen goes away. */
+    fun releasePsbt() {
+        psbtTxid?.let { runtime.psbtHolds.release(it) }
+        psbtTxid = null
+    }
+
     fun finish() {
+        releasePsbt()
         leaveBroadcast(if (step == SendStep.PrivateSend) privateBroadcastId else broadcastId)
         if (step == SendStep.PrivateSend) dropBuild()
         close()
@@ -546,22 +568,14 @@ internal class SendFlow(
         close()
     }
 
-    private fun retryBlock(id: String): String? {
-        val txHex = runtime.broadcastStore.get(id)?.txHex
-        return retryRefusal(
-            txHex,
-            snap.utxos.map { it.key }.toSet(),
-            snap.utxosReady,
-            runtime.reservedOutpoints(),
-        )
-    }
+    private fun retryBlock(id: String): String? = retryRefusalFor(runtime, id, snap)
 
     fun openPrivateSend() {
         val rate = feeRate
         val amt = amountSats
         val refund = currentReceiveAddress(runtime, db)
-        val coinsHeld = selectionNeedsAck || selectedKeys.size != selectedRows.size
-        val held = coinsHeld || amt == null || privateSendBlock != null
+        trimToSpendable()
+        val held = selectionNeedsAck || amt == null || privateSendBlock != null
         when {
             rate == null -> openFeeSheet()
             held || refund.isNullOrEmpty() -> {}
@@ -701,6 +715,10 @@ internal class SendFlow(
         step = next
     }
 
+    init {
+        if (snap.utxosReady) trimToSpendable()
+    }
+
     private fun popStep() {
         navForward = false
         if (backStack.isEmpty()) {
@@ -709,6 +727,7 @@ internal class SendFlow(
         }
         if (step == SendStep.PrivateSend) privateSigned = null
         if (step == SendStep.Broadcast) sent = null
+        if (step == SendStep.Psbt) releasePsbt()
         step = backStack.removeLast()
     }
 }

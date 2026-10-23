@@ -224,7 +224,12 @@ private suspend fun connectSocket(
         }
         val rc = connectFd(fd, ai.addr)
         if (rc == 0) {
-            enableSocketOptions(fd)
+            try {
+                enableSocketOptions(fd)
+            } catch (e: IllegalStateException) {
+                platform.posix.close(fd)
+                throw e
+            }
             return PosixByteDuplex(fd)
         }
         lastError = posixError("connect")

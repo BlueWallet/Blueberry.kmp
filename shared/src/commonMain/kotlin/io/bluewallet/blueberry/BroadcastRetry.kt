@@ -64,6 +64,21 @@ fun retryRefusal(
     }
 }
 
+/** [retryRefusal] for job [id]. Its own hold, stored once a node had it, is not another payment's. */
+fun retryRefusalFor(
+    runtime: PeersRuntime,
+    id: String,
+    wallet: WalletTxsSnapshot,
+): String? {
+    val session = runtime.broadcastStore.sessions().find { it.snapshot.id == id }
+    return retryRefusal(
+        session?.snapshot?.txHex,
+        wallet.utxos.map { it.key }.toSet(),
+        wallet.utxosReady,
+        runtime.reservedOutpoints(session?.receipt?.txid),
+    )
+}
+
 private fun txInputKeys(txHex: String): Set<String>? =
     runCatching {
         decodeBroadcastTx(txHex)

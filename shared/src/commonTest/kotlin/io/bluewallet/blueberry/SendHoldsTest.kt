@@ -1,8 +1,16 @@
 package io.bluewallet.blueberry
 
+import io.bluewallet.bip324.OutPoint
+import io.bluewallet.bip324.Transaction
+import io.bluewallet.bip324.TxInput
+import io.bluewallet.bip324.TxOutput
+import io.bluewallet.bip324.bytesToHex
+import io.bluewallet.bip324.encodeTransaction
 import io.bluewallet.blueberry.bus.BroadcastDonePayload
 import io.bluewallet.blueberry.storage.PrivateSendCoin
 import io.bluewallet.blueberry.storage.SendRow
+import io.bluewallet.blueberry.wallet.PsbtSendResult
+import io.bluewallet.blueberry.wallet.hexToBytes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
@@ -184,6 +192,84 @@ class SendHoldsTest {
             assertEquals(txid, db.sends.get(txid)?.txid)
             assertEquals(setOf(held.key), runtime.reservedOutpoints())
         }
+
+    @Test
+    fun a_psbt_refuses_coins_another_payment_holds() =
+        runFlow { _, runtime, flow ->
+            val held = coin("11", 100_000_000)
+            prime(flow, held)
+            flow.build = ReviewBuild.Built(psbt("ee"), flow.draftStamp())
+            runtime.psbtHolds.hold("cd".repeat(32), setOf(held.key))
+            flow.send()
+            assertEquals(SELECTION_HELD, flow.sendError)
+            assertEquals(SendStep.Address, flow.step)
+        }
+
+    @Test
+    fun a_psbt_on_screen_holds_its_coins_until_the_step_is_left() =
+        runFlow { _, runtime, flow ->
+            val c = coin("11", 100_000_000)
+            prime(flow, c)
+            val txid = "ee".repeat(32)
+            flow.build = ReviewBuild.Built(psbt("ee"), flow.draftStamp())
+            flow.send()
+            assertEquals(SendStep.Psbt, flow.step)
+            assertEquals(setOf(c.key), runtime.reservedOutpoints())
+            assertTrue(runtime.reservedOutpoints(txid).isEmpty())
+            flow.goBack()
+            assertTrue(runtime.reservedOutpoints().isEmpty())
+        }
+
+    @Test
+    fun send_again_ignores_its_own_stored_hold_but_not_another_payments() =
+        runFlow { _, runtime, _ ->
+            val c = coin("ab", 100_000_000)
+            val txid = "cd".repeat(32)
+            val hex = spending(c)
+            runtime.armSendPersist(
+                "1",
+                SendRow(txid = txid, txHex = hex, destination = ADDRESS, coins = listOf(PrivateSendCoin(c.txid, c.vout, c.valueSats))),
+            )
+            runtime.broadcastStore.start("1", hex, receipt = BroadcastReceipt(txid, ADDRESS, "", 1_000, 141))
+            runtime.broadcastStore.markHandedOff("1")
+            runtime.persistArmedBroadcast("1", handedOff = true)
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Ok("1", "1.1.1.1:8333", acknowledged = false))
+            runtime.persistArmedBroadcast("1")
+            val wallet = WalletTxsSnapshot(utxos = listOf(c), utxosReady = true)
+            assertEquals(setOf(c.key), runtime.reservedOutpoints())
+            assertNull(retryRefusalFor(runtime, "1", wallet))
+            runtime.psbtHolds.hold("ef".repeat(32), setOf(c.key))
+            assertEquals(RETRY_COINS_HELD, retryRefusalFor(runtime, "1", wallet))
+        }
+
+    @Test
+    fun private_send_with_a_coin_taken_since_review_asks_to_review_the_selection() =
+        runFlow { _, runtime, flow ->
+            val kept = coin("11", 100_000_000)
+            val taken = coin("22", 100_000_000)
+            prime(flow, kept, taken)
+            runtime.psbtHolds.hold("cd".repeat(32), setOf(taken.key))
+            flow.refreshHeldOutpoints()
+            flow.openPrivateSend()
+            assertTrue(flow.selectionNeedsAck)
+            assertEquals(SELECTION_HELD, flow.selectionNotice)
+            assertEquals(setOf(kept.key), flow.selectedKeys)
+            assertEquals(SendStep.Address, flow.step)
+        }
 }
+
+private fun spending(coin: WalletUtxoRow): String =
+    bytesToHex(
+        encodeTransaction(
+            Transaction(
+                version = 1u,
+                inputs = listOf(TxInput(OutPoint(hexToBytes(coin.txid).reversedArray(), 0u), ByteArray(0), 0xffffffffu)),
+                outputs = listOf(TxOutput(value = 1000, scriptPubKey = byteArrayOf(0x51))),
+                lockTime = 0u,
+            ),
+        ),
+    )
+
+private fun psbt(id: String) = PsbtSendResult(psbtHex = "00", txid = id.repeat(32), feeSats = 141, vsize = 141, changeSats = 0, changeVouts = emptyList())
 
 private const val ADDRESS = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"

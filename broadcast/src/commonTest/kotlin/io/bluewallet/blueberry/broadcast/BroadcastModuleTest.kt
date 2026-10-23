@@ -1,6 +1,8 @@
 package io.bluewallet.blueberry.broadcast
 
 import io.bluewallet.bip324.ByteDuplex
+import io.bluewallet.bip324.InventoryPayload
+import io.bluewallet.bip324.InventoryVector
 import io.bluewallet.bip324.Message
 import io.bluewallet.bip324.Networks
 import io.bluewallet.bip324.OutPoint
@@ -71,9 +73,10 @@ internal fun upsertAlive(
     )
 }
 
+/** Plays a node: takes the `tx`, then [reply]s, or by default announces it back with an `inv`. */
 internal suspend fun acceptTx(
     server: ByteDuplex,
-    reply: suspend (Protocol) -> Unit = {},
+    reply: (suspend (Protocol) -> Unit)? = null,
 ): Transaction {
     val protocol =
         Protocol.connect(
@@ -96,7 +99,12 @@ internal suspend fun acceptTx(
     while (true) {
         val msg = protocol.readMessage()
         if (msg is Message.Tx) {
-            reply(protocol)
+            if (reply != null) {
+                reply(protocol)
+            } else {
+                val inv = InventoryVector(1u, transactionId(msg.payload))
+                protocol.writeMessage(Message.Inv(InventoryPayload(listOf(inv))))
+            }
             return msg.payload
         }
     }

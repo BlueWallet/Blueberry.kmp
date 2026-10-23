@@ -106,7 +106,7 @@ class BroadcastStopTest {
                         connect = { _, _, _ ->
                             val (client, server) = pairedByteDuplexes()
                             CoroutineScope(Job() + Dispatchers.Default).launch {
-                                acceptTx(server)
+                                acceptTx(server) {}
                                 suspendCancellableCoroutine<Unit> { }
                             }
                             client
@@ -246,7 +246,7 @@ class BroadcastStopTest {
                             val (client, server) = pairedByteDuplexes()
                             CoroutineScope(Job() + Dispatchers.Default).launch {
                                 try {
-                                    acceptTx(server)
+                                    acceptTx(server) {}
                                     wrote.complete(Unit)
                                     suspendCancellableCoroutine<Unit> { }
                                 } finally {
@@ -274,6 +274,44 @@ class BroadcastStopTest {
             assertEquals("written", result.id)
             assertFalse(result.acknowledged)
             assertEquals(listOf("written"), handedOff)
+            db.close()
+        }
+
+    @Test
+    fun a_node_that_goes_quiet_after_the_tx_is_handed_not_acknowledged() =
+        runBlocking {
+            val db = createSqliteDatabase(":memory:")
+            upsertAlive(db, "1.1.1.1")
+            val bus = createMessageBus()
+            val done =
+                async {
+                    val deferred = CompletableDeferred<BroadcastDonePayload>()
+                    bus.on(Event.BroadcastDone) { deferred.complete(it) }
+                    deferred.await()
+                }
+            val mod =
+                createBroadcastModule(
+                    ModuleContext(bus, db),
+                    BroadcastModuleOptions(
+                        maxAttempts = 1,
+                        peerWaitPollMs = 15,
+                        ackTimeoutMs = 50,
+                        connect = { _, _, _ ->
+                            val (client, server) = pairedByteDuplexes()
+                            CoroutineScope(Job() + Dispatchers.Default).launch {
+                                acceptTx(server) {}
+                                suspendCancellableCoroutine<Unit> { }
+                            }
+                            client
+                        },
+                    ),
+                )
+            mod.start()
+            bus.emit(Event.BroadcastRequest, BroadcastRequestPayload("quiet", sampleTxHex()))
+            val result = withTimeout(5_000) { done.await() }
+            assertTrue(result is BroadcastDonePayload.Ok)
+            assertFalse(result.acknowledged)
+            mod.stop()
             db.close()
         }
 

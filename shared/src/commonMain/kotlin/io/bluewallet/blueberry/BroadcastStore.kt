@@ -246,7 +246,11 @@ fun prepareUiBroadcast(
     return id
 }
 
-/** Restarts a finished job under the same id so the open screen and list row stay put. */
+/**
+ * Restarts a finished job under the same id so the open screen and list row stay put. A failure restarts,
+ * and so does a send no node confirmed; a confirmed send is done. A re-send starts handed off, since a node
+ * may already hold it, so it cannot be stopped and a failure still reads as sent.
+ */
 fun rebroadcast(
     store: BroadcastStore,
     id: String,
@@ -255,10 +259,11 @@ fun rebroadcast(
     val txHex = session?.snapshot?.txHex
     val phase = session?.snapshot?.phase
     val missing = session == null || txHex == null
-    val settled = broadcastJobInFlight(phase) || phase == "success"
+    val settled = broadcastJobInFlight(phase) || (phase == "success" && session?.snapshot?.acknowledged != false)
     if (missing || settled) return null
     store.dismiss(id)
     store.start(id, txHex, session.snapshot.triedPeers, session.receipt)
+    if (phase == "success") store.markHandedOff(id)
     return BroadcastRequestPayload(id, txHex, session.snapshot.triedPeers)
 }
 

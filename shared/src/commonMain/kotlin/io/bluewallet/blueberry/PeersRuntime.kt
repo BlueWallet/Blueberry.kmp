@@ -112,8 +112,11 @@ class PeersRuntime(
     /** Cleared whenever the wallet store rebuilds from the database. */
     private val storedHolds = StoredHoldsCache { loadStoredHolds(db) }
 
+    /** Coins in a PSBT that is on screen to be signed elsewhere. */
+    internal val psbtHolds = DraftHolds()
+
     /**
-     * Outpoints a live broadcast or an unconfirmed stored send still holds.
+     * Outpoints a live broadcast, an open PSBT, or an unconfirmed stored send still holds.
      * A finished error keeps the row for Retry and no longer holds the coins, since no node has it.
      * [exceptTxid] leaves out one transaction's own hold, so a screen can tell its own coins from coins another payment took.
      */
@@ -135,7 +138,7 @@ class PeersRuntime(
                     .values
                     .flatMap { it.coins }
         val held = stored.mapNotNull { (txid, key) -> if (txid == exceptTxid) null else key }
-        return armed.map { outpointKey(it.txid, it.vout) }.toSet() + held
+        return armed.map { outpointKey(it.txid, it.vout) }.toSet() + held + psbtHolds.keys(exceptTxid)
     }
 
     /** Stored holds if already read, without touching the database. */
@@ -517,6 +520,37 @@ internal class StoredHoldsCache(
             if (slot.compareAndSet(cur, Slot(fresh))) return fresh
         }
     }
+}
+
+/** Outpoint keys reserved per txid while nothing is stored for that transaction. */
+@OptIn(ExperimentalAtomicApi::class)
+internal class DraftHolds {
+    private val held = AtomicReference<Map<String, Set<String>>>(emptyMap())
+
+    fun hold(
+        txid: String,
+        keys: Set<String>,
+    ) {
+        while (true) {
+            val cur = held.load()
+            if (held.compareAndSet(cur, cur + (txid to keys))) return
+        }
+    }
+
+    fun release(txid: String) {
+        while (true) {
+            val cur = held.load()
+            if (held.compareAndSet(cur, cur - txid)) return
+        }
+    }
+
+    fun keys(exceptTxid: String? = null): Set<String> =
+        held
+            .load()
+            .filterKeys { it != exceptTxid }
+            .values
+            .flatten()
+            .toSet()
 }
 
 internal fun loadStoredHolds(db: Database): List<Pair<String, String>> =

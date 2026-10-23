@@ -86,8 +86,10 @@ internal fun PrivateSendDeposit(
         Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
             BroadcastStatusCard(status)
             when (status.tone) {
-                BroadcastTone.Sent ->
+                BroadcastTone.Sent -> {
                     PillButton(text = "Done", onClick = finish.onDone, modifier = Modifier.fillMaxWidth(), pressable = true)
+                    if (status.resend) SendAgainButton(finish.onRetry)
+                }
                 BroadcastTone.Failed ->
                     PillButton(text = "Retry", onClick = finish.onRetry, modifier = Modifier.fillMaxWidth(), pressable = true)
                 BroadcastTone.Working -> WorkingBroadcastActions(finish.onStop)

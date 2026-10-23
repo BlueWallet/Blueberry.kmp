@@ -7,6 +7,8 @@ data class BroadcastStatusUi(
     val line: String,
     val caption: String?,
     val tone: BroadcastTone,
+    /** Sent, but no node confirmed it, so the same transaction can be given to nodes again. */
+    val resend: Boolean = false,
 )
 
 private const val DONE_PERCENT = 100
@@ -31,8 +33,10 @@ fun broadcastStatus(snap: BroadcastSnapshot): BroadcastStatusUi =
             BroadcastStatusUi(
                 "Sent",
                 "Given to Bitcoin nodes",
-                "No node confirmed it took it, but one may still pass it on, so its coins stay locked until it confirms.",
+                "No node confirmed it took it, but one may still pass it on, so its coins stay locked until it confirms. " +
+                    "Send again gives the same transaction to other nodes.",
                 BroadcastTone.Sent,
+                resend = true,
             )
         snap.phase == "success" ->
             BroadcastStatusUi(

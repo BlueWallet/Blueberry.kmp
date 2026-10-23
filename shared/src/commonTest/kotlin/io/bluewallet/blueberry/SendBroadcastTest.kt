@@ -6,6 +6,7 @@ import io.bluewallet.bip324.TxInput
 import io.bluewallet.bip324.TxOutput
 import io.bluewallet.bip324.bytesToHex
 import io.bluewallet.bip324.encodeTransaction
+import io.bluewallet.blueberry.bus.BroadcastDonePayload
 import io.bluewallet.blueberry.wallet.hexToBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -38,6 +39,23 @@ class SendBroadcastTest {
         assertEquals("no peers accepted", failed.line)
         assertEquals(BroadcastTone.Failed, failed.tone)
         assertEquals("No node accepted it.", line(BroadcastSnapshot(phase = "error")))
+    }
+
+    @Test
+    fun a_send_no_node_confirmed_can_go_again_and_starts_handed_off() {
+        val store = createBroadcastStore()
+        store.start("quiet", "aa")
+        store.applyDone(BroadcastDonePayload.Ok("quiet", "1.1.1.1:8333", acknowledged = false))
+        assertTrue(broadcastStatus(store.get("quiet")!!).resend)
+        assertEquals("aa", rebroadcast(store, "quiet")?.txHex)
+        assertTrue(store.get("quiet")!!.handedOff)
+        assertFalse(broadcastCanBeStopped(store.get("quiet")))
+        store.applyDone(BroadcastDonePayload.Error("quiet", "no peers"))
+        assertEquals("success", store.get("quiet")?.phase)
+        store.start("took", "bb")
+        store.applyDone(BroadcastDonePayload.Ok("took", "1.1.1.1:8333"))
+        assertFalse(broadcastStatus(store.get("took")!!).resend)
+        assertNull(rebroadcast(store, "took"))
     }
 
     @Test

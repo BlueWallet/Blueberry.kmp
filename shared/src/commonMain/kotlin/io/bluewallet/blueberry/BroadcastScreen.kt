@@ -46,7 +46,8 @@ fun BroadcastScreen(
     }
     val receipt = SendReceipt(SendRecipient(stored.destination, stored.label), stored.paidSats, stored.feeSats, stored.txid)
     val status = ownedBroadcastStatus(snap, snap.txHex ?: stored.txid)
-    val shown = if (retryNote != null && status.tone == BroadcastTone.Failed) status.copy(line = retryNote!!) else status
+    val retryable = status.tone == BroadcastTone.Failed || status.resend
+    val shown = if (retryNote != null && retryable) status.copy(line = retryNote!!) else status
     SendBroadcastStep(
         receipt = receipt,
         status = shown,
@@ -77,15 +78,7 @@ private fun retryBroadcast(
     runtime: PeersRuntime,
     id: String,
 ): String? {
-    val session = runtime.broadcastStore.sessions().find { it.snapshot.id == id }
-    val wallet = runtime.walletTxsStore.get()
-    val blocked =
-        retryRefusal(
-            session?.snapshot?.txHex,
-            wallet.utxos.map { it.key }.toSet(),
-            wallet.utxosReady,
-            runtime.reservedOutpoints(),
-        )
+    val blocked = retryRefusalFor(runtime, id, runtime.walletTxsStore.get())
     val req = if (blocked != null) null else rebroadcast(runtime.broadcastStore, id)
     if (blocked == null && req != null) requestBroadcast(runtime, req)
     val alreadyRunning = runtime.broadcastStore.get(id)?.phase != null

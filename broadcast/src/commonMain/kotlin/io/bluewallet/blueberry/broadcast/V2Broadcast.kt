@@ -124,14 +124,15 @@ private fun describeV2Command(msg: Message): String {
 }
 
 /**
- * BIP-324 session: version/verack, send `tx`, succeed on inv/getdata for the
- * txid, or ack timeout / peer close without `reject`.
+ * BIP-324 session: version/verack, then send `tx`. Returns true when the peer showed it holds the
+ * transaction (inv/getdata for it, or a duplicate reject). Returns false on ack timeout or a peer close:
+ * nodes no longer send `reject`, so silence cannot tell a kept transaction from a dropped one.
  */
 suspend fun broadcastTxV2(
     duplex: ByteDuplex,
     txHex: String,
     options: BroadcastTxV2Options,
-) {
+): Boolean {
     val wireTx = decodeBroadcastTx(txHex)
     val txidInternal = transactionId(wireTx)
     val wtxidInternal = sha256d(encodeTransaction(wireTx))
@@ -172,50 +173,73 @@ suspend fun broadcastTxV2(
         log("broadcast", "v2 send-tx")
         session.writeMessage(Message.Tx(wireTx))
         currentCoroutineContext()[HandedOff]?.mark?.invoke()
-        try {
-            withTimeout(options.ackTimeoutMs) {
-                while (true) {
-                    yield()
-                    val msg = session.readMessage()
-                    log("broadcast", "v2 recv command=${describeV2Command(msg)}")
-                    val verdict = rejectPayload(msg)?.let { rejectVerdict(it, txidInternal) }
-                    if (verdict == RejectVerdict.Refused) {
-                        logError("broadcast", "v2 reject")
-                        throw IllegalStateException("peer rejected transaction")
-                    }
-                    if (verdict == RejectVerdict.AlreadyHave) {
-                        log("broadcast", "v2 reject duplicate (accepted)")
-                        return@withTimeout
-                    }
-                    if ((msg is Message.Inv || msg is Message.GetData)) {
-                        val inventory =
-                            when (msg) {
-                                is Message.Inv -> msg.payload.inventory
-                                is Message.GetData -> msg.payload.inventory
-                            }
-                        if (inventoryMentionsTx(inventory, txidInternal, wtxidInternal)) {
-                            log("broadcast", "v2 ack ${msg.command}")
-                            return@withTimeout
-                        }
-                    }
-                    answerPing(session, msg)
-                }
-            }
-        } catch (err: TimeoutCancellationException) {
-            log("broadcast", "v2 ack timeout (accepted)")
-        } catch (err: Throwable) {
-            if (err.message == "peer rejected transaction") throw err
-            if (isSessionGone(err)) {
-                log("broadcast", "v2 peer-closed after tx (accepted)")
-            } else {
-                logError("broadcast", "v2 session error", err)
-                throw err
-            }
-        }
+        return awaitTxAck(session, txidInternal, wtxidInternal, options.ackTimeoutMs)
     } finally {
         try {
             session.close()
         } catch (_: Throwable) {
+        }
+    }
+}
+
+private const val PEER_REJECTED_TX = "peer rejected transaction"
+
+/** Reads until the peer shows it holds the tx. False when it goes quiet or hangs up first; throws on a reject. */
+private suspend fun awaitTxAck(
+    session: Protocol,
+    txid: ByteArray,
+    wtxid: ByteArray,
+    timeoutMs: Long,
+): Boolean =
+    try {
+        withTimeout(timeoutMs) {
+            var acked = false
+            while (!acked) {
+                yield()
+                val msg = session.readMessage()
+                log("broadcast", "v2 recv command=${describeV2Command(msg)}")
+                acked = acknowledgesTx(msg, txid, wtxid)
+                if (!acked) answerPing(session, msg)
+            }
+            true
+        }
+    } catch (err: TimeoutCancellationException) {
+        log("broadcast", "v2 ack timeout (handed, not acknowledged)")
+        false
+    } catch (err: Throwable) {
+        val rejected = err.message == PEER_REJECTED_TX
+        if (rejected || !isSessionGone(err)) {
+            if (!rejected) logError("broadcast", "v2 session error", err)
+            throw err
+        }
+        log("broadcast", "v2 peer-closed after tx (handed, not acknowledged)")
+        false
+    }
+
+private fun acknowledgesTx(
+    msg: Message,
+    txid: ByteArray,
+    wtxid: ByteArray,
+): Boolean {
+    val inventory =
+        when (msg) {
+            is Message.Inv -> msg.payload.inventory
+            is Message.GetData -> msg.payload.inventory
+            else -> null
+        }
+    return when (rejectPayload(msg)?.let { rejectVerdict(it, txid) }) {
+        RejectVerdict.Refused -> {
+            logError("broadcast", "v2 reject")
+            throw IllegalStateException(PEER_REJECTED_TX)
+        }
+        RejectVerdict.AlreadyHave -> {
+            log("broadcast", "v2 reject duplicate (accepted)")
+            true
+        }
+        else -> {
+            val acked = inventory != null && inventoryMentionsTx(inventory, txid, wtxid)
+            if (acked) log("broadcast", "v2 ack ${msg.command}")
+            acked
         }
     }
 }

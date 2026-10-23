@@ -190,7 +190,7 @@ fun createBroadcastModule(
         txHex: String,
         job: Job,
         ledger: PeerLedger,
-    ) {
+    ): Boolean {
         job.ensureActive()
         val key = peerKey(peer)
         log("broadcast", "dial start peer=$key timeoutMs=${options.dialTimeoutMs}")
@@ -206,7 +206,7 @@ fun createBroadcastModule(
                 logError("broadcast", "dial fail peer=$key", err)
                 throw err
             }
-        try {
+        return try {
             withContext(HandedOff { ledger.hand(key) }) {
                 broadcastTxV2(
                     duplex,
@@ -247,10 +247,10 @@ fun createBroadcastModule(
             }
             job.ensureActive()
             val peers = alivePeers(ALIVE_PEER_PICK_LIMIT)
-            val tried = ledger.accepted + failed + exclude
+            val given = ledger.accepted + ledger.handed
             val peer =
-                pickAlive(peers, options.random, tried)
-                    ?: if (ledger.accepted.isEmpty()) pickAlive(peers, options.random, ledger.accepted + exclude) else null
+                pickAlive(peers, options.random, given + failed + exclude)
+                    ?: if (ledger.accepted.isEmpty()) pickAlive(peers, options.random, given + exclude) else null
             if (peer == null) {
                 log("broadcast", "attempt $attempt/$maxAttempts no-unused-alive-peer ok=${ledger.accepted.size}")
                 return accepted() to failures
@@ -259,8 +259,11 @@ fun createBroadcastModule(
             log("broadcast", "attempt $attempt/$maxAttempts peer=$key ok=${ledger.accepted.size}/$BROADCAST_SUCCESS_PEERS")
             emitProgress(BroadcastPhase.ATTEMPT, key, null, null, null)
             try {
-                attemptOne(dial, peer, txHex, job, ledger)
-                ledger.accepted += key
+                if (attemptOne(dial, peer, txHex, job, ledger)) {
+                    ledger.accepted += key
+                } else {
+                    log("broadcast", "attempt peer=$key handed, not acknowledged")
+                }
             } catch (err: CancellationException) {
                 throw err
             } catch (err: Throwable) {
@@ -305,12 +308,12 @@ fun createBroadcastModule(
                     val unusedAlive =
                         alivePeers(ALIVE_PEER_PICK_LIMIT).any { candidate ->
                             val key = peerKey(candidate)
-                            key !in ledger.accepted && key !in cycleFailed && key !in excludePeers
+                            key !in ledger.accepted && key !in ledger.handed && key !in cycleFailed && key !in excludePeers
                         }
                     if (ledger.accepted.size >= BROADCAST_SUCCESS_PEERS ||
-                        (ledger.accepted.isNotEmpty() && !unusedAlive)
+                        (ledger.holders().isNotEmpty() && !unusedAlive)
                     ) {
-                        accepted ?: ledger.accepted.joinToString(", ")
+                        accepted ?: ledger.holders().joinToString(", ")
                     } else {
                         throw IllegalStateException(
                             fails.takeLast(3).joinToString(" | ").ifEmpty { "no alive peers" },
