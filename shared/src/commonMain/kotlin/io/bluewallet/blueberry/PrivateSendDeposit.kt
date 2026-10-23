@@ -82,8 +82,18 @@ internal fun PrivateSendDeposit(
         showBroadcast &&
             (broadcastJobInFlight(broadcast.phase) || broadcast.phase == "success" || broadcast.phase == "error")
     if (broadcasting) {
+        val status = broadcastStatus(broadcast)
         Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
-            BroadcastStatus(broadcast, finish = finish)
+            BroadcastStatusCard(status)
+            when (status.tone) {
+                BroadcastTone.Sent -> {
+                    PillButton(text = "Done", onClick = finish.onDone, modifier = Modifier.fillMaxWidth(), pressable = true)
+                    if (status.resend) SendAgainButton(finish.onRetry)
+                }
+                BroadcastTone.Failed ->
+                    PillButton(text = "Retry", onClick = finish.onRetry, modifier = Modifier.fillMaxWidth(), pressable = true)
+                BroadcastTone.Working -> WorkingBroadcastActions(finish.onStop)
+            }
         }
         return
     }
@@ -119,6 +129,7 @@ internal fun PrivateSendDeposit(
             onClick = onBroadcast,
             modifier = Modifier.fillMaxWidth(),
             enabled = privateBroadcastEnabled(agreed),
+            pressable = true,
         )
     }
 }

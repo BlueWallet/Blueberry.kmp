@@ -4,16 +4,14 @@ package io.bluewallet.blueberry
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,10 +31,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -50,44 +44,33 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.backhandler.BackHandler
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
-import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.OverlayBackEffects
-import io.bluewallet.blueberry.ui.PillButton
+import io.bluewallet.blueberry.ui.PlatformBottomEdgeBlur
 import io.bluewallet.blueberry.ui.PlatformScreenHeader
 import io.bluewallet.blueberry.ui.PlatformScrollEdge
+import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.alwaysBounceTail
-import io.bluewallet.blueberry.ui.platformBottomEdgeClearance
 import io.bluewallet.blueberry.ui.platformHeaderClearance
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Breathing room under the inline nav title before the summary. */
 private val TitleBelowHeaderGap = 12.dp
@@ -95,17 +78,7 @@ private val TitleBelowHeaderGap = 12.dp
 /** Room above and below the weight bar and filter chips, so they read as their own section. */
 private val CoinOverviewGap = 32.dp
 private val CoinGroupGap = 24.dp
-
-/** Frozen coins stay in the weight bar for scale but read as locked under the spendable headline. */
-private const val FROZEN_BAR_ALPHA = 0.18f
-
-enum class CoinControlMode {
-    /** Home entry: Send opens the send flow with the selection. */
-    Standalone,
-
-    /** Send entry: confirm returns keys to the caller. */
-    Picker,
-}
+private val BottomFeather = 36.dp
 
 @Composable
 @Suppress("LongMethod", "LongParameterList", "CyclomaticComplexMethod")
@@ -113,14 +86,15 @@ fun CoinsScreen(
     runtime: PeersRuntime,
     db: Database,
     onBack: () -> Unit,
-    mode: CoinControlMode = CoinControlMode.Standalone,
     initialSelectedKeys: Set<String> = emptySet(),
     onSendWithCoins: (Set<String>) -> Unit = {},
-    onConfirmSelection: (keys: Set<String>, coinsVanished: Boolean) -> Unit = { _, _ -> },
     onFrozenKey: (String) -> Unit = {},
     feeRateSatPerVb: Double? = null,
 ) {
     var snap by remember { mutableStateOf(runtime.walletTxsStore.get()) }
+    val heldAtOpen = remember { runtime.reservedOutpointsNow() }
+    var sendingKeys by remember { mutableStateOf(heldAtOpen.keys) }
+    var sendingReady by remember { mutableStateOf(heldAtOpen.complete) }
     var selectedKeys by remember { mutableStateOf(initialSelectedKeys) }
     var filter by remember { mutableStateOf(CoinControlFilter.All) }
     var editingKey by remember { mutableStateOf<String?>(null) }
@@ -128,38 +102,52 @@ fun CoinsScreen(
     var sheetRow by remember { mutableStateOf<CoinsRowModel?>(null) }
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
+    val holdsGen = remember { intArrayOf(0) }
+    val refresh = {
+        scope.launch {
+            val gen = ++holdsGen[0]
+            val held = withContext(Dispatchers.Default) { runtime.reservedOutpoints() }
+            if (gen == holdsGen[0]) {
+                snap = runtime.walletTxsStore.get()
+                sendingKeys = held
+                sendingReady = true
+            }
+        }
+    }
     DisposableEffect(runtime.walletTxsStore) {
-        val off = runtime.walletTxsStore.subscribe { scope.launch { snap = runtime.walletTxsStore.get() } }
+        refresh()
+        val off = runtime.walletTxsStore.subscribe { refresh() }
+        onDispose { off() }
+    }
+    DisposableEffect(runtime.broadcastStore) {
+        var seenLive: Set<String>? = null
+        val off =
+            runtime.broadcastStore.subscribe {
+                scope.launch {
+                    val ids = liveBroadcastIds(runtime.broadcastStore)
+                    if (ids == seenLive) return@launch
+                    seenLive = ids
+                    refresh()
+                }
+            }
         onDispose { off() }
     }
     val control =
-        remember(snap, feeRateSatPerVb) {
-            coinControlSnapshotFrom(snap, feeRateSatPerVb)
+        remember(snap, feeRateSatPerVb, sendingKeys) {
+            coinControlSnapshotFrom(snap, feeRateSatPerVb, sendingKeys)
         }
     val filtered = remember(control, filter) { filterCoinControlGroups(control, filter) }
-    val visibleKeys =
-        remember(filtered) { filtered.flatMap { group -> group.coins.map { it.key } }.toSet() }
-    // Selected coins spent while the picker is open; Back must not answer a warning the subject never saw.
-    var coinsVanished by remember { mutableStateOf(false) }
-    LaunchedEffect(control, visibleKeys) {
+    LaunchedEffect(control) {
         val live = control.coins.map { it.key }.toSet()
-        val frozen =
+        val unavailable =
             control.coins
-                .filter { it.isFrozen }
+                .filter { !it.canSelect }
                 .map { it.key }
                 .toSet()
-        if ((selectedKeys - live).isNotEmpty()) coinsVanished = true
-        val next = pickerSelection(selectedKeys, live, visibleKeys, frozen, showsAll = filter == CoinControlFilter.All)
+        val next = pickerSelection(selectedKeys, live, unavailable)
         if (next != selectedKeys) selectedKeys = next
     }
-    val actionCoins = control.coins.filter { it.key in selectedKeys && !it.isFrozen }
-    // Every picker exit writes the checked set, partial or empty, so Send never keeps unchecked coins.
-    val leave: () -> Unit = {
-        when (mode) {
-            CoinControlMode.Standalone -> onBack()
-            CoinControlMode.Picker -> onConfirmSelection(actionCoins.map { it.key }.toSet(), coinsVanished)
-        }
-    }
+    val actionCoins = control.coins.filter { it.key in selectedKeys && it.canSelect }
     val notice = remember(actionCoins) { privacyNoticeForSelection(actionCoins) }
     val rowsByKey = remember(snap.utxos) { coinsRows(snap.utxos).associateBy { it.key } }
     LaunchedEffect(editingKey) {
@@ -182,9 +170,12 @@ fun CoinsScreen(
         } else {
             safe.calculateBottomPadding()
         }
+    val hazeState = rememberHazeState()
+    val blurHeight by animateDpAsState(
+        targetValue = (if (hasSelection) bottomBarHeight else safe.calculateBottomPadding()) + BottomFeather,
+        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+    )
 
-    // The sheet's handler is registered later, so it still wins while the sheet is open.
-    BackHandler(enabled = mode == CoinControlMode.Picker && !sheetOpen, onBack = leave)
     OverlayBackEffects(
         enabled = sheetOpen,
         onDismiss = { editingKey = null },
@@ -196,10 +187,9 @@ fun CoinsScreen(
                     .background(BwColors.Paper),
         ) {
             PlatformScrollEdge(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().background(BwColors.Paper).hazeSource(hazeState),
                 top = topChrome,
-                // Bottom scrim is a fixed 40 dp 60%→0% fade on iOS.
-                bottom = platformBottomEdgeClearance(),
+                bottom = null,
                 showEdges = !sheetOpen,
             ) {
                 LazyColumn(
@@ -250,7 +240,7 @@ fun CoinsScreen(
                             group = group,
                             selectedKeys = selectedKeys,
                             onToggle = { coin ->
-                                if (coin.isFrozen) return@CoinGroupSection
+                                if (!coin.canSelect) return@CoinGroupSection
                                 selectedKeys =
                                     if (coin.key in selectedKeys) {
                                         selectedKeys - coin.key
@@ -268,9 +258,19 @@ fun CoinsScreen(
                 }
             }
             if (!sheetOpen) {
+                PlatformBottomEdgeBlur(
+                    hazeState = hazeState,
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .height(blurHeight),
+                )
+            }
+            if (!sheetOpen) {
                 PlatformScreenHeader(
                     title = "Coin control",
-                    onBack = leave,
+                    onBack = onBack,
                     showBarTitle = true,
                     trailingText = if (hasSelection) "Clear" else null,
                     onTrailing =
@@ -312,12 +312,14 @@ fun CoinsScreen(
                             },
                     notice = notice,
                     selectedCoins = actionCoins,
-                    mode = mode,
+                    ready = sendingReady,
                     onPrimary = {
+                        val now = runtime.reservedOutpointsNow()
                         val keys = actionCoins.map { it.key }.toSet()
-                        when (mode) {
-                            CoinControlMode.Standalone -> onSendWithCoins(keys)
-                            CoinControlMode.Picker -> onConfirmSelection(keys, coinsVanished)
+                        if (sendingReady && now.complete && keys.none { it in now.keys }) {
+                            onSendWithCoins(keys)
+                        } else {
+                            refresh()
                         }
                     },
                 )
@@ -395,390 +397,24 @@ private fun CoinControlSummary(control: CoinControlSnapshot) {
             letterSpacing = (-0.55).sp,
             roundedDigits = true,
         )
-        FrozenBalancePill(control.frozenSats)
-        if (control.availability == CoinAvailability.AllFrozen) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FrozenBalancePill(control.frozenSats)
+            SendingBalancePill(control.sendingSats)
+        }
+        val notice =
+            when (control.availability) {
+                CoinAvailability.AllFrozen -> ALL_FROZEN_NOTICE
+                CoinAvailability.AllSending -> ALL_SENDING_NOTICE
+                else -> null
+            }
+        if (notice != null) {
             Text(
-                text = ALL_FROZEN_NOTICE,
+                text = notice,
                 color = BwColors.Warning,
                 fontFamily = BwFontFamily,
                 fontSize = 15.sp,
             )
         }
-    }
-}
-
-@Composable
-private fun CoinWeightBar(
-    coins: List<CoinControlCoin>,
-    selectedKeys: Set<String>,
-    modifier: Modifier = Modifier,
-) {
-    val hasSelection = selectedKeys.isNotEmpty()
-    Canvas(modifier = modifier.clip(RoundedCornerShape(8.dp))) {
-        val gaps = (coins.size - 1).coerceAtLeast(0)
-        val gap = if (gaps == 0) 0f else minOf(2.dp.toPx(), size.width / 2f / gaps)
-        val usable = (size.width - gap * gaps).coerceAtLeast(0f)
-        val widths = coinWeightBarWidths(coins.map { it.valueSats }, usable, 3.dp.toPx())
-        var x = 0f
-        for ((index, coin) in coins.withIndex()) {
-            val w = widths[index]
-            val alpha =
-                when {
-                    coin.isFrozen -> FROZEN_BAR_ALPHA
-                    !hasSelection || coin.key in selectedKeys -> 1f
-                    else -> 0.28f
-                }
-            drawRoundRect(
-                color = Color(coin.colorArgb).copy(alpha = alpha),
-                topLeft = Offset(x, 0f),
-                size = Size(w, size.height),
-                cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
-            )
-            x += w
-            if (index < coins.lastIndex) x += gap
-        }
-    }
-}
-
-@Composable
-private fun CoinFilterChips(
-    counts: Map<CoinControlFilter, Int>,
-    selected: CoinControlFilter,
-    onSelect: (CoinControlFilter) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        CoinControlFilter.entries.forEach { f ->
-            val count = counts[f] ?: 0
-            val active = f == selected
-            val label =
-                when (f) {
-                    CoinControlFilter.All -> "All"
-                    CoinControlFilter.Labeled -> "Labeled"
-                    CoinControlFilter.Change -> "Change"
-                    CoinControlFilter.NoLabel -> "No label"
-                    CoinControlFilter.Frozen -> "Frozen"
-                }
-            val shape = RoundedCornerShape(18.dp)
-            val bg = if (active) BwColors.AccentSoft else BwColors.Card
-            val fg =
-                when {
-                    active -> BwColors.Accent
-                    f == CoinControlFilter.NoLabel -> BwColors.Warning
-                    else -> BwColors.InkSecondary
-                }
-            Text(
-                text = "$label $count",
-                color = fg,
-                fontFamily = BwFontFamily,
-                fontSize = 13.sp,
-                modifier =
-                    Modifier
-                        .clip(shape)
-                        .background(bg, shape)
-                        .semantics { this.selected = active }
-                        .clickable(
-                            role = Role.Tab,
-                            onClickLabel = coinFilterClickLabel(label, count, narrows = f != CoinControlFilter.All),
-                        ) { onSelect(f) }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-            )
-        }
-    }
-}
-
-@Composable
-@Suppress("LongMethod")
-private fun CoinGroupSection(
-    group: CoinControlGroup,
-    selectedKeys: Set<String>,
-    onToggle: (CoinControlCoin) -> Unit,
-    onOpenSheet: (CoinControlCoin) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = "${group.title} · ${group.coins.size}",
-                color = BwColors.Ink,
-                fontFamily = BwFontFamily,
-                fontSize = 15.sp,
-                fontWeight = BwType.Label,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = coinGroupSubtitle(group),
-                    color = BwColors.InkSecondary,
-                    fontFamily = BwFontFamily,
-                    fontSize = 13.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                BtcAmountText(
-                    sats = group.totalSats,
-                    color = BwColors.InkSecondary,
-                    trailingColor = BwColors.InkSecondary,
-                    fontSize = 14.sp,
-                    fontWeight = BwType.Value,
-                    roundedDigits = true,
-                )
-            }
-        }
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(BwColors.Card),
-        ) {
-            group.coins.forEachIndexed { index, coin ->
-                key(coin.key, coin.isFrozen, coin.label, coin.privacyState) {
-                    if (index > 0) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(BwColors.InkMuted.copy(alpha = 0.22f)),
-                        )
-                    }
-                    CoinControlRow(
-                        coin = coin,
-                        selected = coin.key in selectedKeys,
-                        onToggle = { onToggle(coin) },
-                        onOpenSheet = { onOpenSheet(coin) },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-@Suppress("LongMethod")
-private fun CoinControlRow(
-    coin: CoinControlCoin,
-    selected: Boolean,
-    onToggle: () -> Unit,
-    onOpenSheet: () -> Unit,
-) {
-    val subtitle = coinRowSubtitle(coin)
-    val tag = coinRowTag(coin)
-    // The toggleable semantics announce the checked state and the hint; the label carries only the coin.
-    val selectA11y =
-        if (coin.isFrozen) {
-            "${formatBtc(coin.valueSats)}, frozen, not selectable"
-        } else {
-            formatBtc(coin.valueSats)
-        }
-    val detailsA11y =
-        buildString {
-            append(formatBtc(coin.valueSats))
-            append(", ")
-            if (coin.isFrozen) append("frozen, ")
-            append(subtitle)
-            append(", ")
-            append(coin.ageLabel)
-            append(", opens coin details")
-        }
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(if (selected) BwColors.AccentSoft else Color.Transparent)
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            modifier =
-                Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .then(
-                        if (coin.isFrozen) {
-                            Modifier.semantics {
-                                contentDescription = selectA11y
-                                disabled()
-                            }
-                        } else {
-                            Modifier
-                                .semantics { contentDescription = selectA11y }
-                                .toggleable(value = selected, role = Role.Checkbox, onValueChange = { onToggle() })
-                        },
-                    ).padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            CoinSelector(selected = selected, frozen = coin.isFrozen)
-            Box(
-                modifier =
-                    Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(Color(coin.colorArgb), CircleShape),
-            )
-        }
-        Row(
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .semantics { contentDescription = detailsA11y }
-                    .clickable(role = Role.Button, onClick = onOpenSheet)
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                BtcAmountText(
-                    sats = coin.valueSats,
-                    color = BwColors.Ink,
-                    fontSize = 17.sp,
-                    fontWeight = BwType.Value,
-                    roundedDigits = true,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (tag != null) {
-                        val (fg, bg) =
-                            when (tag) {
-                                "Frozen" -> BwColors.InkSecondary to BwColors.Section
-                                "Near dust" -> BwColors.Warning to BwColors.Warning.copy(alpha = 0.16f)
-                                "Change" -> BwColors.Accent to BwColors.AccentSoft
-                                else -> BwColors.InkSecondary to BwColors.Section
-                            }
-                        Text(
-                            text = tag,
-                            color = fg,
-                            fontFamily = BwFontFamily,
-                            fontSize = 11.sp,
-                            modifier =
-                                Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .background(bg)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
-                    }
-                    Text(
-                        text = subtitle,
-                        color =
-                            if (subtitle.startsWith("No label")) {
-                                BwColors.Warning
-                            } else {
-                                BwColors.InkSecondary
-                            },
-                        fontFamily = BwFontFamily,
-                        fontSize = 13.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            Text(
-                text = coin.ageLabel,
-                color = BwColors.InkSecondary,
-                fontFamily = BwFontFamily,
-                fontSize = 13.sp,
-            )
-        }
-    }
-}
-
-@Composable
-private fun CoinSelector(
-    selected: Boolean,
-    frozen: Boolean,
-) {
-    if (frozen) {
-        Box(
-            modifier =
-                Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(BwColors.Section),
-            contentAlignment = Alignment.Center,
-        ) {
-            FrozenLockIcon(modifier = Modifier.size(12.dp), color = BwColors.InkMuted)
-        }
-    } else {
-        Box(
-            modifier =
-                Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .then(
-                        if (selected) {
-                            Modifier.background(BwColors.Accent, CircleShape)
-                        } else {
-                            Modifier.border(2.dp, BwColors.InkMuted, CircleShape)
-                        },
-                    ),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (selected) {
-                CheckmarkIcon(modifier = Modifier.size(12.dp), color = BwColors.OnAccent)
-            }
-        }
-    }
-}
-
-@Composable
-private fun CheckmarkIcon(
-    modifier: Modifier = Modifier,
-    color: Color,
-) {
-    Canvas(modifier = modifier) {
-        val stroke =
-            Stroke(
-                width = 2.dp.toPx(),
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round,
-            )
-        val path =
-            Path().apply {
-                moveTo(size.width * 0.12f, size.height * 0.52f)
-                lineTo(size.width * 0.38f, size.height * 0.78f)
-                lineTo(size.width * 0.88f, size.height * 0.22f)
-            }
-        drawPath(path, color, style = stroke)
-    }
-}
-
-@Composable
-private fun FrozenLockIcon(
-    modifier: Modifier = Modifier,
-    color: Color,
-) {
-    Canvas(modifier = modifier) {
-        val stroke = 1.4.dp.toPx()
-        val w = size.width
-        val h = size.height
-        val bodyTop = h * 0.42f
-        val bodyHeight = h - bodyTop
-        val bodyLeft = w * 0.18f
-        val bodyWidth = w - bodyLeft * 2f
-        val shackleCx = w / 2f
-        val shackleR = bodyWidth * 0.32f
-        val shackleTop = h * 0.08f
-        drawArc(
-            color = color,
-            startAngle = 180f,
-            sweepAngle = 180f,
-            useCenter = false,
-            topLeft = Offset(shackleCx - shackleR, shackleTop),
-            size = Size(shackleR * 2f, shackleR * 2f),
-            style = Stroke(width = stroke),
-        )
-        drawRoundRect(
-            color = color,
-            topLeft = Offset(bodyLeft, bodyTop),
-            size = Size(bodyWidth, bodyHeight),
-            cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
-        )
     }
 }
 
@@ -786,53 +422,25 @@ private fun FrozenLockIcon(
 private fun CoinControlBottomBar(
     notice: PrivacyNotice,
     selectedCoins: List<CoinControlCoin>,
-    mode: CoinControlMode,
+    ready: Boolean,
     onPrimary: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val k = selectedCoins.size
-    val total = selectedCoins.sumOf { it.valueSats }
-    val noticeColor =
-        when (notice.kind) {
-            PrivacyNoticeKind.Hint -> BwColors.InkSecondary
-            PrivacyNoticeKind.Safe -> BwColors.Success
-            PrivacyNoticeKind.Warning -> BwColors.Warning
-        }
     val word = if (k == 1) "coin" else "coins"
-    val amount = formatBtc(total).removeSuffix(" BTC")
-    val primaryLabel =
-        when (mode) {
-            CoinControlMode.Picker -> "Use $k $word · $amount"
-            CoinControlMode.Standalone -> "Send $k $word · $amount"
-        }
-    Column(
+    val amount = formatBtc(selectedCoins.sumOf { it.valueSats }).removeSuffix(" BTC")
+    CoinActionPanel(
+        notice = notice,
         modifier =
             modifier
-                .background(BwColors.Paper)
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
-                .padding(horizontal = BwSpace.ScreenX, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                .padding(horizontal = BwSpace.ScreenX, vertical = 8.dp),
     ) {
-        Text(
-            text = notice.message,
-            color = noticeColor,
-            fontFamily = BwFontFamily,
-            fontSize = 14.sp,
-        )
-        notice.costLine?.let { line ->
-            Text(
-                text = line,
-                color = BwColors.Warning,
-                fontFamily = BwFontFamily,
-                fontSize = 13.sp,
-            )
-        }
-        PillButton(
-            text = primaryLabel,
+        TintedPillButton(
+            text = "Send $k $word · $amount",
             onClick = onPrimary,
-            enabled = k > 0,
+            enabled = k > 0 && ready,
             modifier = Modifier.fillMaxWidth(),
-            height = 56.dp,
         )
     }
 }

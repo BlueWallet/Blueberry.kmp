@@ -41,7 +41,11 @@ data class CoinControlCoin(
     val ageLabel: String,
     val parentTxid: String,
     val scriptPubKey: ByteArray,
-)
+    /** Held by a broadcast that has not confirmed. The picker must not select it. */
+    val sending: Boolean = false,
+) {
+    val canSelect: Boolean get() = !isFrozen && !sending
+}
 
 data class CoinControlGroup(
     val groupId: String,
@@ -78,10 +82,19 @@ data class CoinControlSnapshot(
     val filterCounts: Map<CoinControlFilter, Int>,
     val frozenSats: Long = 0L,
 ) {
-    val spendableSats: Long get() = totalSats - frozenSats
+    /** Frozen and in-flight coins stay on screen and stay out of what can be spent. */
+    val spendableSats: Long get() = coins.filter { it.canSelect }.sumOf { it.valueSats }
+
+    /** Unfrozen value held by payments that are still sending. */
+    val sendingSats: Long get() = coins.filter { it.sending && !it.isFrozen }.sumOf { it.valueSats }
 
     val availability: CoinAvailability
-        get() = coinAvailability(coinCount = coins.size, frozenCount = coins.count { it.isFrozen })
+        get() =
+            coinAvailability(
+                coinCount = coins.size,
+                frozenCount = coins.count { it.isFrozen },
+                sendingCount = coins.count { it.sending && !it.isFrozen },
+            )
 }
 
 enum class PrivacyNoticeKind {
@@ -550,14 +563,14 @@ fun coinControlSummaryLine(control: CoinControlSnapshot): String {
     return parts.joinToString(" · ")
 }
 
-/** Screen-reader action for a filter chip; narrowing also drops hidden coins from the selection. */
+/** Screen-reader action for a filter chip. Filtering hides rows and leaves the selection alone. */
 fun coinFilterClickLabel(
     label: String,
     count: Int,
     narrows: Boolean,
 ): String {
     val coins = if (count == 1) "1 coin" else "$count coins"
-    return if (narrows) "Show $label, $coins. Deselects hidden coins" else "Show all $coins"
+    return if (narrows) "Show $label, $coins" else "Show all $coins"
 }
 
 private fun accessibilityGroupPhrase(
@@ -591,9 +604,21 @@ fun coinRowSubtitle(coin: CoinControlCoin): String =
         else -> "No label"
     }
 
+/** Marks coins a broadcast still holds. They stay in the list and cannot be selected. */
+fun CoinControlSnapshot.markedSending(held: Set<String>): CoinControlSnapshot {
+    if (held.isEmpty()) return this
+
+    fun CoinControlCoin.hold() = if (key in held) copy(sending = true) else this
+    return copy(
+        coins = coins.map { it.hold() },
+        groups = groups.map { group -> group.copy(coins = group.coins.map { it.hold() }) },
+    )
+}
+
 fun coinRowTag(coin: CoinControlCoin): String? =
     when {
         coin.isFrozen -> "Frozen"
+        coin.sending -> "Sending"
         coin.nearDust -> "Near dust"
         coin.isChange -> "Change"
         else -> null

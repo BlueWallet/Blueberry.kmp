@@ -38,6 +38,12 @@ expect fun PlatformScreenHeader(
     /** Trailing text action (e.g. Clear). Drawn in the header so it stays above edge overlays. */
     trailingText: String? = null,
     onTrailing: (() -> Unit)? = null,
+    /** Overflow actions behind a trailing "…" button. Empty hides the button. */
+    menu: List<HeaderMenuItem> = emptyList(),
+    /** When false, the leading back control is omitted. */
+    showBack: Boolean = true,
+    /** Trailing close icon. Takes the trailing slot instead of [trailingText]. */
+    onClose: (() -> Unit)? = null,
 )
 
 /** Body copy at the platform default size: iOS 17pt, Material bodyLarge elsewhere. */
@@ -71,13 +77,14 @@ expect fun PlatformLargeTitle(
  *
  * Pass [showEdges] = false while a full-screen scrim or pushed screen covers the
  * content. Place [PlatformScreenHeader] as a Compose sibling after this so chrome
- * paints above the blur.
+ * paints above the blur. Pass [bottom] = null to skip the bottom scrim and use
+ * [PlatformBottomEdgeBlur] under the bottom controls instead.
  */
 @Composable
 expect fun PlatformScrollEdge(
     modifier: Modifier = Modifier,
     top: Dp = 0.dp,
-    bottom: Dp = 0.dp,
+    bottom: Dp? = 0.dp,
     showEdges: Boolean = true,
     content: @Composable () -> Unit,
 )
@@ -92,6 +99,9 @@ internal fun MaterialScreenHeader(
     enabled: Boolean = true,
     trailingText: String? = null,
     onTrailing: (() -> Unit)? = null,
+    menu: List<HeaderMenuItem> = emptyList(),
+    showBack: Boolean = true,
+    onClose: (() -> Unit)? = null,
 ) {
     TopAppBar(
         modifier = modifier,
@@ -105,7 +115,7 @@ internal fun MaterialScreenHeader(
                 actionIconContentColor = BwColors.Action,
             ),
         navigationIcon = {
-            HeaderBackButton(onClick = onBack, enabled = enabled)
+            if (showBack) HeaderBackButton(onClick = onBack, enabled = enabled)
         },
         title = {
             Text(
@@ -114,9 +124,12 @@ internal fun MaterialScreenHeader(
             )
         },
         actions = {
-            if (trailingText != null && onTrailing != null) {
+            if (onClose != null) {
+                HeaderCloseButton(onClick = onClose, enabled = enabled)
+            } else if (trailingText != null && onTrailing != null) {
                 TextAction(text = trailingText, onClick = onTrailing)
             }
+            if (onClose == null && menu.isNotEmpty()) HeaderOverflowMenu(menu)
         },
     )
 }

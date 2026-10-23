@@ -60,6 +60,54 @@ fun Modifier.listRowPanel(): Modifier {
 }
 
 @Composable
+fun HomeBroadcastRow(
+    row: BroadcastListRow,
+    onClick: () -> Unit,
+) {
+    Pressable(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        role = Role.Button,
+    ) {
+        Row(
+            modifier = Modifier.listRowPanel(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Image(
+                painter = painterResource(Res.drawable.send_icon),
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                colorFilter = ColorFilter.tint(BwColors.Ink),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = row.status,
+                    color = if (row.status == "Not sent") BwColors.Danger else BwColors.Ink,
+                    style = TxRowText.copy(fontSize = BwType.BodySize, lineHeight = BwType.BodySize),
+                    maxLines = 1,
+                )
+                Text(
+                    text = row.title,
+                    color = BwColors.InkMuted,
+                    style = TxRowText.copy(fontSize = BwType.CaptionSize, lineHeight = BwType.CaptionSize),
+                    maxLines = 1,
+                )
+            }
+            BtcAmountText(
+                sats = row.paidSats,
+                color = BwColors.Ink,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = TxRowLetterSpacing,
+            )
+        }
+    }
+}
+
+@Composable
 fun HomeTxBubble(
     tx: WalletTxRow,
     onClick: () -> Unit,

@@ -20,20 +20,48 @@ data class BroadcastSnapshot(
     val percent: Int? = null,
     val stage: String? = null,
     val triedPeers: Set<String> = emptySet(),
+    /**
+     * A node may hold the transaction from this run, so it can no longer be stopped. Cleared when every
+     * node that got it refused it.
+     */
+    val handedOff: Boolean = false,
+    /** False for a success where nodes were given the transaction but none confirmed taking it. */
+    val acknowledged: Boolean = true,
+)
+
+/** What the transaction list and the broadcast screen need after Send has closed. */
+data class BroadcastReceipt(
+    val txid: String,
+    val destination: String,
+    val label: String,
+    val paidSats: Long,
+    val feeSats: Long,
+)
+
+data class BroadcastSession(
+    val snapshot: BroadcastSnapshot,
+    val receipt: BroadcastReceipt? = null,
 )
 
 interface BroadcastStore {
-    fun get(): BroadcastSnapshot
+    fun get(id: String): BroadcastSnapshot?
+
+    fun sessions(): List<BroadcastSession>
 
     fun start(
         id: String,
         txHex: String,
         triedPeers: Set<String> = emptySet(),
+        receipt: BroadcastReceipt? = null,
     )
 
     fun applyProgress(payload: BroadcastProgressPayload)
 
     fun applyDone(payload: BroadcastDonePayload)
+
+    fun markHandedOff(id: String)
+
+    fun dismiss(id: String)
 
     fun reset()
 
@@ -42,70 +70,89 @@ interface BroadcastStore {
 
 @OptIn(ExperimentalAtomicApi::class)
 private class BroadcastStoreImpl : BroadcastStore {
-    private val state = AtomicReference(BroadcastSnapshot())
+    private val state = AtomicReference<Map<String, BroadcastSession>>(emptyMap())
     private val listeners = AtomicReference<List<() -> Unit>>(emptyList())
 
-    private fun emit() {
-        for (listener in listeners.load()) listener()
+    private fun update(transform: (Map<String, BroadcastSession>) -> Map<String, BroadcastSession>) {
+        updateSessions(state, listeners, transform)
     }
 
-    override fun get(): BroadcastSnapshot = state.load()
+    override fun get(id: String): BroadcastSnapshot? = state.load()[id]?.snapshot
+
+    override fun sessions(): List<BroadcastSession> = state.load().values.toList()
 
     override fun start(
         id: String,
         txHex: String,
         triedPeers: Set<String>,
+        receipt: BroadcastReceipt?,
     ) {
-        state.store(BroadcastSnapshot(id = id, txHex = txHex, phase = "starting", triedPeers = triedPeers))
-        emit()
+        val session =
+            BroadcastSession(
+                snapshot = BroadcastSnapshot(id = id, txHex = txHex, phase = "starting", triedPeers = triedPeers),
+                receipt = receipt,
+            )
+        update { it + (id to session) }
     }
 
     override fun applyProgress(payload: BroadcastProgressPayload) {
-        val cur = state.load()
-        if (cur.id != payload.id) return
-        state.store(
-            cur.copy(
-                id = payload.id,
-                phase = payload.phase.wireName,
-                attempt = payload.attempt,
-                maxAttempts = payload.maxAttempts,
-                peer = payload.peer,
-                detail = payload.detail,
-                percent = payload.percent,
-                stage = payload.stage,
-                triedPeers = rememberTriedPeers(cur.triedPeers, payload.peer),
-            ),
-        )
-        emit()
+        update { map ->
+            val cur = map[payload.id] ?: return@update map
+            val snap =
+                cur.snapshot.copy(
+                    phase = payload.phase.wireName,
+                    attempt = payload.attempt,
+                    maxAttempts = payload.maxAttempts,
+                    peer = payload.peer,
+                    detail = payload.detail,
+                    percent = payload.percent,
+                    stage = payload.stage,
+                    triedPeers = rememberTriedPeers(cur.snapshot.triedPeers, payload.peer),
+                )
+            map + (payload.id to cur.copy(snapshot = snap))
+        }
     }
 
     override fun applyDone(payload: BroadcastDonePayload) {
-        val cur = state.load()
-        if (cur.id != payload.id) return
-        state.store(
-            when (payload) {
-                is BroadcastDonePayload.Ok ->
-                    cur.copy(
-                        id = payload.id,
-                        phase = "success",
-                        peer = payload.peer,
-                        error = null,
-                        triedPeers = rememberTriedPeers(cur.triedPeers, payload.peer),
-                    )
-                is BroadcastDonePayload.Error ->
-                    cur.copy(
-                        id = payload.id,
-                        phase = "error",
-                        error = payload.error,
-                    )
-            },
-        )
-        emit()
+        update { map ->
+            val cur = map[payload.id] ?: return@update map
+            val snap =
+                when (payload) {
+                    is BroadcastDonePayload.Ok ->
+                        cur.snapshot.copy(
+                            phase = "success",
+                            peer = payload.peer,
+                            error = null,
+                            acknowledged = payload.acknowledged,
+                            triedPeers = rememberTriedPeers(cur.snapshot.triedPeers, payload.peer),
+                        )
+                    is BroadcastDonePayload.Error ->
+                        when {
+                            payload.refused -> cur.snapshot.copy(phase = "error", error = payload.error, handedOff = false)
+                            cur.snapshot.handedOff ->
+                                cur.snapshot.copy(phase = "success", error = null, detail = payload.error, acknowledged = false)
+                            else -> cur.snapshot.copy(phase = "error", error = payload.error)
+                        }
+                }
+            map + (payload.id to cur.copy(snapshot = snap))
+        }
+    }
+
+    override fun markHandedOff(id: String) {
+        update { map ->
+            val cur = map[id] ?: return@update map
+            if (cur.snapshot.handedOff) return@update map
+            map + (id to cur.copy(snapshot = cur.snapshot.copy(handedOff = true)))
+        }
+    }
+
+    override fun dismiss(id: String) {
+        update { it - id }
     }
 
     override fun reset() {
-        state.store(BroadcastSnapshot())
-        emit()
+        state.store(emptyMap())
+        emitSessions(listeners)
     }
 
     override fun subscribe(listener: () -> Unit): () -> Unit {
@@ -124,44 +171,51 @@ private class BroadcastStoreImpl : BroadcastStore {
     }
 }
 
+@OptIn(ExperimentalAtomicApi::class)
+private fun emitSessions(listeners: AtomicReference<List<() -> Unit>>) {
+    for (listener in listeners.load()) listener()
+}
+
+@OptIn(ExperimentalAtomicApi::class)
+private fun updateSessions(
+    state: AtomicReference<Map<String, BroadcastSession>>,
+    listeners: AtomicReference<List<() -> Unit>>,
+    transform: (Map<String, BroadcastSession>) -> Map<String, BroadcastSession>,
+) {
+    while (true) {
+        val cur = state.load()
+        val next = transform(cur)
+        if (next === cur || state.compareAndSet(cur, next)) {
+            if (next !== cur) emitSessions(listeners)
+            return
+        }
+    }
+}
+
 fun createBroadcastStore(): BroadcastStore = BroadcastStoreImpl()
 
 fun bindBroadcastEvents(
     bus: MessageBus,
     store: BroadcastStore,
-    onDone: () -> Unit = {},
+    onHandedOff: (String) -> Unit = {},
+    onDone: (String) -> Unit = {},
 ): () -> Unit {
     val a = bus.on(Event.BroadcastProgress) { store.applyProgress(it) }
     val b =
         bus.on(Event.BroadcastDone) {
             store.applyDone(it)
-            onDone()
+            onDone(it.id)
+        }
+    val c =
+        bus.on(Event.BroadcastHandedOff) {
+            store.markHandedOff(it.id)
+            onHandedOff(it.id)
         }
     return {
         a()
         b()
+        c()
     }
-}
-
-fun broadcastJobInFlight(phase: String?): Boolean = phase != null && phase != "success" && phase != "error"
-
-fun broadcastTorCaption(stage: String?): String? = stage?.let { "Tor: $it" }
-
-sealed class BroadcastEscape {
-    data object Ignore : BroadcastEscape()
-
-    data object Cancel : BroadcastEscape()
-
-    data object ForceClose : BroadcastEscape()
-}
-
-fun inFlightBroadcastEscape(
-    phase: String?,
-    id: String?,
-    cancelArmedForId: String?,
-): BroadcastEscape {
-    if (id == null || !broadcastJobInFlight(phase)) return BroadcastEscape.Ignore
-    return if (cancelArmedForId == id) BroadcastEscape.ForceClose else BroadcastEscape.Cancel
 }
 
 fun rememberTriedPeers(
@@ -176,34 +230,60 @@ fun rememberTriedPeers(
 fun prepareUiBroadcast(
     store: BroadcastStore,
     txHex: String,
+    receipt: BroadcastReceipt? = null,
 ): String? {
-    val snap = store.get()
-    if (broadcastJobInFlight(snap.phase)) return null
-    if (snap.phase == "success") {
-        if (snap.txHex == txHex) return null
-        store.reset()
+    val same = store.sessions().filter { it.snapshot.txHex == txHex }
+    val blocked = same.any { broadcastJobInFlight(it.snapshot.phase) || it.snapshot.phase == "success" }
+    if (blocked) return null
+    val previous = same.lastOrNull { it.snapshot.phase == "error" }
+    val tried = previous?.snapshot?.triedPeers ?: emptySet()
+    val kept = receipt ?: previous?.receipt
+    same.filter { it.snapshot.phase == "error" }.forEach { session ->
+        session.snapshot.id?.let { store.dismiss(it) }
     }
-    val tried = if (snap.phase == "error" && snap.txHex == txHex) snap.triedPeers else emptySet()
     val id = nextUiBroadcastId()
-    store.start(id, txHex, tried)
+    store.start(id, txHex, tried, kept)
     return id
+}
+
+/**
+ * Restarts a finished job under the same id so the open screen and list row stay put. A failure restarts,
+ * and so does a send no node confirmed; a confirmed send is done. A re-send starts handed off, since a node
+ * may already hold it, so it cannot be stopped and a failure still reads as sent.
+ */
+fun rebroadcast(
+    store: BroadcastStore,
+    id: String,
+): BroadcastRequestPayload? {
+    val session = store.sessions().find { it.snapshot.id == id }
+    val txHex = session?.snapshot?.txHex
+    val phase = session?.snapshot?.phase
+    val missing = session == null || txHex == null
+    val settled = broadcastJobInFlight(phase) || (phase == "success" && session?.snapshot?.acknowledged != false)
+    if (missing || settled) return null
+    store.dismiss(id)
+    store.start(id, txHex, session.snapshot.triedPeers, session.receipt)
+    if (phase == "success") store.markHandedOff(id)
+    return BroadcastRequestPayload(id, txHex, session.snapshot.triedPeers)
 }
 
 fun enqueueBroadcast(
     store: BroadcastStore,
     txHex: String,
+    receipt: BroadcastReceipt? = null,
 ): BroadcastRequestPayload? {
-    val id = prepareUiBroadcast(store, txHex) ?: return null
-    return BroadcastRequestPayload(id, txHex, store.get().triedPeers)
+    val id = prepareUiBroadcast(store, txHex, receipt) ?: return null
+    return BroadcastRequestPayload(id, txHex, store.get(id)?.triedPeers ?: emptySet())
 }
 
 fun enqueueArmedBroadcast(
     store: BroadcastStore,
     txHex: String,
-    arm: () -> Unit,
+    receipt: BroadcastReceipt? = null,
+    arm: (String) -> Unit,
 ): BroadcastRequestPayload? {
-    val req = enqueueBroadcast(store, txHex) ?: return null
-    arm()
+    val req = enqueueBroadcast(store, txHex, receipt) ?: return null
+    arm(req.id)
     return req
 }
 

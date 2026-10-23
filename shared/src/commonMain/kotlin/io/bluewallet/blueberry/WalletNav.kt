@@ -3,6 +3,7 @@ package io.bluewallet.blueberry
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,13 +41,16 @@ data object ReceiveRoute
 data object SendRoute
 
 @Serializable
-data class CoinsRoute(
-    val picker: Boolean = false,
-)
+data object CoinsRoute
 
 @Serializable
 data class TxDetailsRoute(
     val txid: String,
+)
+
+@Serializable
+data class BroadcastRoute(
+    val id: String,
 )
 
 @Serializable
@@ -70,7 +74,7 @@ internal fun WalletNavHost(
 ) {
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
-    // Hoisted so Choose-coins navigation cannot drop the selection, fee, or vanished-coin warning.
+    // Hoisted so coin control can hand its selection to Send and read Send's fee rate.
     var sendDraft by remember { mutableStateOf(SendDraft.Empty) }
     val liveSendEntries = remember { mutableSetOf<String>() }
     // Subscribe so recomposition runs when the stack changes (for LocalHomeVisible).
@@ -93,7 +97,24 @@ internal fun WalletNavHost(
             }
         }
 
-    CompositionLocalProvider(LocalHomeVisible provides homeVisible) {
+    var broadcastSessions by remember { mutableStateOf(runtime.broadcastStore.sessions()) }
+    DisposableEffect(runtime.broadcastStore) {
+        val off =
+            runtime.broadcastStore.subscribe {
+                scope.launch { broadcastSessions = runtime.broadcastStore.sessions() }
+            }
+        onDispose { off() }
+    }
+    val openBroadcast: (String) -> Unit =
+        remember(navController) {
+            { id -> navController.navigate(BroadcastRoute(id)) { launchSingleTop = true } }
+        }
+
+    CompositionLocalProvider(
+        LocalHomeVisible provides homeVisible,
+        LocalBroadcastSessions provides broadcastSessions,
+        LocalOpenBroadcast provides openBroadcast,
+    ) {
         // Only swallow back on home so NavHost can pop pushed screens.
         BackHandler(enabled = homeVisible) { /* idle: do not finish the activity / app */ }
         // Do not set enterTransition/exitTransition: iOS keeps the native-like push defaults.
@@ -115,7 +136,7 @@ internal fun WalletNavHost(
                     onOpenReceive = { navController.navigate(ReceiveRoute) { launchSingleTop = true } },
                     onOpenSend = openSendFresh,
                     onOpenCoins = {
-                        navController.navigate(CoinsRoute(picker = false)) { launchSingleTop = true }
+                        navController.navigate(CoinsRoute) { launchSingleTop = true }
                     },
                     onOpenTx = {
                         navController.navigate(TxDetailsRoute(txid = it)) { launchSingleTop = true }
@@ -133,8 +154,7 @@ internal fun WalletNavHost(
                 )
             }
             composable<SendRoute> { entry ->
-                // The entry outlives this composition while the coin picker covers it, and is
-                // destroyed only when Send is popped; that is when the draft selection and fee end.
+                // The draft selection and fee end when the Send entry is destroyed.
                 LaunchedEffect(entry.id) {
                     if (!liveSendEntries.add(entry.id)) return@LaunchedEffect
                     entry.lifecycle.addObserver(
@@ -150,29 +170,15 @@ internal fun WalletNavHost(
                     db = db,
                     onBack = backFrom(entry),
                     initialSelectedKeys = sendDraft.selectedKeys,
-                    selectionNeedsAck = sendDraft.selectionNeedsAck,
-                    onSelectionNeedsAckChange = { sendDraft = sendDraft.withSelectionNeedsAck(it) },
-                    onChooseCoins = {
-                        navController.navigate(CoinsRoute(picker = true)) { launchSingleTop = true }
-                    },
                     onSelectedKeysChange = { sendDraft = sendDraft.withSelection(it) },
                     onFeeRateChange = { sendDraft = sendDraft.withFeeRate(it) },
-                    advanceToDetails = sendDraft.advanceToDetails,
-                    onAdvanceToDetailsConsumed = { sendDraft = sendDraft.detailsAdvanceConsumed() },
                 )
             }
             composable<CoinsRoute> { entry ->
-                val route = entry.toRoute<CoinsRoute>()
                 CoinsScreen(
                     runtime = runtime,
                     db = db,
                     onBack = backFrom(entry),
-                    mode =
-                        if (route.picker) {
-                            CoinControlMode.Picker
-                        } else {
-                            CoinControlMode.Standalone
-                        },
                     initialSelectedKeys = sendDraft.selectedKeys,
                     feeRateSatPerVb = sendDraft.feeRateSatPerVb,
                     onSendWithCoins = { keys ->
@@ -180,12 +186,6 @@ internal fun WalletNavHost(
                         navController.navigate(SendRoute) {
                             popUpTo(HomeRoute) { inclusive = false }
                             launchSingleTop = true
-                        }
-                    },
-                    onConfirmSelection = { keys, coinsVanished ->
-                        if (navController.currentBackStackEntry?.id == entry.id) {
-                            sendDraft = sendDraft.pickerCommitted(keys, coinsVanished)
-                            popIfCurrent(entry)
                         }
                     },
                     onFrozenKey = { key -> sendDraft = sendDraft.frozen(key) },
@@ -199,6 +199,10 @@ internal fun WalletNavHost(
                     txid = route.txid,
                     onBack = backFrom(entry),
                 )
+            }
+            composable<BroadcastRoute> { entry ->
+                val route = entry.toRoute<BroadcastRoute>()
+                BroadcastScreen(runtime = runtime, id = route.id, onClose = backFrom(entry))
             }
             composable<SettingsRoute> { entry ->
                 SettingsScreen(

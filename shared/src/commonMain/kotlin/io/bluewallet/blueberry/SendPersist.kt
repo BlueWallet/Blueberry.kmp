@@ -48,6 +48,46 @@ fun <T : Any> armedAfterPersist(
     return if (current === persisted) null else current
 }
 
+fun unconfirmedSendOpen(
+    db: Database,
+    txid: String,
+): Boolean {
+    val sendOpen = db.sends.get(txid)?.confirmedInBlock == 0L
+    val privateOpen = db.privateSends.get(txid)?.confirmedInBlock == 0L
+    return sendOpen || privateOpen
+}
+
+/** Drops the local hold on a payment that has not confirmed. The network copy can still settle. */
+fun abandonUnconfirmedSend(
+    db: Database,
+    runtime: PeersRuntime,
+    txid: String,
+): Boolean {
+    if (!unconfirmedSendOpen(db, txid)) return false
+    runtime.broadcastStore.sessions().forEach { session ->
+        val id = session.snapshot.id
+        if (session.receipt?.txid == txid && id != null) {
+            runtime.dropArmedBroadcast(id)
+            runtime.broadcastStore.dismiss(id)
+        }
+    }
+    dropUnsentSend(db, runtime.walletTxsStore, runtime.wallet, txid)
+    return true
+}
+
+/** Deletes the unconfirmed rows for [txid]. A confirmed row stays. */
+fun dropUnsentSend(
+    db: Database,
+    store: WalletTxsStore,
+    wallet: Wallet?,
+    txid: String,
+) {
+    if (!unconfirmedSendOpen(db, txid)) return
+    if (db.sends.get(txid)?.confirmedInBlock == 0L) db.sends.delete(txid)
+    if (db.privateSends.get(txid)?.confirmedInBlock == 0L) db.privateSends.delete(txid)
+    hydrateWallet(db, store, wallet, nowMillis())
+}
+
 fun persistSendAndRefresh(
     db: Database,
     store: WalletTxsStore,

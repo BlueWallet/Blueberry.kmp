@@ -12,6 +12,14 @@ class SpendableCoinsTest {
     }
 
     @Test
+    fun availability_names_a_wallet_whose_coins_are_all_sending() {
+        assertEquals(CoinAvailability.AllSending, coinAvailability(coinCount = 3, frozenCount = 1, sendingCount = 2))
+        assertEquals(CoinAvailability.AllSending, coinAvailability(coinCount = 2, frozenCount = 0, sendingCount = 2))
+        assertEquals(CoinAvailability.Spendable, coinAvailability(coinCount = 3, frozenCount = 0, sendingCount = 2))
+        assertEquals(ALL_SENDING_NOTICE, sendCoinPrompt(CoinAvailability.AllSending))
+    }
+
+    @Test
     fun send_prompt_says_the_wallet_is_locked_when_everything_is_frozen() {
         assertEquals(ALL_FROZEN_NOTICE, sendCoinPrompt(CoinAvailability.AllFrozen))
         assertEquals("Choose which coins this payment spends.", sendCoinPrompt(CoinAvailability.Spendable))
