@@ -58,6 +58,9 @@ data object SecretRoute
 @Serializable
 data object AboutRoute
 
+@Serializable
+data object ChangelogRoute
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 @Suppress("LongMethod")
@@ -140,6 +143,10 @@ internal fun WalletNavHost(
                     entry.lifecycle.addObserver(
                         LifecycleEventObserver { _, event ->
                             if (event != Lifecycle.Event.ON_DESTROY) return@LifecycleEventObserver
+                            // A swipe from the coin step pops without goBack(), so a finished job is dropped here.
+                            if (broadcastClearedOnLeave(runtime.broadcastStore.get().phase)) {
+                                runtime.broadcastStore.reset()
+                            }
                             liveSendEntries.remove(entry.id)
                             if (liveSendEntries.isEmpty()) sendDraft = SendDraft.Empty
                         },
@@ -188,6 +195,12 @@ internal fun WalletNavHost(
                             popIfCurrent(entry)
                         }
                     },
+                    onPickerSelectionChange = { keys, coinsVanished ->
+                        // Only while the picker is on top: its exit must not rewrite the draft.
+                        if (navController.currentBackStackEntry?.id == entry.id) {
+                            sendDraft = sendDraft.pickerCommitted(keys, coinsVanished)
+                        }
+                    },
                     onFrozenKey = { key -> sendDraft = sendDraft.frozen(key) },
                 )
             }
@@ -225,7 +238,13 @@ internal fun WalletNavHost(
                 SecretScreen(secret = secret, onBack = backFrom(entry))
             }
             composable<AboutRoute> { entry ->
-                AboutScreen(onBack = backFrom(entry))
+                AboutScreen(
+                    onBack = backFrom(entry),
+                    onOpenChangelog = { navController.navigate(ChangelogRoute) { launchSingleTop = true } },
+                )
+            }
+            composable<ChangelogRoute> { entry ->
+                ChangelogScreen(onBack = backFrom(entry))
             }
         }
     }
