@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalComposeUiApi::class)
-
 package io.bluewallet.blueberry
 
 import androidx.compose.animation.AnimatedVisibility
@@ -48,9 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -117,6 +113,7 @@ fun CoinsScreen(
     initialSelectedKeys: Set<String> = emptySet(),
     onSendWithCoins: (Set<String>) -> Unit = {},
     onConfirmSelection: (keys: Set<String>, coinsVanished: Boolean) -> Unit = { _, _ -> },
+    onPickerSelectionChange: (keys: Set<String>, coinsVanished: Boolean) -> Unit = { _, _ -> },
     onFrozenKey: (String) -> Unit = {},
     feeRateSatPerVb: Double? = null,
 ) {
@@ -153,13 +150,6 @@ fun CoinsScreen(
         if (next != selectedKeys) selectedKeys = next
     }
     val actionCoins = control.coins.filter { it.key in selectedKeys && !it.isFrozen }
-    // Every picker exit writes the checked set, partial or empty, so Send never keeps unchecked coins.
-    val leave: () -> Unit = {
-        when (mode) {
-            CoinControlMode.Standalone -> onBack()
-            CoinControlMode.Picker -> onConfirmSelection(actionCoins.map { it.key }.toSet(), coinsVanished)
-        }
-    }
     val notice = remember(actionCoins) { privacyNoticeForSelection(actionCoins) }
     val rowsByKey = remember(snap.utxos) { coinsRows(snap.utxos).associateBy { it.key } }
     LaunchedEffect(editingKey) {
@@ -183,8 +173,12 @@ fun CoinsScreen(
             safe.calculateBottomPadding()
         }
 
-    // The sheet's handler is registered later, so it still wins while the sheet is open.
-    BackHandler(enabled = mode == CoinControlMode.Picker && !sheetOpen, onBack = leave)
+    // The picker writes the checked set, partial or empty, as it changes, so Send never keeps unchecked
+    // coins and every back is a plain pop: the swipe follows the finger.
+    val pickedKeys = remember(actionCoins) { actionCoins.map { it.key }.toSet() }
+    LaunchedEffect(mode, pickedKeys, coinsVanished) {
+        if (mode == CoinControlMode.Picker) onPickerSelectionChange(pickedKeys, coinsVanished)
+    }
     OverlayBackEffects(
         enabled = sheetOpen,
         onDismiss = { editingKey = null },
@@ -270,7 +264,7 @@ fun CoinsScreen(
             if (!sheetOpen) {
                 PlatformScreenHeader(
                     title = "Coin control",
-                    onBack = leave,
+                    onBack = onBack,
                     showBarTitle = true,
                     trailingText = if (hasSelection) "Clear" else null,
                     onTrailing =
@@ -314,10 +308,9 @@ fun CoinsScreen(
                     selectedCoins = actionCoins,
                     mode = mode,
                     onPrimary = {
-                        val keys = actionCoins.map { it.key }.toSet()
                         when (mode) {
-                            CoinControlMode.Standalone -> onSendWithCoins(keys)
-                            CoinControlMode.Picker -> onConfirmSelection(keys, coinsVanished)
+                            CoinControlMode.Standalone -> onSendWithCoins(pickedKeys)
+                            CoinControlMode.Picker -> onConfirmSelection(pickedKeys, coinsVanished)
                         }
                     },
                 )

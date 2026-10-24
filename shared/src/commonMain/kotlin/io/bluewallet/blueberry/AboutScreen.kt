@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,10 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,36 +32,32 @@ import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.Chevron
 import io.bluewallet.blueberry.ui.ScreenHeader
-import io.bluewallet.blueberry.ui.ScreenPushOverlay
 import io.bluewallet.blueberry.ui.alwaysBounceTail
 
 @Composable
-fun AboutScreen(onBack: () -> Unit) {
-    var showChangelog by remember { mutableStateOf(false) }
+fun AboutScreen(
+    onBack: () -> Unit,
+    onOpenChangelog: () -> Unit = {},
+) {
     val uriHandler = LocalUriHandler.current
     val build = remember { buildInfoCard(BuildInfo.VERSION, BuildInfo.GIT_SHA) }
-    Box(Modifier.fillMaxSize()) {
-        CardListScreen(title = "About", onBack = onBack) {
-            item {
-                LinkRow(build.title, build.subtitle, onClick = build.url?.let { url -> { runCatching { uriHandler.openUri(url) } } })
-            }
-            item { LinkRow("Changelog", "Recent changes in this build", onClick = { showChangelog = true }) }
-            item { LinkRow("GitHub", ABOUT_GITHUB_URL.removePrefix("https://"), ABOUT_GITHUB_URL) }
-            item { LinkRow("MIT License", "Blueberry is open source under the MIT License", ABOUT_LICENSE_URL) }
-            item { SectionLabel("Open-source libraries") }
-            items(aboutDependencies) { DependencyRow(it) }
-            item {
-                HorizontalDivider(
-                    color = BwColors.InkMuted.copy(alpha = 0.4f),
-                    modifier = Modifier.padding(top = BwSpace.Gap),
-                )
-            }
-            item { SectionLabel("Transitive dependencies") }
-            items(transitiveDependencies) { DependencyRow(it) }
+    CardListScreen(title = "About", onBack = onBack) {
+        item {
+            LinkRow(build.title, build.subtitle, onClick = build.url?.let { url -> { runCatching { uriHandler.openUri(url) } } })
         }
-        ScreenPushOverlay(visible = showChangelog, onDismiss = { showChangelog = false }) {
-            ChangelogScreen(onBack = { showChangelog = false })
+        item { LinkRow("Changelog", "Recent changes in this build", onClick = onOpenChangelog) }
+        item { LinkRow("GitHub", ABOUT_GITHUB_URL.removePrefix("https://"), ABOUT_GITHUB_URL) }
+        item { LinkRow("MIT License", "Blueberry is open source under the MIT License", ABOUT_LICENSE_URL) }
+        item { SectionLabel("Open-source libraries") }
+        items(aboutDependencies) { DependencyRow(it) }
+        item {
+            HorizontalDivider(
+                color = BwColors.InkMuted.copy(alpha = 0.4f),
+                modifier = Modifier.padding(top = BwSpace.Gap),
+            )
         }
+        item { SectionLabel("Transitive dependencies") }
+        items(transitiveDependencies) { DependencyRow(it) }
     }
 }
 

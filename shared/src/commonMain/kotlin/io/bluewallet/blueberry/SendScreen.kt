@@ -191,7 +191,7 @@ fun SendScreen(
                 BroadcastEscape.Ignore -> {}
             }
         }
-        if (broadcast.phase == "success" || broadcast.phase == "error") {
+        if (broadcastClearedOnLeave(broadcast.phase)) {
             runtime.broadcastStore.reset()
         }
         if (scanning) {
@@ -211,7 +211,8 @@ fun SendScreen(
             }
         }
     }
-    BackHandler { goBack() }
+    // On the coin step back is the NavHost's pop, so the swipe drags the screen.
+    BackHandler(enabled = scanning || step != SendStep.Utxos) { goBack() }
     val latestGoBack by rememberUpdatedState { goBack() }
     DisposableEffect(Unit) {
         val cb: () -> Unit = { latestGoBack() }

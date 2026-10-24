@@ -67,6 +67,9 @@ internal fun resolveSendStep(
     return SendStepResolution(next, consumeAdvance = advanceToDetails)
 }
 
+/** Leaving Send drops a finished broadcast so the next payment starts clean; a live job is kept. */
+internal fun broadcastClearedOnLeave(phase: String?): Boolean = phase == "success" || phase == "error"
+
 /** Continue on the coin step also answers a vanished-coin warning, so it stays live while one is shown. */
 internal fun utxosContinueEnabled(
     selected: Set<String>,

@@ -152,4 +152,12 @@ class SendDraftTest {
         val next = pickerSelection(abc, liveKeys = abc, visibleKeys = abc, frozenKeys = setOf("c"), showsAll = true)
         assertEquals(setOf("a", "b"), next)
     }
+
+    @Test
+    fun leaving_send_clears_only_a_finished_broadcast() {
+        assertTrue(broadcastClearedOnLeave("success"))
+        assertTrue(broadcastClearedOnLeave("error"))
+        assertFalse(broadcastClearedOnLeave("starting"))
+        assertFalse(broadcastClearedOnLeave(null))
+    }
 }
