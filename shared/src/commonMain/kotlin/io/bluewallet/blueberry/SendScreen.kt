@@ -95,7 +95,8 @@ fun SendScreen(
     ) {
         if (reviewing && !flow.selectionNeedsAck) flow.rebuild()
     }
-    BackHandler { flow.goBack() }
+    // On the first step back is the NavHost's pop, so the swipe drags the screen.
+    BackHandler(enabled = flow.handlesBack) { flow.goBack() }
     DisposableEffect(flow) {
         val cb: () -> Unit = { flow.goBack() }
         overlayBackStack.push(cb)

@@ -641,6 +641,10 @@ internal class SendFlow(
         }
     }
 
+    /** False on the first step with nothing open: back there just closes Send, so the NavHost pops it. */
+    val handlesBack: Boolean
+        get() = step != SendStep.Address || scanning || feeSheetOpen
+
     /** A private payment that is sending or sent: leaving closes the flow and the job keeps going. */
     val privateSendLive: Boolean
         get() {

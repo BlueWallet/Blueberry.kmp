@@ -62,6 +62,9 @@ data object SecretRoute
 @Serializable
 data object AboutRoute
 
+@Serializable
+data object ChangelogRoute
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 @Suppress("LongMethod")
@@ -229,7 +232,13 @@ internal fun WalletNavHost(
                 SecretScreen(secret = secret, onBack = backFrom(entry))
             }
             composable<AboutRoute> { entry ->
-                AboutScreen(onBack = backFrom(entry))
+                AboutScreen(
+                    onBack = backFrom(entry),
+                    onOpenChangelog = { navController.navigate(ChangelogRoute) { launchSingleTop = true } },
+                )
+            }
+            composable<ChangelogRoute> { entry ->
+                ChangelogScreen(onBack = backFrom(entry))
             }
         }
     }
