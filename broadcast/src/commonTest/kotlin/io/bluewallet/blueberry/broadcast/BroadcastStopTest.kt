@@ -316,6 +316,46 @@ class BroadcastStopTest {
         }
 
     @Test
+    fun three_silent_nodes_end_the_job_without_dialing_more() =
+        runBlocking {
+            val db = createSqliteDatabase(":memory:")
+            listOf("1.1.1.1", "2.2.2.2", "3.3.3.3", "4.4.4.4", "5.5.5.5", "6.6.6.6").forEach { upsertAlive(db, it) }
+            val bus = createMessageBus()
+            val done =
+                async {
+                    val deferred = CompletableDeferred<BroadcastDonePayload>()
+                    bus.on(Event.BroadcastDone) { deferred.complete(it) }
+                    deferred.await()
+                }
+            var dials = 0
+            val mod =
+                createBroadcastModule(
+                    ModuleContext(bus, db),
+                    BroadcastModuleOptions(
+                        peerWaitPollMs = 15,
+                        ackTimeoutMs = 50,
+                        connect = { _, _, _ ->
+                            dials += 1
+                            val (client, server) = pairedByteDuplexes()
+                            CoroutineScope(Job() + Dispatchers.Default).launch {
+                                acceptTx(server) {}
+                                suspendCancellableCoroutine<Unit> { }
+                            }
+                            client
+                        },
+                    ),
+                )
+            mod.start()
+            bus.emit(Event.BroadcastRequest, BroadcastRequestPayload("silent", sampleTxHex()))
+            val result = withTimeout(5_000) { done.await() }
+            assertTrue(result is BroadcastDonePayload.Ok)
+            assertFalse(result.acknowledged)
+            assertEquals(3, dials)
+            mod.stop()
+            db.close()
+        }
+
+    @Test
     fun a_job_every_node_refused_fails_as_refused() =
         runBlocking {
             val db = createSqliteDatabase(":memory:")

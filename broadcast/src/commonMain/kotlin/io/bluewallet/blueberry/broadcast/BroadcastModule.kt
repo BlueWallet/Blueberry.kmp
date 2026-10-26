@@ -240,9 +240,9 @@ fun createBroadcastModule(
     ): Pair<String?, List<String>> {
         val failures = mutableListOf<String>()
 
-        fun accepted(): String? = if (ledger.accepted.isNotEmpty()) ledger.accepted.joinToString(", ") else null
+        fun holding(): String? = ledger.holders().takeIf { it.isNotEmpty() }?.joinToString(", ")
         for (attempt in 1..maxAttempts) {
-            if (ledger.accepted.size >= BROADCAST_SUCCESS_PEERS) {
+            if (ledger.holders().size >= BROADCAST_SUCCESS_PEERS) {
                 break
             }
             job.ensureActive()
@@ -250,13 +250,13 @@ fun createBroadcastModule(
             val given = ledger.accepted + ledger.handed
             val peer =
                 pickAlive(peers, options.random, given + failed + exclude)
-                    ?: if (ledger.accepted.isEmpty()) pickAlive(peers, options.random, given + exclude) else null
+                    ?: if (ledger.holders().isEmpty()) pickAlive(peers, options.random, given + exclude) else null
             if (peer == null) {
-                log("broadcast", "attempt $attempt/$maxAttempts no-unused-alive-peer ok=${ledger.accepted.size}")
-                return accepted() to failures
+                log("broadcast", "attempt $attempt/$maxAttempts no-unused-alive-peer given=${ledger.holders().size}")
+                return holding() to failures
             }
             val key = peerKey(peer)
-            log("broadcast", "attempt $attempt/$maxAttempts peer=$key ok=${ledger.accepted.size}/$BROADCAST_SUCCESS_PEERS")
+            log("broadcast", "attempt $attempt/$maxAttempts peer=$key given=${ledger.holders().size}/$BROADCAST_SUCCESS_PEERS")
             emitProgress(BroadcastPhase.ATTEMPT, key, null, null, null)
             try {
                 if (attemptOne(dial, peer, txHex, job, ledger)) {
@@ -274,7 +274,7 @@ fun createBroadcastModule(
                 emitProgress(BroadcastPhase.FAILED_ATTEMPT, key, detail, null, null)
             }
         }
-        return accepted() to failures
+        return holding() to failures
     }
 
     suspend fun runTorAttempts(
@@ -290,7 +290,7 @@ fun createBroadcastModule(
                 injectedDialer ?: { createTorByteDuplexDialer() },
                 { dialer ->
                     val cycleFailed = linkedSetOf<String>()
-                    val (accepted, fails) =
+                    val (given, fails) =
                         runPeerAttempts(
                             { host, port, j ->
                                 dialer.dial(host, port, j) { percent, stage ->
@@ -310,10 +310,10 @@ fun createBroadcastModule(
                             val key = peerKey(candidate)
                             key !in ledger.accepted && key !in ledger.handed && key !in cycleFailed && key !in excludePeers
                         }
-                    if (ledger.accepted.size >= BROADCAST_SUCCESS_PEERS ||
+                    if (ledger.holders().size >= BROADCAST_SUCCESS_PEERS ||
                         (ledger.holders().isNotEmpty() && !unusedAlive)
                     ) {
-                        accepted ?: ledger.holders().joinToString(", ")
+                        given ?: ledger.holders().joinToString(", ")
                     } else {
                         throw IllegalStateException(
                             fails.takeLast(3).joinToString(" | ").ifEmpty { "no alive peers" },

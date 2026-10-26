@@ -33,6 +33,7 @@ import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.PlainPillButton
 import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.ui.TextAction
+import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.alwaysBounceVerticalScroll
 import io.bluewallet.blueberry.wallet.hexToBytes
 import kotlinx.coroutines.launch
@@ -83,7 +84,7 @@ fun TxDetailsScreen(
                         },
                     )
                 }
-                ForgetOpenSend(db = db, runtime = runtime, txid = txid, snap = snap, onForgotten = onBack)
+                OpenSendActions(db = db, runtime = runtime, row = row, snap = snap, onForgotten = onBack)
             }
         }
     }
@@ -100,17 +101,23 @@ fun TxDetailsScreen(
     )
 }
 
+/** An unconfirmed payment: its latest broadcast status, Send again when this device signed it, and Forget. */
 @Composable
-private fun ForgetOpenSend(
+private fun OpenSendActions(
     db: Database,
     runtime: PeersRuntime,
-    txid: String,
+    row: WalletTxRow,
     snap: WalletTxsSnapshot,
     onForgotten: () -> Unit,
 ) {
+    val txid = row.txid
     val open = remember(txid, snap) { unconfirmedSendOpen(db, txid) }
+    val signed = remember(txid, snap) { storedSendCanGoAgain(db, txid) }
     var confirming by remember(txid) { mutableStateOf(false) }
+    var note by remember(txid) { mutableStateOf<String?>(null) }
     if (!open) return
+    val session = LocalBroadcastSessions.current.lastOrNull { it.receipt?.txid == txid }
+    val sending = session != null && broadcastJobInFlight(session.snapshot.phase)
     if (confirming) {
         ForgetSendDialog(
             onForget = {
@@ -121,12 +128,28 @@ private fun ForgetOpenSend(
         )
     }
     Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
+        session?.let { BroadcastStatusCard(broadcastStatus(it.snapshot)) }
         Text(
-            text = "This payment was already given to Bitcoin nodes and may still confirm. Removing it does not pull it back, and a new spend of these coins conflicts with it.",
+            text = note ?: openSendExplainer(signed),
             color = BwColors.InkMuted,
             fontFamily = BwFontFamily,
             fontSize = BwType.LabelSize,
         )
+        if (signed && !sending) {
+            TintedPillButton(
+                text = "Send again",
+                onClick = {
+                    val destination =
+                        db.sends.get(txid)?.destination ?: db.privateSends
+                            .get(txid)
+                            ?.destination
+                            .orEmpty()
+                    val receipt = BroadcastReceipt(txid, destination, row.paymentLabel.orEmpty(), -row.netDeltaSats, 0)
+                    note = sendStoredAgain(runtime, db, txid, receipt)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         PlainPillButton(
             text = "Forget this payment",
             onClick = { confirming = true },
@@ -134,6 +157,15 @@ private fun ForgetOpenSend(
         )
     }
 }
+
+private fun openSendExplainer(signed: Boolean): String =
+    if (signed) {
+        "This payment was given to Bitcoin nodes and may still confirm. Send again gives the same transaction to more nodes. " +
+            "Forgetting it does not pull it back, and a new spend of these coins conflicts with it."
+    } else {
+        "This payment waits to be signed and published from another device, so its coins stay locked until it confirms. " +
+            "Forget it only if it will never be published."
+    }
 
 @Composable
 private fun ForgetSendDialog(

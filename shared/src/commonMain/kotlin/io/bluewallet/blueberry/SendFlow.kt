@@ -9,7 +9,9 @@ import io.bluewallet.blueberry.parse.SendBuildParams
 import io.bluewallet.blueberry.parse.buildActiveSendTx
 import io.bluewallet.blueberry.parse.savePaymentLabel
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.storage.PrivateSendCoin
 import io.bluewallet.blueberry.storage.PrivateSendRow
+import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.wallet.AddressScriptType
 import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.PsbtSendResult
@@ -140,7 +142,7 @@ internal class SendFlow(
             .getOrElse { "no wallet" }
             ?.let { "Needs a wallet that can sign." }
 
-    /** The PSBT on screen. Its coins stay reserved until the PSBT step is left. */
+    /** The PSBT this flow stored. Its hold is this flow's own, not another payment's. */
     private var psbtTxid: String? = null
 
     /** The transaction this flow signed or exported. Its own coin hold is not a coin leaving the selection. */
@@ -461,14 +463,15 @@ internal class SendFlow(
         }
     }
 
-    /** Signing happens elsewhere, so the coins are held here while the PSBT is on screen. */
+    /** Signing and publishing happen elsewhere, later, so the spend is stored now and holds its coins until it confirms. */
     private fun sendPsbt(
         result: PsbtSendResult,
         rate: Double,
     ) {
         val inputs = selectedInputs
         if (!inputsFree(inputs, result.txid)) return
-        runtime.psbtHolds.hold(result.txid, inputs.map { outpointKey(it.txid, it.vout) }.toSet())
+        val coins = inputs.map { PrivateSendCoin(txid = it.txid, vout = it.vout, valueSats = it.valueSats) }
+        storeUnsignedSend(db, runtime, SendRow(result.txid, result.unsignedTxHex, recipient.address, coins))
         psbtTxid = result.txid
         commit(result, rate)
         sendError = null
@@ -540,14 +543,7 @@ internal class SendFlow(
         refreshBroadcast()
     }
 
-    /** Frees the PSBT's coins. Called when the PSBT step is left or the send screen goes away. */
-    fun releasePsbt() {
-        psbtTxid?.let { runtime.psbtHolds.release(it) }
-        psbtTxid = null
-    }
-
     fun finish() {
-        releasePsbt()
         leaveBroadcast(if (step == SendStep.PrivateSend) privateBroadcastId else broadcastId)
         if (step == SendStep.PrivateSend) dropBuild()
         close()
@@ -688,9 +684,8 @@ internal class SendFlow(
                 ?.id
         }
 
-    /** A successful job leaves the list once its transaction is stored. Closing sooner drops it. */
     private fun leaveBroadcast(id: String?) {
-        if (id != null && runtime.broadcastStore.get(id)?.phase == "success") runtime.broadcastStore.dismiss(id)
+        if (id != null) dismissConfirmedBroadcast(runtime.broadcastStore, id)
     }
 
     private fun ownedHex(): String? =
@@ -731,7 +726,6 @@ internal class SendFlow(
         }
         if (step == SendStep.PrivateSend) privateSigned = null
         if (step == SendStep.Broadcast) sent = null
-        if (step == SendStep.Psbt) releasePsbt()
         step = backStack.removeLast()
     }
 }

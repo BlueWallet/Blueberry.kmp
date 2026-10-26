@@ -27,6 +27,8 @@ data class BroadcastSnapshot(
     val handedOff: Boolean = false,
     /** False for a success where nodes were given the transaction but none confirmed taking it. */
     val acknowledged: Boolean = true,
+    /** An earlier run gave nodes this transaction, so nothing this run hears can make it unsent. */
+    val heldBefore: Boolean = false,
 )
 
 /** What the transaction list and the broadcast screen need after Send has closed. */
@@ -53,6 +55,7 @@ interface BroadcastStore {
         txHex: String,
         triedPeers: Set<String> = emptySet(),
         receipt: BroadcastReceipt? = null,
+        heldBefore: Boolean = false,
     )
 
     fun applyProgress(payload: BroadcastProgressPayload)
@@ -86,12 +89,18 @@ private class BroadcastStoreImpl : BroadcastStore {
         txHex: String,
         triedPeers: Set<String>,
         receipt: BroadcastReceipt?,
+        heldBefore: Boolean,
     ) {
-        val session =
-            BroadcastSession(
-                snapshot = BroadcastSnapshot(id = id, txHex = txHex, phase = "starting", triedPeers = triedPeers),
-                receipt = receipt,
+        val snap =
+            BroadcastSnapshot(
+                id = id,
+                txHex = txHex,
+                phase = "starting",
+                triedPeers = triedPeers,
+                handedOff = heldBefore,
+                heldBefore = heldBefore,
             )
+        val session = BroadcastSession(snapshot = snap, receipt = receipt)
         update { it + (id to session) }
     }
 
@@ -128,8 +137,9 @@ private class BroadcastStoreImpl : BroadcastStore {
                         )
                     is BroadcastDonePayload.Error ->
                         when {
-                            payload.refused -> cur.snapshot.copy(phase = "error", error = payload.error, handedOff = false)
-                            cur.snapshot.handedOff ->
+                            payload.refused && !cur.snapshot.heldBefore ->
+                                cur.snapshot.copy(phase = "error", error = payload.error, handedOff = false)
+                            cur.snapshot.handedOff || cur.snapshot.heldBefore ->
                                 cur.snapshot.copy(phase = "success", error = null, detail = payload.error, acknowledged = false)
                             else -> cur.snapshot.copy(phase = "error", error = payload.error)
                         }
@@ -262,8 +272,7 @@ fun rebroadcast(
     val settled = broadcastJobInFlight(phase) || (phase == "success" && session?.snapshot?.acknowledged != false)
     if (missing || settled) return null
     store.dismiss(id)
-    store.start(id, txHex, session.snapshot.triedPeers, session.receipt)
-    if (phase == "success") store.markHandedOff(id)
+    store.start(id, txHex, session.snapshot.triedPeers, session.receipt, heldBefore = phase == "success")
     return BroadcastRequestPayload(id, txHex, session.snapshot.triedPeers)
 }
 

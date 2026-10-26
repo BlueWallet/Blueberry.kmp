@@ -100,10 +100,7 @@ fun SendScreen(
     DisposableEffect(flow) {
         val cb: () -> Unit = { flow.goBack() }
         overlayBackStack.push(cb)
-        onDispose {
-            overlayBackStack.pop(cb)
-            flow.releasePsbt()
-        }
+        onDispose { overlayBackStack.pop(cb) }
     }
     Box(modifier = Modifier.fillMaxSize().background(BwColors.Paper)) {
         SendStepContent(flow)

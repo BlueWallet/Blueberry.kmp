@@ -9,6 +9,18 @@ import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.wallet.outpointKey
 import io.bluewallet.blueberry.wallet.prevoutTxidDisplay
 
+/**
+ * Drops a job a node confirmed, once its screen closes. A send no node confirmed stays, so its transaction
+ * can still show that status and go again.
+ */
+fun dismissConfirmedBroadcast(
+    store: BroadcastStore,
+    id: String,
+) {
+    val snap = store.get(id) ?: return
+    if (snap.phase == "success" && snap.acknowledged) store.dismiss(id)
+}
+
 /** Any finished failure can leave the list. A live or sent job stays. */
 fun broadcastCanBeForgotten(phase: String?): Boolean = phase == "error"
 

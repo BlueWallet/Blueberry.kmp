@@ -6,7 +6,9 @@ import io.bluewallet.bip324.TxInput
 import io.bluewallet.bip324.TxOutput
 import io.bluewallet.bip324.bytesToHex
 import io.bluewallet.bip324.encodeTransaction
+import io.bluewallet.blueberry.broadcast.BROADCAST_REFUSED
 import io.bluewallet.blueberry.bus.BroadcastDonePayload
+import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
 import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.wallet.PsbtSendResult
@@ -195,19 +197,22 @@ class SendHoldsTest {
 
     @Test
     fun a_psbt_refuses_coins_another_payment_holds() =
-        runFlow { _, runtime, flow ->
+        runFlow { db, runtime, flow ->
             val held = coin("11", 100_000_000)
             prime(flow, held)
             flow.build = ReviewBuild.Built(psbt("ee"), flow.draftStamp())
-            runtime.psbtHolds.hold("cd".repeat(32), setOf(held.key))
+            holdElsewhere(db, runtime, "cd", held)
+            flow.send()
+            assertEquals(HOLDS_LOADING, flow.sendError)
+            assertEquals(setOf(held.key), runtime.reservedOutpoints())
             flow.send()
             assertEquals(SELECTION_HELD, flow.sendError)
             assertEquals(SendStep.Address, flow.step)
         }
 
     @Test
-    fun a_psbt_on_screen_holds_its_coins_until_the_step_is_left() =
-        runFlow { _, runtime, flow ->
+    fun a_psbt_keeps_its_coins_after_the_screen_closes() =
+        runFlow { db, runtime, flow ->
             val c = coin("11", 100_000_000)
             prime(flow, c)
             val txid = "ee".repeat(32)
@@ -216,13 +221,36 @@ class SendHoldsTest {
             assertEquals(SendStep.Psbt, flow.step)
             assertEquals(setOf(c.key), runtime.reservedOutpoints())
             assertTrue(runtime.reservedOutpoints(txid).isEmpty())
-            flow.goBack()
-            assertTrue(runtime.reservedOutpoints().isEmpty())
+            flow.finish()
+            assertEquals(setOf(c.key), runtime.reservedOutpoints())
+            assertEquals("00", db.sends.get(txid)?.txHex)
+            assertFalse(storedSendCanGoAgain(db, txid))
+            assertEquals(RESEND_NOT_SIGNED, sendStoredAgain(runtime, db, txid, BroadcastReceipt(txid, ADDRESS, "", 1_000, 0)))
+        }
+
+    @Test
+    fun a_stored_send_goes_again_from_its_transaction_and_stays_sent() =
+        runFlow { db, runtime, _ ->
+            val c = coin("ab", 100_000_000)
+            val txid = "cd".repeat(32)
+            val hex = spending(c, signed = true)
+            storeUnsignedSend(db, runtime, SendRow(txid, hex, ADDRESS, listOf(PrivateSendCoin(c.txid, c.vout, c.valueSats))))
+            runtime.walletTxsStore.update { it.copy(utxos = listOf(c), utxosReady = true) }
+            assertTrue(storedSendCanGoAgain(db, txid))
+            assertNull(sendStoredAgain(runtime, db, txid, BroadcastReceipt(txid, ADDRESS, "", 1_000, 0)))
+            val session = storedSendSession(runtime.broadcastStore, txid)!!
+            assertTrue(session.snapshot.heldBefore)
+            assertFalse(broadcastCanBeStopped(session.snapshot))
+            val id = session.snapshot.id!!
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(id, BROADCAST_REFUSED, refused = true))
+            assertEquals("success", runtime.broadcastStore.get(id)?.phase)
+            dismissConfirmedBroadcast(runtime.broadcastStore, id)
+            assertEquals(id, storedSendSession(runtime.broadcastStore, txid)?.snapshot?.id)
         }
 
     @Test
     fun send_again_ignores_its_own_stored_hold_but_not_another_payments() =
-        runFlow { _, runtime, _ ->
+        runFlow { db, runtime, _ ->
             val c = coin("ab", 100_000_000)
             val txid = "cd".repeat(32)
             val hex = spending(c)
@@ -238,17 +266,17 @@ class SendHoldsTest {
             val wallet = WalletTxsSnapshot(utxos = listOf(c), utxosReady = true)
             assertEquals(setOf(c.key), runtime.reservedOutpoints())
             assertNull(retryRefusalFor(runtime, "1", wallet))
-            runtime.psbtHolds.hold("ef".repeat(32), setOf(c.key))
+            holdElsewhere(db, runtime, "ef", c)
             assertEquals(RETRY_COINS_HELD, retryRefusalFor(runtime, "1", wallet))
         }
 
     @Test
     fun private_send_with_a_coin_taken_since_review_asks_to_review_the_selection() =
-        runFlow { _, runtime, flow ->
+        runFlow { db, runtime, flow ->
             val kept = coin("11", 100_000_000)
             val taken = coin("22", 100_000_000)
             prime(flow, kept, taken)
-            runtime.psbtHolds.hold("cd".repeat(32), setOf(taken.key))
+            holdElsewhere(db, runtime, "cd", taken)
             flow.refreshHeldOutpoints()
             flow.openPrivateSend()
             assertTrue(flow.selectionNeedsAck)
@@ -258,18 +286,28 @@ class SendHoldsTest {
         }
 }
 
-private fun spending(coin: WalletUtxoRow): String =
+private fun holdElsewhere(
+    db: Database,
+    runtime: PeersRuntime,
+    id: String,
+    coin: WalletUtxoRow,
+) = storeUnsignedSend(db, runtime, SendRow(id.repeat(32), "00", ADDRESS, listOf(PrivateSendCoin(coin.txid, coin.vout, coin.valueSats))))
+
+private fun spending(
+    coin: WalletUtxoRow,
+    signed: Boolean = false,
+): String =
     bytesToHex(
         encodeTransaction(
             Transaction(
                 version = 1u,
-                inputs = listOf(TxInput(OutPoint(hexToBytes(coin.txid).reversedArray(), 0u), ByteArray(0), 0xffffffffu)),
+                inputs = listOf(TxInput(OutPoint(hexToBytes(coin.txid).reversedArray(), 0u), if (signed) byteArrayOf(0x51) else ByteArray(0), 0xffffffffu)),
                 outputs = listOf(TxOutput(value = 1000, scriptPubKey = byteArrayOf(0x51))),
                 lockTime = 0u,
             ),
         ),
     )
 
-private fun psbt(id: String) = PsbtSendResult(psbtHex = "00", txid = id.repeat(32), feeSats = 141, vsize = 141, changeSats = 0, changeVouts = emptyList())
+private fun psbt(id: String) = PsbtSendResult(psbtHex = "00", unsignedTxHex = "00", txid = id.repeat(32), feeSats = 141, vsize = 141, changeSats = 0, changeVouts = emptyList())
 
 private const val ADDRESS = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"

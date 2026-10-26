@@ -34,7 +34,7 @@ fun BroadcastScreen(
     val snap = current?.snapshot
 
     fun leave() {
-        if (snap?.phase == "success") runtime.broadcastStore.dismiss(id)
+        dismissConfirmedBroadcast(runtime.broadcastStore, id)
         onClose()
     }
     BackHandler { leave() }

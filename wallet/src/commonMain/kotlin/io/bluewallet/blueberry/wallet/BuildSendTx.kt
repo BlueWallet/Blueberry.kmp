@@ -61,6 +61,7 @@ data class BuildSendTxResult(
 data class BuildSendPsbtResult(
     val kind: String = "psbt",
     val psbtHex: String,
+    val unsignedTxHex: String,
     val txid: String,
     val feeSats: Long,
     val vsize: Int,
@@ -81,6 +82,8 @@ data class SignedSendResult(
 
 data class PsbtSendResult(
     val psbtHex: String,
+    /** The transaction the PSBT spends, without signatures. Same txid once signed for segwit inputs. */
+    val unsignedTxHex: String,
     val txid: String,
     val feeSats: Long,
     val vsize: Int,
@@ -589,6 +592,7 @@ fun buildUnsignedSendPsbt(params: BuildSendTxParams): BuildSendPsbtResult {
 
     return BuildSendPsbtResult(
         psbtHex = hexFromBytes(Psbt.write(psbt).toByteArray()),
+        unsignedTxHex = hexFromBytes(Transaction.write(draft.unsignedTx)),
         txid = draft.unsignedTx.txid.toString(),
         feeSats = draft.feeSats,
         vsize = draft.vsize,
@@ -627,6 +631,7 @@ fun buildSend(params: BuildSendTxParams): BuildSendResult {
     val result = buildUnsignedSendPsbt(effectiveParams)
     return PsbtSendResult(
         psbtHex = result.psbtHex,
+        unsignedTxHex = result.unsignedTxHex,
         txid = result.txid,
         feeSats = result.feeSats,
         vsize = result.vsize,
@@ -634,3 +639,9 @@ fun buildSend(params: BuildSendTxParams): BuildSendResult {
         changeVouts = result.changeVouts,
     )
 }
+
+/** True when every input carries a signature script or witness, so the transaction can be published as is. */
+fun isSignedTxHex(txHex: String): Boolean =
+    runCatching {
+        Transaction.read(txHex).txIn.all { it.signatureScript.size() > 0 || it.witness.isNotNull() }
+    }.getOrDefault(false)

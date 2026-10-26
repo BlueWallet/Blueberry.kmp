@@ -75,6 +75,20 @@ fun abandonUnconfirmedSend(
     return true
 }
 
+/**
+ * Stores a PSBT's transaction as an unconfirmed send. Another device signs and publishes it after the send
+ * screen is gone, so its coins stay held until it confirms or the payment is forgotten. The wallet rebuild
+ * clears the runtime's stored-hold cache.
+ */
+fun storeUnsignedSend(
+    db: Database,
+    runtime: PeersRuntime,
+    row: SendRow,
+) {
+    db.sends.upsert(row)
+    hydrateWallet(db, runtime.walletTxsStore, runtime.wallet, nowMillis())
+}
+
 /** Deletes the unconfirmed rows for [txid]. A confirmed row stays. */
 fun dropUnsentSend(
     db: Database,

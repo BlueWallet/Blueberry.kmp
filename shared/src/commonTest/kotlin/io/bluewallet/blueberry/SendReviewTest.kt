@@ -72,7 +72,7 @@ class SendReviewTest {
     fun review_button_names_the_action_it_runs() {
         val stamp = SendDraftStamp(emptyList(), "bc1q", SendAmount.Exact(1), 3.0)
         val signed = ReviewBuild.Built(SignedSendResult("00", "t", 1, 1, 0, emptyList()), stamp)
-        val psbt = ReviewBuild.Built(PsbtSendResult("00", "t", 1, 1, 0, emptyList()), stamp)
+        val psbt = ReviewBuild.Built(PsbtSendResult("00", "00", "t", 1, 1, 0, emptyList()), stamp)
         assertButton("Enter a fee rate", ReviewButtonAction.EditFee, true, reviewButton(null, ReviewBuild.Idle, false))
         assertButton("Building…", ReviewButtonAction.Send, false, reviewButton(3.0, ReviewBuild.Building, false))
         assertButton("Send via Tor", ReviewButtonAction.Send, true, reviewButton(3.0, signed, false))
