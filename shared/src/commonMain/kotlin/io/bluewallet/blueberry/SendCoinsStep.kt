@@ -104,11 +104,10 @@ internal fun SendCoinsStep(
             fontFamily = BwFontFamily,
             fontSize = BwType.LabelSize,
         )
-        when (control.availability) {
-            CoinAvailability.NoCoins -> HelperText("No coins in this wallet yet.")
-            CoinAvailability.AllFrozen -> HelperText(ALL_FROZEN_NOTICE, error = true)
-            CoinAvailability.AllSending -> HelperText(ALL_SENDING_NOTICE, error = true)
-            CoinAvailability.Spendable -> {}
+        if (control.availability == CoinAvailability.NoCoins) {
+            HelperText("No coins in this wallet yet.")
+        } else {
+            unavailableNotice(control.availability)?.let { HelperText(it, error = true) }
         }
         if (control.coins.isNotEmpty()) {
             CoinFilterChips(counts = control.filterCounts, selected = filter, onSelect = { filter = it })

@@ -49,6 +49,11 @@ data class TxDetailsRoute(
 )
 
 @Serializable
+data class StoredPsbtRoute(
+    val txid: String,
+)
+
+@Serializable
 data class BroadcastRoute(
     val id: String,
 )
@@ -201,7 +206,12 @@ internal fun WalletNavHost(
                     db = db,
                     txid = route.txid,
                     onBack = backFrom(entry),
+                    onShowPsbt = { navController.navigate(StoredPsbtRoute(route.txid)) { launchSingleTop = true } },
                 )
+            }
+            composable<StoredPsbtRoute> { entry ->
+                val route = entry.toRoute<StoredPsbtRoute>()
+                StoredPsbtScreen(runtime = runtime, db = db, txid = route.txid, onBack = backFrom(entry))
             }
             composable<BroadcastRoute> { entry ->
                 val route = entry.toRoute<BroadcastRoute>()

@@ -19,3 +19,6 @@ UPDATE sends SET confirmed_in_block = ? WHERE txid = ?;
 
 delete:
 DELETE FROM sends WHERE txid = ?;
+
+reopenAbove:
+UPDATE sends SET confirmed_in_block = 0 WHERE confirmed_in_block > ?;

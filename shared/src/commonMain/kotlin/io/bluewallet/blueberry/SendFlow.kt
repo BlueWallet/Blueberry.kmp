@@ -46,7 +46,7 @@ internal fun stepAfterAmount(
 ): SendStep = if (selectedKeys.isNotEmpty() && covered) SendStep.Review else SendStep.Coins
 
 internal const val SELECTION_CHANGED = "Some selected coins are frozen or no longer available. Review the selection."
-internal const val SELECTION_HELD = "Some selected coins are in another payment that is still sending. Review the selection."
+internal const val SELECTION_HELD = "Some selected coins are in another payment that hasn't confirmed. Review the selection."
 internal const val WALLET_NOT_LOADED = "Wallet isn't loaded yet."
 internal const val HOLDS_LOADING = "Checking which coins other payments are using…"
 internal const val BROADCAST_BUSY = "A broadcast is already running. Wait for it to finish."
@@ -142,11 +142,11 @@ internal class SendFlow(
             .getOrElse { "no wallet" }
             ?.let { "Needs a wallet that can sign." }
 
-    /** The PSBT this flow stored. Its hold is this flow's own, not another payment's. */
-    private var psbtTxid: String? = null
+    /** Every PSBT this flow stored. Their holds are this flow's own, not another payment's. */
+    private var psbtTxids: Set<String> = emptySet()
 
-    /** The transaction this flow signed or exported. Its own coin hold is not a coin leaving the selection. */
-    val ownTxid: String? get() = privateSigned?.txid ?: sent?.signed?.txid ?: psbtTxid
+    /** Transactions this flow signed or exported. Their coin holds are not coins leaving the selection. */
+    val ownTxids: Set<String> get() = setOfNotNull(privateSigned?.txid, sent?.signed?.txid) + psbtTxids
 
     val recipient: SendRecipient get() = SendRecipient(address.trim(), label.trim())
     val spendableRows: List<WalletUtxoRow>
@@ -340,14 +340,14 @@ internal class SendFlow(
     }
 
     fun refreshHeldOutpoints() {
-        heldOutpoints = runtime.reservedOutpoints(ownTxid)
+        heldOutpoints = runtime.reservedOutpoints(ownTxids)
         heldReady = true
     }
 
     /** Keeps the selection to coins the wallet still holds and can spend. The screen reads [held] off the UI thread. */
     fun updateSnap(
         next: WalletTxsSnapshot,
-        held: Set<String> = runtime.reservedOutpoints(ownTxid),
+        held: Set<String> = runtime.reservedOutpoints(ownTxids),
     ) {
         heldOutpoints = held
         heldReady = true
@@ -373,9 +373,9 @@ internal class SendFlow(
      */
     private fun inputsFree(
         inputs: List<SendInputUtxo>,
-        ownTxid: String?,
+        own: Set<String>,
     ): Boolean {
-        val now = runtime.reservedOutpointsNow(ownTxid)
+        val now = runtime.reservedOutpointsNow(own)
         val reserved = heldOutpoints + now.keys
         val taken = inputs.any { outpointKey(it.txid, it.vout) in reserved }
         val known = heldReady && now.complete
@@ -400,7 +400,7 @@ internal class SendFlow(
      */
     suspend fun reloadHeld() {
         val gen = ++holdsGen
-        val own = ownTxid
+        val own = ownTxids
         val held = withContext(Dispatchers.Default) { runtime.reservedOutpoints(own) }
         if (gen != holdsGen) return
         updateSnap(runtime.walletTxsStore.get(), held)
@@ -463,16 +463,20 @@ internal class SendFlow(
         }
     }
 
-    /** Signing and publishing happen elsewhere, later, so the spend is stored now and holds its coins until it confirms. */
+    /**
+     * Signing and publishing happen elsewhere, later, so the spend is stored now and holds its coins until it
+     * confirms. A PSBT shown before an edit stays stored too: it may already be signed and published elsewhere, so
+     * only its confirmation or Forget in its details releases its coins.
+     */
     private fun sendPsbt(
         result: PsbtSendResult,
         rate: Double,
     ) {
         val inputs = selectedInputs
-        if (!inputsFree(inputs, result.txid)) return
+        if (!inputsFree(inputs, ownTxids + result.txid)) return
         val coins = inputs.map { PrivateSendCoin(txid = it.txid, vout = it.vout, valueSats = it.valueSats) }
         storeUnsignedSend(db, runtime, SendRow(result.txid, result.unsignedTxHex, recipient.address, coins))
-        psbtTxid = result.txid
+        psbtTxids = psbtTxids + result.txid
         commit(result, rate)
         sendError = null
         pushStep(SendStep.Psbt)
@@ -495,7 +499,7 @@ internal class SendFlow(
         rate: Double,
     ) {
         val inputs = selectedInputs
-        if (!inputsFree(inputs, result.txid)) return
+        if (!inputsFree(inputs, ownTxids + result.txid)) return
         val priced = builtSend(result)
         val paid = sendPaidSats(amt, inputs.sumOf { it.valueSats }, priced.feeSats, priced.changeSats)
         val receipt = SendReceipt(recipient, paid, priced.feeSats, priced.txid)
@@ -588,7 +592,7 @@ internal class SendFlow(
         signed: SignedSendResult,
         row: PrivateSendRow,
     ) {
-        val session = privateSession?.takeIf { inputsFree(it.utxos, signed.txid) } ?: return
+        val session = privateSession?.takeIf { inputsFree(it.utxos, ownTxids + signed.txid) } ?: return
         val priced = builtSend(signed)
         val paid = sendPaidSats(session.amountSats, session.utxos.sumOf { it.valueSats }, priced.feeSats, priced.changeSats)
         val receipt = SendReceipt(SendRecipient(session.destination, session.label), paid, priced.feeSats, priced.txid)

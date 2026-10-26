@@ -1,6 +1,8 @@
 package io.bluewallet.blueberry.parse
 
+import fr.acinq.bitcoin.Transaction
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.storage.PrivateSendCoin
 import io.bluewallet.blueberry.wallet.AddressScriptType
 import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.HD_SCRIPT_TYPES
@@ -19,6 +21,7 @@ import io.bluewallet.blueberry.wallet.loadHdWatchGaps
 import io.bluewallet.blueberry.wallet.loadWalletSecret
 import io.bluewallet.blueberry.wallet.pickMnemonicChange
 import io.bluewallet.blueberry.wallet.preferredWifReceiveAddress
+import io.bluewallet.blueberry.wallet.rebuildSendPsbt
 import io.bluewallet.blueberry.wallet.resolvedScriptType
 import io.bluewallet.blueberry.wallet.saveHdWatchGaps
 import kotlinx.coroutines.CancellationException
@@ -68,6 +71,22 @@ private fun attachNonWitnessUtxos(
         val prev = db.transactions.get(utxo.txid) ?: return@map utxo
         utxo.copy(nonWitnessUtxo = prev.tx)
     }
+
+/** The PSBT for a stored unsigned send. Each coin's script comes from its stored parent transaction. */
+fun storedSendPsbt(
+    db: Database,
+    wallet: Wallet,
+    unsignedTxHex: String,
+    coins: List<PrivateSendCoin>,
+): String {
+    val utxos =
+        coins.map { coin ->
+            val parent = db.transactions.get(coin.txid)?.tx ?: throw IllegalArgumentException("missing parent transaction")
+            val script = Transaction.read(parent).txOut[coin.vout].publicKeyScript
+            SendInputUtxo(coin.txid, coin.vout, coin.valueSats, script.toByteArray(), nonWitnessUtxo = parent)
+        }
+    return rebuildSendPsbt(loadWalletSecret(db), wallet.snapshot(), unsignedTxHex, utxos)
+}
 
 internal fun grownInternalCount(
     current: Int,

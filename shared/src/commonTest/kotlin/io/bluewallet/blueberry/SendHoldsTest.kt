@@ -220,7 +220,7 @@ class SendHoldsTest {
             flow.send()
             assertEquals(SendStep.Psbt, flow.step)
             assertEquals(setOf(c.key), runtime.reservedOutpoints())
-            assertTrue(runtime.reservedOutpoints(txid).isEmpty())
+            assertTrue(runtime.reservedOutpoints(setOf(txid)).isEmpty())
             flow.finish()
             assertEquals(setOf(c.key), runtime.reservedOutpoints())
             assertEquals("00", db.sends.get(txid)?.txHex)
@@ -234,7 +234,7 @@ class SendHoldsTest {
             val c = coin("ab", 100_000_000)
             val txid = "cd".repeat(32)
             val hex = spending(c, signed = true)
-            storeUnsignedSend(db, runtime, SendRow(txid, hex, ADDRESS, listOf(PrivateSendCoin(c.txid, c.vout, c.valueSats))))
+            storeStored(db, runtime, SendRow(txid, hex, ADDRESS, listOf(PrivateSendCoin(c.txid, c.vout, c.valueSats))))
             runtime.walletTxsStore.update { it.copy(utxos = listOf(c), utxosReady = true) }
             assertTrue(storedSendCanGoAgain(db, txid))
             assertNull(sendStoredAgain(runtime, db, txid, BroadcastReceipt(txid, ADDRESS, "", 1_000, 0)))
@@ -246,6 +246,45 @@ class SendHoldsTest {
             assertEquals("success", runtime.broadcastStore.get(id)?.phase)
             dismissConfirmedBroadcast(runtime.broadcastStore, id)
             assertEquals(id, storedSendSession(runtime.broadcastStore, txid)?.snapshot?.id)
+        }
+
+    @Test
+    fun a_psbt_made_after_an_edit_keeps_the_one_shown_before() =
+        runFlow { db, runtime, flow ->
+            val c = coin("11", 100_000_000)
+            prime(flow, c)
+            flow.build = ReviewBuild.Built(psbt("ee"), flow.draftStamp())
+            flow.send()
+            assertEquals(SendStep.Psbt, flow.step)
+            flow.goBack()
+            flow.refreshHeldOutpoints()
+            assertTrue(c.key in flow.selectedKeys)
+            flow.build = ReviewBuild.Built(psbt("ef"), flow.draftStamp())
+            flow.send()
+            assertNull(flow.sendError)
+            assertEquals(SendStep.Psbt, flow.step)
+            assertEquals("ee".repeat(32), db.sends.get("ee".repeat(32))?.txid)
+            assertEquals("ef".repeat(32), db.sends.get("ef".repeat(32))?.txid)
+            assertEquals(setOf(c.key), runtime.reservedOutpoints())
+            assertTrue(runtime.reservedOutpoints(setOf("ee".repeat(32), "ef".repeat(32))).isEmpty())
+        }
+
+    @Test
+    fun send_again_keeps_a_node_confirmation_from_the_run_before() =
+        runFlow { db, runtime, _ ->
+            val c = coin("ab", 100_000_000)
+            val txid = "cd".repeat(32)
+            val hex = spending(c, signed = true)
+            storeStored(db, runtime, SendRow(txid, hex, ADDRESS, listOf(PrivateSendCoin(c.txid, c.vout, c.valueSats))))
+            runtime.walletTxsStore.update { it.copy(utxos = listOf(c), utxosReady = true) }
+            runtime.broadcastStore.start("1", hex, receipt = BroadcastReceipt(txid, ADDRESS, "", 1_000, 141))
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Ok("1", "1.1.1.1:8333", acknowledged = true))
+            assertNull(sendStoredAgain(runtime, db, txid, BroadcastReceipt(txid, ADDRESS, "", 1_000, 0)))
+            val id = storedSendSession(runtime.broadcastStore, txid)!!.snapshot.id!!
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(id, BROADCAST_REFUSED, refused = true))
+            val snap = runtime.broadcastStore.get(id)!!
+            assertEquals("success", snap.phase)
+            assertTrue(snap.acknowledged)
         }
 
     @Test
@@ -286,12 +325,19 @@ class SendHoldsTest {
         }
 }
 
-private fun holdElsewhere(
+private suspend fun holdElsewhere(
     db: Database,
     runtime: PeersRuntime,
     id: String,
     coin: WalletUtxoRow,
-) = storeUnsignedSend(db, runtime, SendRow(id.repeat(32), "00", ADDRESS, listOf(PrivateSendCoin(coin.txid, coin.vout, coin.valueSats))))
+) = storeStored(db, runtime, SendRow(id.repeat(32), "00", ADDRESS, listOf(PrivateSendCoin(coin.txid, coin.vout, coin.valueSats))))
+
+/** Stores the row and waits for the wallet rebuild, so a test's own store update is not overwritten. */
+private suspend fun storeStored(
+    db: Database,
+    runtime: PeersRuntime,
+    row: SendRow,
+) = storeUnsignedSend(db, runtime, row).join()
 
 private fun spending(
     coin: WalletUtxoRow,

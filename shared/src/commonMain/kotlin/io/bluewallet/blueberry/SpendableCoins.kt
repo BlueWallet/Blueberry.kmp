@@ -4,14 +4,19 @@ enum class CoinAvailability {
     NoCoins,
     AllFrozen,
 
-    /** Nothing is spendable and at least one coin is held by a payment that is still sending. */
+    /** Nothing is spendable and every unfrozen coin is held by a payment that has not confirmed; none is frozen. */
     AllSending,
+
+    /** Nothing is spendable: some coins are frozen and the rest are held by a payment that has not confirmed. */
+    FrozenOrSending,
     Spendable,
 }
 
 internal const val ALL_FROZEN_NOTICE = "Every coin is frozen. Unfreeze one in Coin control to spend it."
 internal const val ALL_SENDING_NOTICE =
-    "Every coin is in a payment that is still sending. They come back if it fails, and its change can be spent once it confirms."
+    "Every coin is in a payment that hasn't confirmed. They come back if it fails or is forgotten, and its change can be spent once it confirms."
+internal const val FROZEN_OR_SENDING_NOTICE =
+    "Every coin is frozen or in a payment that hasn't confirmed. Unfreeze one in Coin control, or wait for that payment."
 
 /** [sendingCount] counts unfrozen coins held by a payment that is still sending. */
 internal fun coinAvailability(
@@ -22,8 +27,9 @@ internal fun coinAvailability(
     when {
         coinCount == 0 -> CoinAvailability.NoCoins
         frozenCount >= coinCount -> CoinAvailability.AllFrozen
-        frozenCount + sendingCount >= coinCount -> CoinAvailability.AllSending
-        else -> CoinAvailability.Spendable
+        frozenCount + sendingCount < coinCount -> CoinAvailability.Spendable
+        frozenCount == 0 -> CoinAvailability.AllSending
+        else -> CoinAvailability.FrozenOrSending
     }
 
 internal fun coinAvailability(
@@ -36,6 +42,15 @@ internal fun coinAvailability(
         sendingCount = utxos.count { !it.isFrozen && it.key in held },
     )
 
+/** Why nothing can be spent, or null when something can. */
+internal fun unavailableNotice(availability: CoinAvailability): String? =
+    when (availability) {
+        CoinAvailability.AllFrozen -> ALL_FROZEN_NOTICE
+        CoinAvailability.AllSending -> ALL_SENDING_NOTICE
+        CoinAvailability.FrozenOrSending -> FROZEN_OR_SENDING_NOTICE
+        CoinAvailability.NoCoins, CoinAvailability.Spendable -> null
+    }
+
 /** [storedFrozen] is the persisted freeze list; it wins even if the snapshot row is stale. */
 internal fun spendableSelectedKeys(
     utxos: List<WalletUtxoRow>,
@@ -46,7 +61,6 @@ internal fun spendableSelectedKeys(
 internal fun sendCoinPrompt(availability: CoinAvailability): String =
     when (availability) {
         CoinAvailability.NoCoins -> "No coins to spend yet."
-        CoinAvailability.AllFrozen -> ALL_FROZEN_NOTICE
-        CoinAvailability.AllSending -> ALL_SENDING_NOTICE
         CoinAvailability.Spendable -> "Choose which coins this payment spends."
+        else -> unavailableNotice(availability).orEmpty()
     }

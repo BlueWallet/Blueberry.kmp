@@ -7,6 +7,10 @@ import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.wallet.SendInputUtxo
 import io.bluewallet.blueberry.wallet.SignedSendResult
 import io.bluewallet.blueberry.wallet.Wallet
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 fun shouldPersistSend(
     phase: String?,
@@ -77,16 +81,19 @@ fun abandonUnconfirmedSend(
 
 /**
  * Stores a PSBT's transaction as an unconfirmed send. Another device signs and publishes it after the send
- * screen is gone, so its coins stay held until it confirms or the payment is forgotten. The wallet rebuild
- * clears the runtime's stored-hold cache.
+ * screen is gone, so its coins stay held until it confirms or the payment is forgotten. The hold applies at
+ * once; the wallet rebuild runs off the UI thread and outlives the send screen, which usually closes right after.
  */
 fun storeUnsignedSend(
     db: Database,
     runtime: PeersRuntime,
     row: SendRow,
-) {
+): Job {
     db.sends.upsert(row)
-    hydrateWallet(db, runtime.walletTxsStore, runtime.wallet, nowMillis())
+    runtime.storedHolds.clear()
+    return CoroutineScope(Dispatchers.Default).launch {
+        runCatching { hydrateWallet(db, runtime.walletTxsStore, runtime.wallet, nowMillis()) }
+    }
 }
 
 /** Deletes the unconfirmed rows for [txid]. A confirmed row stays. */

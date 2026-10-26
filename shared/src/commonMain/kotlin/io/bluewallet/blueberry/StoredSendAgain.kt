@@ -47,13 +47,14 @@ fun sendStoredAgain(
         when {
             existing != null && broadcastJobInFlight(existing.snapshot.phase) -> return null
             hex == null -> RESEND_NOT_SIGNED
-            else -> retryRefusal(hex, utxoKeys, wallet.utxosReady, runtime.reservedOutpoints(txid))
+            else -> retryRefusal(hex, utxoKeys, wallet.utxosReady, runtime.reservedOutpoints(setOf(txid)))
         }
     if (blocked == null && hex != null) {
         val tried = existing?.snapshot?.triedPeers ?: emptySet()
         existing?.snapshot?.id?.let { store.dismiss(it) }
         val id = nextUiBroadcastId()
-        store.start(id, hex, tried, existing?.receipt ?: receipt, heldBefore = true)
+        val acked = existing?.snapshot?.let { it.phase == "success" && it.acknowledged } == true
+        store.start(id, hex, tried, existing?.receipt ?: receipt, if (acked) PriorRun.Acked else PriorRun.Held)
         requestBroadcast(runtime, BroadcastRequestPayload(id, hex, tried))
     }
     return blocked

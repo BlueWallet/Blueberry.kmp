@@ -401,12 +401,7 @@ private fun CoinControlSummary(control: CoinControlSnapshot) {
             FrozenBalancePill(control.frozenSats)
             SendingBalancePill(control.sendingSats)
         }
-        val notice =
-            when (control.availability) {
-                CoinAvailability.AllFrozen -> ALL_FROZEN_NOTICE
-                CoinAvailability.AllSending -> ALL_SENDING_NOTICE
-                else -> null
-            }
+        val notice = unavailableNotice(control.availability)
         if (notice != null) {
             Text(
                 text = notice,

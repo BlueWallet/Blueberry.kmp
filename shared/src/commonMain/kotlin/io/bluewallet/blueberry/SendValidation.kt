@@ -88,6 +88,7 @@ fun amountContinueLabel(
         check is SendAmountCheck.Ok -> "Continue"
         availability == CoinAvailability.AllFrozen -> "Every coin is frozen"
         availability == CoinAvailability.AllSending -> "Every coin is sending"
+        availability == CoinAvailability.FrozenOrSending -> "Every coin is frozen or sending"
         walletTotalSats <= 0L -> "No spendable coins left"
         else -> "Enter an amount"
     }
@@ -97,13 +98,7 @@ fun amountContinueLabel(
 fun noSpendableNotice(
     walletTotalSats: Long,
     availability: CoinAvailability,
-): String? =
-    when {
-        availability == CoinAvailability.AllFrozen -> ALL_FROZEN_NOTICE
-        availability == CoinAvailability.AllSending -> ALL_SENDING_NOTICE
-        walletTotalSats <= 0L -> "No spendable coins left."
-        else -> null
-    }
+): String? = unavailableNotice(availability) ?: if (walletTotalSats <= 0L) "No spendable coins left." else null
 
 /** Why Review cannot price this payment, or null when [checkSendAmount] is ok. */
 fun sendAmountUnavailable(

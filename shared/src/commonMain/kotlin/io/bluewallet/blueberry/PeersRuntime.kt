@@ -109,32 +109,32 @@ class PeersRuntime(
         putPending(pendingPrivateSends, id, row)
     }
 
-    /** Cleared whenever the wallet store rebuilds from the database. */
-    private val storedHolds = StoredHoldsCache { loadStoredHolds(db) }
+    /** Cleared whenever the wallet store rebuilds from the database, and by a write that cannot wait for that rebuild. */
+    internal val storedHolds = StoredHoldsCache { loadStoredHolds(db) }
 
     /**
      * Outpoints a live broadcast or an unconfirmed stored send (a PSBT included) still holds.
      * A finished error keeps the row for Retry and no longer holds the coins, since no node has it.
-     * [exceptTxid] leaves out one transaction's own hold, so a screen can tell its own coins from coins another payment took.
+     * [except] leaves out a screen's own transactions, so it can tell its own coins from coins another payment took.
      */
     @OptIn(ExperimentalAtomicApi::class)
     fun reservedOutpoints(
-        exceptTxid: String? = null,
+        except: Set<String> = emptySet(),
         stored: List<Pair<String, String>> = storedHolds.get(),
     ): Set<String> {
         val live = liveBroadcastIds(broadcastStore)
         val armed =
             pendingSends
                 .load()
-                .filter { it.key in live && it.value.txid != exceptTxid }
+                .filter { it.key in live && it.value.txid !in except }
                 .values
                 .flatMap { it.coins } +
                 pendingPrivateSends
                     .load()
-                    .filter { it.key in live && it.value.txid != exceptTxid }
+                    .filter { it.key in live && it.value.txid !in except }
                     .values
                     .flatMap { it.coins }
-        val held = stored.mapNotNull { (txid, key) -> if (txid == exceptTxid) null else key }
+        val held = stored.mapNotNull { (txid, key) -> if (txid in except) null else key }
         return armed.map { outpointKey(it.txid, it.vout) }.toSet() + held
     }
 
@@ -483,9 +483,9 @@ data class HeldOutpoints(
  * Live broadcasts from memory plus stored holds only if already cached, so it never touches the database
  * and is safe on the UI thread.
  */
-fun PeersRuntime.reservedOutpointsNow(exceptTxid: String? = null): HeldOutpoints {
+fun PeersRuntime.reservedOutpointsNow(except: Set<String> = emptySet()): HeldOutpoints {
     val stored = cachedStoredHolds
-    return HeldOutpoints(reservedOutpoints(exceptTxid, stored.orEmpty()), complete = stored != null)
+    return HeldOutpoints(reservedOutpoints(except, stored.orEmpty()), complete = stored != null)
 }
 
 /**

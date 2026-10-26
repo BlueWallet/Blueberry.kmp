@@ -893,6 +893,8 @@ internal class SqliteDatabase(
             storageDb.filtersQueries.rewindBlocks(height)
             storageDb.filtersQueries.rewindParsed(height)
             storageDb.filtersQueries.rewindTransactions(height)
+            storageDb.sendsQueries.reopenAbove(height)
+            storageDb.privateSendsQueries.reopenAbove(height)
         }
     }
 

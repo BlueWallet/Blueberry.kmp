@@ -87,7 +87,7 @@ fun retryRefusalFor(
         session?.snapshot?.txHex,
         wallet.utxos.map { it.key }.toSet(),
         wallet.utxosReady,
-        runtime.reservedOutpoints(session?.receipt?.txid),
+        runtime.reservedOutpoints(setOfNotNull(session?.receipt?.txid)),
     )
 }
 

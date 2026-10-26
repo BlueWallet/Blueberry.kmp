@@ -13,10 +13,17 @@ class SpendableCoinsTest {
 
     @Test
     fun availability_names_a_wallet_whose_coins_are_all_sending() {
-        assertEquals(CoinAvailability.AllSending, coinAvailability(coinCount = 3, frozenCount = 1, sendingCount = 2))
         assertEquals(CoinAvailability.AllSending, coinAvailability(coinCount = 2, frozenCount = 0, sendingCount = 2))
         assertEquals(CoinAvailability.Spendable, coinAvailability(coinCount = 3, frozenCount = 0, sendingCount = 2))
         assertEquals(ALL_SENDING_NOTICE, sendCoinPrompt(CoinAvailability.AllSending))
+    }
+
+    @Test
+    fun frozen_coins_are_not_called_sending() {
+        assertEquals(CoinAvailability.FrozenOrSending, coinAvailability(coinCount = 3, frozenCount = 1, sendingCount = 2))
+        assertEquals(FROZEN_OR_SENDING_NOTICE, sendCoinPrompt(CoinAvailability.FrozenOrSending))
+        assertEquals(FROZEN_OR_SENDING_NOTICE, noSpendableNotice(0, CoinAvailability.FrozenOrSending))
+        assertEquals("Every coin is frozen or sending", amountContinueLabel("0.5", 0, CoinAvailability.FrozenOrSending))
     }
 
     @Test
