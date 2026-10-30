@@ -171,8 +171,9 @@ suspend fun broadcastTxV2(
     val session = protocol
     try {
         log("broadcast", "v2 send-tx")
-        session.writeMessage(Message.Tx(wireTx))
+        // Before the write: a cancelled write can still put the bytes on the wire.
         currentCoroutineContext()[HandedOff]?.mark?.invoke()
+        session.writeMessage(Message.Tx(wireTx))
         return awaitTxAck(session, txidInternal, wtxidInternal, options.ackTimeoutMs)
     } finally {
         try {

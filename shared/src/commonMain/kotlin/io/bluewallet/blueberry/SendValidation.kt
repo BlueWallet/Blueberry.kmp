@@ -70,11 +70,14 @@ fun numberPadInput(
     }
 }
 
+/** Many nodes still refuse to relay below this, so a lower rate can sit unconfirmed with its coins locked. */
+const val MIN_FEE_RATE_SAT_PER_VB = 1.0
+
 fun parseFeeRateSatPerVb(input: String): Double? {
     val t = input.trim()
     if (t.isEmpty() || !Regex("^\\d+(\\.\\d+)?$").matches(t)) return null
     val n = t.toDouble()
-    return if (n.isFinite() && n > 0.0) n else null
+    return if (n.isFinite() && n >= MIN_FEE_RATE_SAT_PER_VB) n else null
 }
 
 /** Amount-step primary label. An empty wallet says so, even when the field still holds a number. */

@@ -12,6 +12,9 @@ class SendValidationTest {
         assertNull(parseFeeRateSatPerVb(""))
         assertNull(parseFeeRateSatPerVb("0"))
         assertNull(parseFeeRateSatPerVb("-1"))
+        assertNull(parseFeeRateSatPerVb("0.5"))
+        assertNull(parseFeeRateSatPerVb("0.00001"))
+        assertEquals(1.0, parseFeeRateSatPerVb("1"))
         assertEquals(1.5, parseFeeRateSatPerVb("1.5"))
         assertEquals(10.0, parseFeeRateSatPerVb("10"))
     }

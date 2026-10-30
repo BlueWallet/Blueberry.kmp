@@ -81,7 +81,7 @@ internal fun SendFeeSheet(
                 TextAction(text = "Add coins", onClick = actions.onAddCoins)
             }
             FeeDraftCheck.Invalid ->
-                if (draft.isNotBlank()) HelperText("Enter a rate above 0 sat/vB.", error = true)
+                if (draft.isNotBlank()) HelperText("Enter a rate of at least 1 sat/vB.", error = true)
         }
         HelperText("Check a fee source you trust. 1 sat/vB can take days.")
         PillButton(

@@ -222,12 +222,13 @@ internal class SendFlow(
     }
 
     private suspend fun produceBuild(ticket: Int): ReviewBuild {
-        val rate = feeRate
         val w = runtime.wallet
-        val amt = amountSats
-        return if (rate != null && amt != null && w != null) {
-            if (selectionSpendable()) buildSigned(w, amt, rate, ticket) else ReviewBuild.Failed(SELECTION_CHANGED)
-        } else if (rate == null || amt == null) {
+        val stamp = stampOrNull()
+        return if (stamp != null && w != null) {
+            // Captured before the suspend below, so the stamp always describes what gets signed.
+            val params = SendBuildParams(selectedInputs, stamp.address, stamp.amount, stamp.rate)
+            if (selectionSpendable()) buildSigned(w, params, stamp, ticket) else ReviewBuild.Failed(SELECTION_CHANGED)
+        } else if (stamp == null) {
             ReviewBuild.Idle
         } else {
             ReviewBuild.Failed(WALLET_NOT_LOADED)
@@ -236,13 +237,11 @@ internal class SendFlow(
 
     private suspend fun buildSigned(
         w: Wallet,
-        amt: SendAmount,
-        rate: Double,
+        params: SendBuildParams,
+        stamp: SendDraftStamp,
         ticket: Int,
-    ): ReviewBuild {
-        val stamp = draftStamp()
-        val params = SendBuildParams(selectedInputs, recipient.address, amt, rate)
-        return runCatching {
+    ): ReviewBuild =
+        runCatching {
             val signed =
                 withContext(Dispatchers.Default) {
                     coroutineContext.ensureActive()
@@ -253,7 +252,6 @@ internal class SendFlow(
             if (it is CancellationException) throw it
             ReviewBuild.Failed(it.message ?: it.toString())
         }
-    }
 
     private fun ticketCurrent(ticket: Int): Boolean = buildCell.load().ticket == ticket
 
