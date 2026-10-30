@@ -22,9 +22,12 @@ object BwPalette {
         val Paper = Color(0xFF000000)
         val Card = Color(0xFF181B1D)
         val Section = Color(0xFF1E2224)
+        val InputFill = Color(0xFF212427)
+        val PanelFill = Color(0xFF25282B)
         val Ink = Color(0xFFFFFFFF)
         val InkSecondary = Color(0xFF606C73)
         val InkMuted = Color(0xFF606C73)
+        val InkQuiet = Color(0xFF8E959C)
         val Action = Color(0xFFC7C7CC)
         val Link = Color(0xFF3788E0)
         val Accent = Color(0xFF3788E0)
@@ -41,9 +44,12 @@ object BwPalette {
         val Paper = Color(0xFFF7F8FA)
         val Card = Color(0xFFFFFFFF)
         val Section = Color(0xFFF9F9F9)
+        val InputFill = Color(0xFFF0F2F5)
+        val PanelFill = Color(0xFFF0F2F5)
         val Ink = Color(0xFF000000)
         val InkSecondary = Color(0xFF81868E)
         val InkMuted = Color(0xFF9AA0AA)
+        val InkQuiet = Color(0xFF5F6670)
         val Action = Color(0xFF50555C)
         val Link = Color(0xFF3788E0)
         val Accent = Color(0xFF3788E0)
@@ -72,6 +78,16 @@ object BwColors {
         @Composable @ReadOnlyComposable
         get() = if (LocalDarkPalette.current) BwPalette.Dark.Section else BwPalette.Light.Section
 
+    /** Fill behind text inputs that sit on a Card. */
+    val InputFill: Color
+        @Composable @ReadOnlyComposable
+        get() = if (LocalDarkPalette.current) BwPalette.Dark.InputFill else BwPalette.Light.InputFill
+
+    /** Fill behind the bottom action panel on coin pickers. */
+    val PanelFill: Color
+        @Composable @ReadOnlyComposable
+        get() = if (LocalDarkPalette.current) BwPalette.Dark.PanelFill else BwPalette.Light.PanelFill
+
     val Ink: Color
         @Composable @ReadOnlyComposable
         get() = if (LocalDarkPalette.current) BwPalette.Dark.Ink else BwPalette.Light.Ink
@@ -83,6 +99,11 @@ object BwColors {
     val InkMuted: Color
         @Composable @ReadOnlyComposable
         get() = if (LocalDarkPalette.current) BwPalette.Dark.InkMuted else BwPalette.Light.InkMuted
+
+    /** Captions and helper text. InkMuted is under 4.5:1 for small text. */
+    val InkQuiet: Color
+        @Composable @ReadOnlyComposable
+        get() = if (LocalDarkPalette.current) BwPalette.Dark.InkQuiet else BwPalette.Light.InkQuiet
 
     val Action: Color
         @Composable @ReadOnlyComposable
@@ -150,6 +171,8 @@ object BwType {
     val ValueSize = 22.sp
     val HeroSize = 26.sp
     val CaptionSize = 12.sp
+    val DisplaySize = 40.sp
+    val DisplayLargeSize = 52.sp
 }
 
 private fun bwColorScheme(dark: Boolean) =

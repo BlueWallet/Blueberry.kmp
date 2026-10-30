@@ -61,6 +61,16 @@ class ParseFormatTest {
     }
 
     @Test
+    fun parseBtcToSats_refuses_amounts_that_would_overflow() {
+        assertEquals(2_100_000_000_000_000, parseBtcToSats("21000000"))
+        assertEquals(99_999_999_99_999_999, parseBtcToSats("99999999.99999999"))
+        assertEquals(100_000_000, parseBtcToSats("0000000001"))
+        assertNull(parseBtcToSats("100000000"))
+        assertNull(parseBtcToSats("92233720368"))
+        assertNull(parseBtcToSats("100000000000000000000"))
+    }
+
+    @Test
     fun isSendMaxAmount_accepts_trimmed_case_insensitive_max_only() {
         assertTrue(isSendMaxAmount("MAX"))
         assertTrue(isSendMaxAmount(" Max "))

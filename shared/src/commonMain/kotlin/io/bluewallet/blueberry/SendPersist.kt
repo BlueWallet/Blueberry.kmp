@@ -7,6 +7,10 @@ import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.wallet.SendInputUtxo
 import io.bluewallet.blueberry.wallet.SignedSendResult
 import io.bluewallet.blueberry.wallet.Wallet
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 fun shouldPersistSend(
     phase: String?,
@@ -46,6 +50,63 @@ fun <T : Any> armedAfterPersist(
 ): T? {
     if (!wrote) return current
     return if (current === persisted) null else current
+}
+
+fun unconfirmedSendOpen(
+    db: Database,
+    txid: String,
+): Boolean {
+    val sendOpen = db.sends.get(txid)?.confirmedInBlock == 0L
+    val privateOpen = db.privateSends.get(txid)?.confirmedInBlock == 0L
+    return sendOpen || privateOpen
+}
+
+/** Drops the local hold on a payment that has not confirmed. The network copy can still settle. */
+fun abandonUnconfirmedSend(
+    db: Database,
+    runtime: PeersRuntime,
+    txid: String,
+): Boolean {
+    if (!unconfirmedSendOpen(db, txid)) return false
+    runtime.broadcastStore.sessions().forEach { session ->
+        val id = session.snapshot.id
+        if (session.receipt?.txid == txid && id != null) {
+            runtime.dropArmedBroadcast(id)
+            runtime.broadcastStore.dismiss(id)
+        }
+    }
+    dropUnsentSend(db, runtime.walletTxsStore, runtime.wallet, txid)
+    return true
+}
+
+/**
+ * Stores a PSBT's transaction as an unconfirmed send. Another device signs and publishes it after the send
+ * screen is gone, so its coins stay held until it confirms or the payment is forgotten. The hold applies at
+ * once; the wallet rebuild runs off the UI thread and outlives the send screen, which usually closes right after.
+ */
+fun storeUnsignedSend(
+    db: Database,
+    runtime: PeersRuntime,
+    row: SendRow,
+): Job {
+    db.sends.upsert(row)
+    runtime.storedHolds.clear()
+    return CoroutineScope(Dispatchers.Default).launch {
+        runCatching { hydrateWallet(db, runtime.walletTxsStore, runtime.wallet, nowMillis()) }
+    }
+}
+
+/** Deletes the unconfirmed rows for [txid]. A confirmed row stays. */
+fun dropUnsentSend(
+    db: Database,
+    store: WalletTxsStore,
+    wallet: Wallet?,
+    txid: String,
+) {
+    if (!unconfirmedSendOpen(db, txid)) return
+    if (db.sends.get(txid)?.confirmedInBlock == 0L) db.sends.delete(txid)
+    if (db.privateSends.get(txid)?.confirmedInBlock == 0L) db.privateSends.delete(txid)
+    hydrateWallet(db, store, wallet, nowMillis())
 }
 
 fun persistSendAndRefresh(

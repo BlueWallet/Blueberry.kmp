@@ -30,11 +30,16 @@ import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.PillButton
+import io.bluewallet.blueberry.ui.PlainPillButton
 import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.ui.TextAction
+import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.alwaysBounceVerticalScroll
 import io.bluewallet.blueberry.wallet.hexToBytes
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun TxDetailsScreen(
@@ -42,6 +47,7 @@ fun TxDetailsScreen(
     db: Database,
     txid: String,
     onBack: () -> Unit,
+    onShowPsbt: () -> Unit = {},
 ) {
     val snap = rememberWalletTxs(runtime)
     var editing by remember { mutableStateOf(false) }
@@ -82,6 +88,7 @@ fun TxDetailsScreen(
                         },
                     )
                 }
+                OpenSendActions(OpenSendHost(db, runtime, scope, onForgotten = onBack, onShowPsbt = onShowPsbt), row, snap)
             }
         }
     }
@@ -95,6 +102,122 @@ fun TxDetailsScreen(
             editing = false
         },
         onCancel = { editing = false },
+    )
+}
+
+private class OpenSendHost(
+    val db: Database,
+    val runtime: PeersRuntime,
+    /** Outlives these actions, which leave as soon as the forgotten row drops out of the wallet. */
+    val scope: CoroutineScope,
+    val onForgotten: () -> Unit,
+    val onShowPsbt: () -> Unit,
+)
+
+/**
+ * An unconfirmed payment: its latest broadcast status, Send again when this device signed it, Show PSBT
+ * when another device signs it, and Forget.
+ */
+@Composable
+private fun OpenSendActions(
+    host: OpenSendHost,
+    row: WalletTxRow,
+    snap: WalletTxsSnapshot,
+) {
+    val db = host.db
+    val runtime = host.runtime
+    val txid = row.txid
+    val open = remember(txid, snap) { unconfirmedSendOpen(db, txid) }
+    val signed = remember(txid, snap) { storedSendCanGoAgain(db, txid) }
+    val psbt = remember(txid, snap) { storedSendIsPsbt(db, txid) }
+    var confirming by remember(txid) { mutableStateOf(false) }
+    var note by remember(txid) { mutableStateOf<String?>(null) }
+    var forgetting by remember(txid) { mutableStateOf(false) }
+    if (!open || forgetting) return
+    val session = LocalBroadcastSessions.current.lastOrNull { it.receipt?.txid == txid }
+    val sending = session != null && broadcastJobInFlight(session.snapshot.phase)
+    if (confirming) {
+        ForgetSendDialog(
+            onForget = {
+                confirming = false
+                forgetting = true
+                host.scope.launch {
+                    val forgot = withContext(Dispatchers.Default) { abandonUnconfirmedSend(db, runtime, txid) }
+                    if (forgot) host.onForgotten() else forgetting = false
+                }
+            },
+            onKeep = { confirming = false },
+        )
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
+        session?.let { BroadcastStatusCard(broadcastStatus(it.snapshot)) }
+        Text(
+            text = note ?: openSendExplainer(signed),
+            color = BwColors.InkMuted,
+            fontFamily = BwFontFamily,
+            fontSize = BwType.LabelSize,
+        )
+        if (signed && !sending) {
+            TintedPillButton(
+                text = "Send again",
+                onClick = {
+                    val destination =
+                        db.sends.get(txid)?.destination ?: db.privateSends
+                            .get(txid)
+                            ?.destination
+                            .orEmpty()
+                    val receipt = BroadcastReceipt(txid, destination, row.paymentLabel.orEmpty(), -row.netDeltaSats, 0)
+                    note = sendStoredAgain(runtime, db, txid, receipt)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (psbt) {
+            TintedPillButton(text = "Show PSBT", onClick = host.onShowPsbt, modifier = Modifier.fillMaxWidth())
+        }
+        PlainPillButton(
+            text = "Forget this payment",
+            onClick = { confirming = true },
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+private fun openSendExplainer(signed: Boolean): String =
+    if (signed) {
+        "This payment was given to Bitcoin nodes and may still confirm. Send again gives the same transaction to more nodes. " +
+            "Forgetting it does not pull it back, and a new spend of these coins conflicts with it."
+    } else {
+        "This payment waits to be signed and published from another device. Show PSBT to scan it there. " +
+            "Its coins stay locked until it confirms. Forget it only if it will never be published."
+    }
+
+@Composable
+private fun ForgetSendDialog(
+    onForget: () -> Unit,
+    onKeep: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onKeep,
+        title = {
+            Text(
+                text = "Forget this payment?",
+                color = BwColors.Ink,
+                fontFamily = BwFontFamily,
+                fontWeight = BwType.Value,
+            )
+        },
+        text = {
+            Text(
+                text = "The original payment can still confirm and send these coins to its recipient. A new payment with the same coins may lose to it.",
+                color = BwColors.InkMuted,
+                fontFamily = BwFontFamily,
+                fontSize = BwType.BodySize,
+            )
+        },
+        confirmButton = { PillButton(text = "Forget", onClick = onForget) },
+        dismissButton = { TextAction(text = "Keep", onClick = onKeep) },
+        containerColor = BwColors.Card,
     )
 }
 

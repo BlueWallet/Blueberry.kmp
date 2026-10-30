@@ -25,6 +25,7 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 private const val MSG_TX = 1u
@@ -86,7 +87,7 @@ class V2BroadcastTest {
                     )
                     tx
                 }
-            broadcastTxV2(client, txHex(), BroadcastTxV2Options(port = 8333, name = APP_NAME, version = APP_VERSION))
+            assertTrue(broadcastTxV2(client, txHex(), BroadcastTxV2Options(port = 8333, name = APP_NAME, version = APP_VERSION)))
             val got = peer.await()
             assertTrue(equalBytes(transactionId(got), transactionId(sampleTx())))
             client.close()
@@ -94,22 +95,24 @@ class V2BroadcastTest {
         }
 
     @Test
-    fun succeeds_on_ack_timeout_when_peer_stays_silent() =
+    fun an_ack_timeout_is_handed_but_not_acknowledged() =
         runBlocking {
             val (client, server) = pairedByteDuplexes()
             val peer = async { handshakeThenTx(server).second }
-            broadcastTxV2(
-                client,
-                txHex(),
-                BroadcastTxV2Options(port = 8333, ackTimeoutMs = 80, name = APP_NAME, version = APP_VERSION),
-            )
+            val acked =
+                broadcastTxV2(
+                    client,
+                    txHex(),
+                    BroadcastTxV2Options(port = 8333, ackTimeoutMs = 80, name = APP_NAME, version = APP_VERSION),
+                )
+            assertFalse(acked)
             assertTrue(equalBytes(transactionId(peer.await()), transactionId(sampleTx())))
             client.close()
             server.close()
         }
 
     @Test
-    fun succeeds_when_peer_closes_after_tx() =
+    fun a_peer_close_after_tx_is_handed_but_not_acknowledged() =
         runBlocking {
             val (client, server) = pairedByteDuplexes()
             val peer =
@@ -118,7 +121,7 @@ class V2BroadcastTest {
                     protocol.close()
                     tx
                 }
-            broadcastTxV2(client, txHex(), BroadcastTxV2Options(port = 8333, name = APP_NAME, version = APP_VERSION))
+            assertFalse(broadcastTxV2(client, txHex(), BroadcastTxV2Options(port = 8333, name = APP_NAME, version = APP_VERSION)))
             assertTrue(equalBytes(transactionId(peer.await()), transactionId(sampleTx())))
             client.close()
             server.close()
@@ -131,7 +134,7 @@ class V2BroadcastTest {
             val peer =
                 async {
                     val (protocol, tx) = handshakeThenTx(server)
-                    protocol.writeMessage(Message.Opaque(WireMessageType.Long("reject"), byteArrayOf(0)))
+                    protocol.writeMessage(Message.Opaque(WireMessageType.Long("reject"), txRejectPayload(txHex())))
                     tx
                 }
             val error =
@@ -139,6 +142,28 @@ class V2BroadcastTest {
                     broadcastTxV2(client, txHex(), BroadcastTxV2Options(port = 8333, name = APP_NAME, version = APP_VERSION))
                 }
             assertTrue(error.message.orEmpty().contains("reject", ignoreCase = true))
+            peer.await()
+            client.close()
+            server.close()
+        }
+
+    @Test
+    fun a_duplicate_reject_counts_as_accepted() =
+        runBlocking {
+            val (client, server) = pairedByteDuplexes()
+            val peer =
+                async {
+                    val (protocol, tx) = handshakeThenTx(server)
+                    protocol.writeMessage(Message.Opaque(WireMessageType.Long("reject"), txRejectPayload(txHex(), 0x12)))
+                    tx
+                }
+            val acked =
+                broadcastTxV2(
+                    client,
+                    txHex(),
+                    BroadcastTxV2Options(port = 8333, name = APP_NAME, version = APP_VERSION, ackTimeoutMs = 60_000),
+                )
+            assertTrue(acked)
             peer.await()
             client.close()
             server.close()

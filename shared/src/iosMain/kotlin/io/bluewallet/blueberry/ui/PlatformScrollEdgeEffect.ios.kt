@@ -22,7 +22,15 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
+import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.HazeProgressive
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
+import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.ObjCAction
 import kotlinx.cinterop.allocArray
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.set
@@ -33,6 +41,10 @@ import platform.CoreGraphics.CGGradientCreateWithColorComponents
 import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSizeMake
+import platform.Foundation.NSRunLoop
+import platform.Foundation.NSRunLoopCommonModes
+import platform.Foundation.NSSelectorFromString
+import platform.QuartzCore.CADisplayLink
 import platform.UIKit.UIBlurEffect
 import platform.UIKit.UIBlurEffectStyle
 import platform.UIKit.UIColor
@@ -42,8 +54,10 @@ import platform.UIKit.UIGraphicsGetCurrentContext
 import platform.UIKit.UIGraphicsGetImageFromCurrentImageContext
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageView
+import platform.UIKit.UIScrollView
 import platform.UIKit.UIView
 import platform.UIKit.UIVisualEffectView
+import platform.darwin.NSObject
 
 /** Extra soft length past the pinned chrome so scroll content eases under the bar. */
 private val TopFeather = 20.dp
@@ -62,15 +76,20 @@ private const val BOTTOM_EDGE_FADE_PEAK_ALPHA = 0.60f
 actual fun PlatformScrollEdge(
     modifier: Modifier,
     top: Dp,
-    bottom: Dp,
+    bottom: Dp?,
     showEdges: Boolean,
     content: @Composable () -> Unit,
 ) {
-    val bottomFade = if (bottom > 0.dp) bottom else IosBottomEdgeFade
+    val bottomFade =
+        when {
+            bottom == null -> null
+            bottom > 0.dp -> bottom
+            else -> IosBottomEdgeFade
+        }
     Box(modifier) {
         content()
         if (showEdges) {
-            Box(modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize()) {
                 if (top > 0.dp) {
                     FadeBlur(
                         fadeFromTop = true,
@@ -81,7 +100,7 @@ actual fun PlatformScrollEdge(
                                 .height(top + TopFeather),
                     )
                 }
-                if (bottomFade > 0.dp) {
+                if (bottomFade != null) {
                     EdgeFade(
                         modifier =
                             Modifier
@@ -93,6 +112,26 @@ actual fun PlatformScrollEdge(
             }
         }
     }
+}
+
+@Composable
+actual fun PlatformBottomEdgeBlur(
+    hazeState: HazeState,
+    modifier: Modifier,
+) {
+    val tint = if (LocalDarkPalette.current) Color.Black else Color.White
+    val style =
+        remember(tint) {
+            HazeBlurStyle {
+                backgroundColor(Color.Transparent)
+                colorEffects(listOf(HazeColorEffect.tint(tint.copy(alpha = 0.82f))))
+                blurRadius(20.dp)
+                noiseFactor(0f)
+                fallbackColorEffect(HazeColorEffect.tint(tint.copy(alpha = 0.92f)))
+                progressive(HazeProgressive.verticalGradient(startIntensity = 0f, endIntensity = 1f))
+            }
+        }
+    Box(modifier.hazeBlur(input = HazeInput.Sources(hazeState), style = style))
 }
 
 /**
@@ -156,6 +195,8 @@ private class FadeBlurView(
     private var placedHeight = -1.0
     private var darkTone: Boolean? = null
 
+    private val floor = OverlayFloor(this)
+
     init {
         userInteractionEnabled = false
         backgroundColor = UIColor.clearColor
@@ -167,6 +208,11 @@ private class FadeBlurView(
         effectView.contentView.addSubview(tintFill)
         addSubview(effectView)
         applyTone(dark = true)
+    }
+
+    override fun didMoveToWindow() {
+        super.didMoveToWindow()
+        if (window != null) floor.start() else floor.stop()
     }
 
     fun applyTone(dark: Boolean) {
@@ -197,6 +243,49 @@ private class FadeBlurView(
         fadeMask.image = topEdgeFadeMask(width, height)
         fadeMask.setFrame(rect)
         maskView = fadeMask
+    }
+}
+
+/**
+ * Keeps the blur's interop wrapper as the lowest overlay so header overlays stay above it.
+ *
+ * On iOS 26+ UIKit parks a scroll-edge backdrop view at index 0 of Compose's overlay
+ * container. Compose's re-index math does not count it, so a header overlay re-placed
+ * after a recomposition (e.g. "Clear" appearing) lands under the blur and loses taps.
+ * Compose has no reorder callback, hence the per-frame check while on screen.
+ */
+@OptIn(BetaInteropApi::class, ExperimentalForeignApi::class)
+private class OverlayFloor(
+    private val view: UIView,
+) : NSObject() {
+    private var link: CADisplayLink? = null
+
+    fun start() {
+        if (link != null) return
+        sink()
+        link =
+            CADisplayLink.displayLinkWithTarget(this, NSSelectorFromString("tick")).also {
+                it.addToRunLoop(NSRunLoop.mainRunLoop, NSRunLoopCommonModes)
+            }
+    }
+
+    fun stop() {
+        link?.invalidate()
+        link = null
+    }
+
+    @ObjCAction
+    fun tick() = sink()
+
+    private fun sink() {
+        var wrapper = view
+        while (true) {
+            val parent = wrapper.superview ?: return
+            if (parent is UIScrollView) break
+            wrapper = parent
+        }
+        val container = wrapper.superview ?: return
+        if (container.subviews.firstOrNull() !== wrapper) container.sendSubviewToBack(wrapper)
     }
 }
 
