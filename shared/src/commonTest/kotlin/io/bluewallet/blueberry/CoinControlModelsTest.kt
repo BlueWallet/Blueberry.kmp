@@ -25,7 +25,7 @@ class CoinControlModelsTest {
         assertEquals("Linked group B", snap.groups[1].title)
         assertEquals(2, snap.groups[1].coins.size)
         assertEquals(49_510L, snap.groups[1].totalSats)
-        assertEquals("Independent", snap.groups[2].title)
+        assertEquals("Solo", snap.groups[2].title)
         assertEquals(6, snap.groups[2].coins.size)
         assertEquals(49_960L, snap.groups[2].totalSats)
     }
@@ -40,6 +40,9 @@ class CoinControlModelsTest {
             coinControlHeaderRight(snap.linkedGroupCount, snap.soloCount, snap.probableGroupCount),
         )
         assertEquals("No on-chain links", coinControlHeaderRight(0, 6))
+        assertEquals(1, coinControlHeaderParts(0, 6).size)
+        assertEquals(2, coinControlHeaderParts(1, 10).size)
+        assertEquals(3, coinControlHeaderParts(1, 4, probableGroupCount = 1).size)
     }
 
     @Test
@@ -130,7 +133,7 @@ class CoinControlModelsTest {
         val label = coinControlAccessibilityLabel(snap.coins.size, snap.groups.filter { it.linked }, snap.soloCount)
         assertEquals(
             "11 coins. 1 group linked on-chain, of 3 coins, 1 group probably linked through change, of 2 coins, " +
-                "6 independent. Opens coin control.",
+                "6 solo. Opens coin control.",
             label,
         )
     }
@@ -247,7 +250,7 @@ class CoinControlModelsTest {
     @Test
     fun summary_line_lists_coins_links_and_independents() {
         val snap = fixtureSnapshot(certainOverride = mapOf("c3:0" to "c3:0"))
-        assertEquals("11 coins · 1 linked group · 1 probable · 6 independent", coinControlSummaryLine(snap))
+        assertEquals("11 coins · 1 linked group · 1 probable · 6 solo", coinControlSummaryLine(snap))
     }
 
     @Test

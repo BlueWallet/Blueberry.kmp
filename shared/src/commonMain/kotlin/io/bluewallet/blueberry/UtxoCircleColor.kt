@@ -8,17 +8,17 @@ import io.bluewallet.blueberry.wallet.sha256Hex
  */
 internal val UtxoCirclePaletteArgb: LongArray =
     longArrayOf(
-        0xFF7E4F8AL,
-        0xFF4E8064L,
-        0xFF4A7D73L,
-        0xFF77723FL,
-        0xFF8C5070L,
-        0xFF7C4F78L,
-        0xFF4B7B74L,
-        0xFF8A5450L,
-        0xFF7F7E52L,
-        0xFF4F8263L,
-        0xFF7C4E8EL,
+        0xFFBE50DAL,
+        0xFF4FD188L,
+        0xFF46D3B7L,
+        0xFFDDCD2BL,
+        0xFFDB539BL,
+        0xFFCA52C0L,
+        0xFF49CFBBL,
+        0xFFD95C53L,
+        0xFFCAC759L,
+        0xFF51D283L,
+        0xFFB74EE0L,
     )
 
 /** First 6 hex chars of SHA-256(outpoint). Used as a stable hash seed. */
