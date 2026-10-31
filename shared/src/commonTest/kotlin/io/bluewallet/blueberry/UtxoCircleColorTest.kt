@@ -15,12 +15,12 @@ class UtxoCircleColorTest {
     @Test
     fun argb_picks_spec_palette_by_hash_mod_11() {
         assertEquals(11, UtxoCirclePaletteArgb.size)
-        assertEquals(0xFFBE50DAL, UtxoCirclePaletteArgb[0])
-        assertEquals(0xFFB74EE0L, UtxoCirclePaletteArgb[10])
+        assertEquals(0xFF1D63AFL, UtxoCirclePaletteArgb[0])
+        assertEquals(0xFF609EE1L, UtxoCirclePaletteArgb[10])
         assertEquals(3, utxoCirclePaletteIndex("abc:0"))
-        assertEquals(0xFFDDCD2BL, utxoCircleArgb("abc:0"))
+        assertEquals(0xFF75AEEAL, utxoCircleArgb("abc:0"))
         assertEquals(7, utxoCirclePaletteIndex(""))
-        assertEquals(0xFFD95C53L, utxoCircleArgb(""))
+        assertEquals(0xFF6CA2DDL, utxoCircleArgb(""))
         assertEquals(utxoCircleArgb("abc:0"), utxoCircleArgb("abc:0"))
     }
 

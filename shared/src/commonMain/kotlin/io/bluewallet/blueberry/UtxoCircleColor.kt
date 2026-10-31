@@ -3,22 +3,22 @@ package io.bluewallet.blueberry
 import io.bluewallet.blueberry.wallet.sha256Hex
 
 /**
- * Spec coin palette (11). Assigned by [utxoCirclePaletteIndex] so a coin keeps
- * the same color across screens and launches.
+ * Eleven tones of the app blue, #3788E0. Assigned by [utxoCirclePaletteIndex] so a coin
+ * keeps the same color across screens and launches.
  */
 internal val UtxoCirclePaletteArgb: LongArray =
     longArrayOf(
-        0xFFBE50DAL,
-        0xFF4FD188L,
-        0xFF46D3B7L,
-        0xFFDDCD2BL,
-        0xFFDB539BL,
-        0xFFCA52C0L,
-        0xFF49CFBBL,
-        0xFFD95C53L,
-        0xFFCAC759L,
-        0xFF51D283L,
-        0xFFB74EE0L,
+        0xFF1D63AFL,
+        0xFFA0C5EEL,
+        0xFF2B7CD4L,
+        0xFF75AEEAL,
+        0xFF3788E0L,
+        0xFF94BAE3L,
+        0xFF196FCCL,
+        0xFF6CA2DDL,
+        0xFF318BEDL,
+        0xFF4796EBL,
+        0xFF609EE1L,
     )
 
 /** First 6 hex chars of SHA-256(outpoint). Used as a stable hash seed. */
