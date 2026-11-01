@@ -214,7 +214,7 @@ fun buildCoinControlSnapshot(
         } else {
             CoinControlGroup(
                 groupId = "independent",
-                title = "Independent",
+                title = "Solo",
                 linked = false,
                 provable = true,
                 totalSats = independentCoins.sumOf { it.valueSats },
@@ -477,8 +477,15 @@ fun coinControlHeaderRight(
     linkedGroupCount: Int,
     soloCount: Int,
     probableGroupCount: Int = 0,
-): String {
-    if (linkedGroupCount == 0 && probableGroupCount == 0 && soloCount == 0) return ""
+): String = coinControlHeaderParts(linkedGroupCount, soloCount, probableGroupCount).joinToString(" · ")
+
+/** Pieces of [coinControlHeaderRight], in display order. */
+fun coinControlHeaderParts(
+    linkedGroupCount: Int,
+    soloCount: Int,
+    probableGroupCount: Int = 0,
+): List<String> {
+    if (linkedGroupCount == 0 && probableGroupCount == 0 && soloCount == 0) return emptyList()
     val parts = mutableListOf<String>()
     if (linkedGroupCount == 0) {
         parts += "No on-chain links"
@@ -502,7 +509,7 @@ fun coinControlHeaderRight(
             parts += "$soloCount solo"
         }
     }
-    return parts.joinToString(" · ")
+    return parts
 }
 
 fun coinControlAccessibilityLabel(
@@ -530,13 +537,13 @@ fun coinControlAccessibilityLabel(
     val soloWord =
         when (soloCount) {
             0 -> ""
-            1 -> ", 1 independent"
-            else -> ", $soloCount independent"
+            1 -> ", 1 solo"
+            else -> ", $soloCount solo"
         }
     return "$coinsWord. $groupsWord$soloWord.$frozenWord Opens coin control."
 }
 
-/** "11 coins · 1 linked group · 1 probable · 6 independent" line above the coin control weight bar. */
+/** "11 coins · 1 linked group · 1 probable · 6 solo" line above the coin control weight bar. */
 fun coinControlSummaryLine(control: CoinControlSnapshot): String {
     val parts = mutableListOf(if (control.coins.size == 1) "1 coin" else "${control.coins.size} coins")
     parts +=
@@ -546,7 +553,7 @@ fun coinControlSummaryLine(control: CoinControlSnapshot): String {
             else -> "${control.linkedGroupCount} linked groups"
         }
     if (control.probableGroupCount > 0) parts += "${control.probableGroupCount} probable"
-    if (control.soloCount > 0) parts += "${control.soloCount} independent"
+    if (control.soloCount > 0) parts += "${control.soloCount} solo"
     return parts.joinToString(" · ")
 }
 

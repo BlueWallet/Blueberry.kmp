@@ -187,16 +187,6 @@ fun PeersScreen(
                     .background(BwColors.Paper)
                     .hazeSource(state = hazeState),
         ) {
-            DitherSyncGlow(
-                active = glowActive,
-                animate = !rememberReducedMotion(),
-                visible = homeVisible,
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(220.dp),
-            )
             PlatformScrollEdge(
                 modifier = Modifier.fillMaxSize(),
                 top = topChrome,
@@ -235,6 +225,17 @@ fun PeersScreen(
                     alwaysBounceTail(listState)
                 }
             }
+            // Over the transactions, under the sync dock drawn after this box.
+            DitherSyncGlow(
+                active = glowActive,
+                animate = !rememberReducedMotion(),
+                visible = homeVisible,
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(220.dp),
+            )
         }
         if (homeInFront) {
             HomeStickyHeader(onOpenSettings = onOpenSettings, modifier = Modifier.align(Alignment.TopCenter))
@@ -356,10 +357,7 @@ private fun HomePinnedChrome(
             roundedDigits = true,
         )
         HomeActionRow(onReceive = onOpenReceive, onSend = onOpenSend)
-        Column {
-            HomeSectionLabel("Coins")
-            CoinsPanel(snap = walletTxs, onClick = onOpenCoins)
-        }
+        CoinsPanel(snap = walletTxs, onClick = onOpenCoins)
         Column {
             HomeSectionLabel("Transactions")
             if (walletTxs.blocksTotal > walletTxs.blocksParsed) {
