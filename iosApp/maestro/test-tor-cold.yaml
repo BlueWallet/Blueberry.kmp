@@ -1,0 +1,43 @@
+# Imports a public watch-only address (never the Create-wallet flow), opens Settings and runs
+# "Test Tor" against the real Tor network. Fails unless the row reports "OK".
+appId: io.bluewallet.blueberry
+---
+- launchApp:
+    appId: io.bluewallet.blueberry
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Import wallet"
+    timeout: 120000
+- takeScreenshot: 01-welcome
+- tapOn: "Import wallet"
+- extendedWaitUntil:
+    visible: "seed words, zpub, WIF, or address…"
+    timeout: 30000
+- tapOn: "seed words, zpub, WIF, or address…"
+- inputText: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
+- tapOn: "Enter BIP39 seed, account zpub, WIF private key, or address"
+- takeScreenshot: 02-import-address
+- tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "Sync from"
+    timeout: 60000
+- takeScreenshot: 03-sync-from
+- tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 120000
+- takeScreenshot: 04-home
+- tapOn: "Settings"
+- extendedWaitUntil:
+    visible: "Theme"
+    timeout: 30000
+- scrollUntilVisible:
+    element: "Test Tor"
+    direction: DOWN
+    timeout: 30000
+- takeScreenshot: 05-settings
+- tapOn: "Test Tor"
+- extendedWaitUntil:
+    visible: "OK"
+    timeout: 200000
+- takeScreenshot: 06-test-tor-cold-ok
