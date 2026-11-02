@@ -192,43 +192,6 @@ internal fun alwaysShowSyncSlots(): SettingsMetricSlots =
         caption = "Keep Private Sync visible when idle",
     )
 
-internal fun torWarmUpSlots(): SettingsMetricSlots =
-    SettingsMetricSlots(
-        label = "",
-        value = "Warm up Tor at launch",
-        caption = "Connects at launch, faster requests",
-    )
-
-internal fun torDirectRelaySlots(): SettingsMetricSlots =
-    SettingsMetricSlots(
-        label = "",
-        value = "Connect to Tor directly",
-        caption = "Faster, but your network sees Tor",
-    )
-
-@Composable
-private fun TorWarmUpCard(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) = TorToggleCard(torWarmUpSlots(), checked, onCheckedChange)
-
-@Composable
-private fun TorToggleCard(
-    slots: SettingsMetricSlots,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    MetricCard(
-        label = slots.label,
-        value = slots.value,
-        caption = slots.caption,
-        modifier = Modifier.fillMaxWidth(),
-        trailing = {
-            BwSwitch(checked = checked, onCheckedChange = onCheckedChange)
-        },
-    )
-}
-
 @Composable
 private fun AlwaysShowSyncCard(
     checked: Boolean,

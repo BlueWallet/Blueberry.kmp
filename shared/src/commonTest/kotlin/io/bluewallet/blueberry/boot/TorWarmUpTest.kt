@@ -3,6 +3,8 @@ package io.bluewallet.blueberry.boot
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.echalote.Echalote
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -82,5 +84,27 @@ class TorWarmUpTest {
             val job = startTorWarmUp("https://example.invalid/") { error("boom") }
             job.join()
             assertFalse(job.isCancelled)
+        }
+
+    @Test
+    fun cancelling_the_caller_does_not_stop_a_route_switch_halfway() =
+        runBlocking {
+            val started = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            var finished = false
+            val caller =
+                launch(start = CoroutineStart.UNDISPATCHED) {
+                    applyTorDirectRelay(true) {
+                        started.complete(Unit)
+                        release.await()
+                        finished = true
+                    }
+                }
+            started.await()
+            caller.cancel()
+            release.complete(Unit)
+            caller.join()
+            assertTrue(finished)
+            assertTrue(caller.isCancelled)
         }
 }

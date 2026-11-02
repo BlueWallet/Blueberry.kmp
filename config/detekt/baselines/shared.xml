@@ -52,7 +52,6 @@
     <ID>ReturnCount:QrCameraPreview.ios.kt$IosFrameDelegate$override fun captureOutput( output: platform.AVFoundation.AVCaptureOutput, didOutputSampleBuffer: CMSampleBufferRef?, fromConnection: platform.AVFoundation.AVCaptureConnection, )</ID>
     <ID>ReturnCount:SendScreen.kt$fun goBack()</ID>
     <ID>ReturnCount:SyncYear.kt$fun parseSyncFromYear(raw: String?): Int?</ID>
-    <ID>ReturnCount:TorDirCache.ios.kt$@OptIn(ExperimentalForeignApi::class) internal actual fun readFileBytesOrNull(path: String): ByteArray?</ID>
     <ID>ReturnCount:WalletTxsStore.kt$private fun estimateEtaMs( samples: List&lt;ParseSample&gt;, total: Int, ): Long?</ID>
     <ID>ThrowsCount:PeersRuntime.kt$PeersRuntime$private suspend fun startLocked()</ID>
     <ID>TooGenericExceptionCaught:ClickMeContent.kt$err: Exception</ID>
@@ -62,13 +61,11 @@
     <ID>TooGenericExceptionCaught:QrCameraPreview.jvm.kt$err: Throwable</ID>
     <ID>TooGenericExceptionCaught:SendScreen.kt$err: Throwable</ID>
     <ID>TooGenericExceptionCaught:TorCheck.kt$err: Throwable</ID>
-    <ID>TooGenericExceptionCaught:TorWarmUp.kt$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:VendorLibraryStatus.kt$error: Exception</ID>
     <ID>TooGenericExceptionThrown:TorCheck.kt$throw Exception( "IsTor=false IP=${got.ip} attempt=$attempt seen=${seenIps.joinToString(",")}", )</ID>
     <ID>TooGenericExceptionThrown:VendorLibrariesTest.kt$VendorLibrariesTest$throw Exception("boom")</ID>
     <ID>TooGenericExceptionThrown:VendorLibraryStatus.kt$throw Exception("expected too-small")</ID>
     <ID>TooGenericExceptionThrown:VendorLibraryStatus.kt$throw Exception("mismatch")</ID>
-    <ID>TooManyFunctions:SettingsScreen.kt$io.bluewallet.blueberry.SettingsScreen.kt</ID>
     <ID>TooManyFunctions:WalletTxsStore.kt$io.bluewallet.blueberry.WalletTxsStore.kt</ID>
     <ID>UseRequire:SyncYear.kt$throw IllegalArgumentException("sync_from_year missing or invalid")</ID>
     <ID>UseRequire:SyncYear.kt$throw IllegalArgumentException("unknown sync_from_year: $year")</ID>

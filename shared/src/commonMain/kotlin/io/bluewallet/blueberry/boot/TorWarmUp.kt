@@ -4,12 +4,15 @@ import io.bluewallet.blueberry.TOR_CHECK_URL
 import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.echalote.Echalote
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.concurrent.Volatile
 
 const val TOR_WARM_UP_KEY = "tor_warm_up"
@@ -43,11 +46,15 @@ fun saveTorDirectRelay(
  * Applies the saved choice to echalote right away: if it changes the route in use, echalote
  * drops the current Tor connection and HTTPS sessions so the next request reconnects the new
  * way (requests in flight are retried on the new connection).
+ *
+ * Runs to completion even if the caller is cancelled (e.g. the startup `LaunchedEffect` leaving
+ * composition): echalote records the new mode before it closes the old connection and HTTPS
+ * sessions, so stopping halfway could leave kept-alive sessions on the old route.
  */
 suspend fun applyTorDirectRelay(
     enabled: Boolean,
     apply: suspend (Boolean) -> Unit = { Echalote.setDirectRelay(it) },
-) = apply(enabled)
+) = withContext(NonCancellable) { apply(enabled) }
 
 private val directRelayScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -81,10 +88,12 @@ fun startTorWarmUp(
             try {
                 warmUp(url)
                 println("TORWARMUP done ms=${nowMillis() - started}")
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            } catch (e: CancellationException) {
                 throw e
-            } catch (e: Throwable) {
-                println("TORWARMUP fail ms=${nowMillis() - started} ${e.message}")
+            } catch (expected: Exception) {
+                // Best effort: any network or Tor failure here just means the first real request
+                // bootstraps instead. Errors (OOM etc.) are not caught.
+                println("TORWARMUP fail ms=${nowMillis() - started} ${expected.message}")
             }
         }
     warmUpJob = job
