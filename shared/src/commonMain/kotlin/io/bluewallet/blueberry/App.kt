@@ -5,6 +5,7 @@ package io.bluewallet.blueberry
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -21,6 +22,10 @@ import io.bluewallet.blueberry.boot.AppearancePreference
 import io.bluewallet.blueberry.boot.OnboardingGate
 import io.bluewallet.blueberry.boot.deleteSqliteDatabaseFiles
 import io.bluewallet.blueberry.boot.inspectSyncFromYear
+import io.bluewallet.blueberry.boot.applyTorDirectRelay
+import io.bluewallet.blueberry.boot.loadTorDirectRelay
+import io.bluewallet.blueberry.boot.loadTorWarmUp
+import io.bluewallet.blueberry.boot.startTorWarmUp
 import io.bluewallet.blueberry.boot.loadAlwaysShowSyncProgress
 import io.bluewallet.blueberry.boot.loadAppearance
 import io.bluewallet.blueberry.boot.resolveDarkTheme
@@ -93,6 +98,10 @@ fun App(databasePath: String) {
                 return@BwTheme
             }
             checkNotNull(db)
+            LaunchedEffect(databasePath, session) {
+                applyTorDirectRelay(loadTorDirectRelay(db))
+                if (loadTorWarmUp(db)) startTorWarmUp()
+            }
             var alwaysShowSync by remember(databasePath, session) {
                 mutableStateOf(loadAlwaysShowSyncProgress(db))
             }

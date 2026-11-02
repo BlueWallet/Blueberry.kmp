@@ -28,6 +28,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import io.bluewallet.blueberry.boot.applyTorDirectRelay
+import io.bluewallet.blueberry.boot.loadTorDirectRelay
+import io.bluewallet.blueberry.boot.loadTorWarmUp
+import io.bluewallet.blueberry.boot.saveTorDirectRelay
+import io.bluewallet.blueberry.boot.saveTorWarmUp
+import io.bluewallet.blueberry.boot.startTorWarmUp
 import io.bluewallet.blueberry.boot.AppearancePreference
 import io.bluewallet.blueberry.boot.appearanceLabel
 import io.bluewallet.blueberry.boot.cycleAppearance
@@ -66,6 +72,8 @@ fun SettingsScreen(
     val alwaysShowSync = LocalAlwaysShowSync.current
     val onAlwaysShowSyncChange = LocalAlwaysShowSyncChange.current
     var appearance by remember(db) { mutableStateOf(loadAppearance(db)) }
+    var torWarmUp by remember(db) { mutableStateOf(loadTorWarmUp(db)) }
+    var torDirect by remember(db) { mutableStateOf(loadTorDirectRelay(db)) }
     val onAppearanceChange = LocalAppearanceChange.current
     val safe = WindowInsets.safeDrawing.asPaddingValues()
     val topChrome = safe.calculateTopPadding() + platformHeaderClearance()
@@ -107,6 +115,23 @@ fun SettingsScreen(
                 AlwaysShowSyncCard(
                     checked = alwaysShowSync,
                     onCheckedChange = onAlwaysShowSyncChange,
+                )
+                TorWarmUpCard(
+                    checked = torWarmUp,
+                    onCheckedChange = { on ->
+                        torWarmUp = on
+                        saveTorWarmUp(db, on)
+                        if (on) startTorWarmUp()
+                    },
+                )
+                TorToggleCard(
+                    slots = torDirectRelaySlots(),
+                    checked = torDirect,
+                    onCheckedChange = { on ->
+                        torDirect = on
+                        saveTorDirectRelay(db, on)
+                        applyTorDirectRelay(on)
+                    },
                 )
                 SecretCard(secret = secret, onShow = onOpenSecret)
                 StorageCard(databaseSize = databaseSize, onClear = { confirmClear = true })
@@ -166,6 +191,43 @@ internal fun alwaysShowSyncSlots(): SettingsMetricSlots =
         value = "Always show sync progress",
         caption = "Keep Private Sync visible when idle",
     )
+
+internal fun torWarmUpSlots(): SettingsMetricSlots =
+    SettingsMetricSlots(
+        label = "",
+        value = "Warm up Tor at launch",
+        caption = "Faster first Tor request; connects to the Tor bridge every launch",
+    )
+
+internal fun torDirectRelaySlots(): SettingsMetricSlots =
+    SettingsMetricSlots(
+        label = "",
+        value = "Connect to Tor directly",
+        caption = "Much faster, but reveals Tor use to your network; falls back to the bridge if blocked. Applies after restart",
+    )
+
+@Composable
+private fun TorWarmUpCard(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) = TorToggleCard(torWarmUpSlots(), checked, onCheckedChange)
+
+@Composable
+private fun TorToggleCard(
+    slots: SettingsMetricSlots,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    MetricCard(
+        label = slots.label,
+        value = slots.value,
+        caption = slots.caption,
+        modifier = Modifier.fillMaxWidth(),
+        trailing = {
+            BwSwitch(checked = checked, onCheckedChange = onCheckedChange)
+        },
+    )
+}
 
 @Composable
 private fun AlwaysShowSyncCard(
