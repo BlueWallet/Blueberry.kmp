@@ -36,6 +36,30 @@ import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.ToPill
 import io.bluewallet.blueberry.ui.numberFontFamily
 
+/** Line under the amount when Max is on. A chosen coin is spent whole; otherwise the next step picks the coins. */
+internal fun amountMaxHint(selectedCount: Int): String =
+    when (selectedCount) {
+        0 -> "Everything you pick next, minus the fee."
+        1 -> "This coin, minus the fee."
+        else -> "These coins, minus the fee."
+    }
+
+/** Suffix after the amount the Max button spends. */
+internal fun amountCapSuffix(selectedCount: Int): String =
+    when (selectedCount) {
+        0 -> " in your wallet"
+        1 -> " in this coin"
+        else -> " in the selected coins"
+    }
+
+/** Shown when the typed amount is above the cap. */
+internal fun amountOverCapMessage(selectedCount: Int): String =
+    when (selectedCount) {
+        0 -> "More than your wallet holds."
+        1 -> "More than this coin holds."
+        else -> "More than the selected coins hold."
+    }
+
 private val numberPadRows =
     listOf(
         listOf('1', '2', '3'),
@@ -57,6 +81,8 @@ internal class SendAmountBalance(
     val spendableSats: Long,
     val sendingSats: Long,
     val availability: CoinAvailability,
+    /** Coins already chosen. The [spendableSats] cap is those coins, not the wallet. */
+    val selectedCount: Int = 0,
 )
 
 @Composable
@@ -85,11 +111,11 @@ internal fun SendAmountStep(
     ) {
         ToPill(label = to.label, address = to.address)
         TypedAmount(amount = amount, max = max)
-        if (max) HelperText("Everything you pick next, minus the fee.", Modifier.fillMaxWidth())
+        if (max) HelperText(amountMaxHint(balance.selectedCount), Modifier.fillMaxWidth())
         if (emptyNotice != null) {
             HelperText(emptyNotice, Modifier.fillMaxWidth(), error = true)
         } else if (check is SendAmountCheck.MoreThanWallet) {
-            HelperText("More than your wallet holds.", Modifier.fillMaxWidth(), error = true)
+            HelperText(amountOverCapMessage(balance.selectedCount), Modifier.fillMaxWidth(), error = true)
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -97,8 +123,13 @@ internal fun SendAmountStep(
         ) {
             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 BtcAmountText(sats = walletTotalSats, color = BwColors.InkQuiet, fontSize = BwType.LabelSize)
-                Text(" in your wallet", color = BwColors.InkQuiet, fontFamily = BwFontFamily, fontSize = BwType.LabelSize)
-                if (balance.sendingSats > 0L) {
+                Text(
+                    amountCapSuffix(balance.selectedCount),
+                    color = BwColors.InkQuiet,
+                    fontFamily = BwFontFamily,
+                    fontSize = BwType.LabelSize,
+                )
+                if (balance.selectedCount == 0 && balance.sendingSats > 0L) {
                     Text(" · ", color = BwColors.InkQuiet, fontFamily = BwFontFamily, fontSize = BwType.LabelSize)
                     BtcAmountText(sats = balance.sendingSats, color = BwColors.InkQuiet, fontSize = BwType.LabelSize)
                     Text(" sending", color = BwColors.InkQuiet, fontFamily = BwFontFamily, fontSize = BwType.LabelSize)

@@ -108,10 +108,12 @@ fun sendAmountUnavailable(
     input: String,
     walletTotalSats: Long,
     availability: CoinAvailability = CoinAvailability.Spendable,
+    selected: Boolean = false,
 ): String? =
     when (checkSendAmount(input, walletTotalSats)) {
         is SendAmountCheck.Ok -> null
-        SendAmountCheck.MoreThanWallet -> "The wallet can no longer cover this amount."
+        SendAmountCheck.MoreThanWallet ->
+            if (selected) "The selected coin can no longer cover this amount." else "The wallet can no longer cover this amount."
         SendAmountCheck.Empty -> noSpendableNotice(walletTotalSats, availability) ?: "Enter an amount."
     }
 

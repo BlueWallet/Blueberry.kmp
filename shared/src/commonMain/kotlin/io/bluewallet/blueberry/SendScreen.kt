@@ -150,7 +150,13 @@ private fun SendStepScreen(
             SendAmountStep(
                 to = flow.recipient,
                 amount = flow.amount,
-                balance = SendAmountBalance(flow.walletTotalSats, flow.sendingSats, flow.coinAvailability),
+                balance =
+                    SendAmountBalance(
+                        flow.amountCapSats,
+                        flow.sendingSats,
+                        flow.coinAvailability,
+                        selectedCount = if (flow.selectedKeys.isEmpty()) 0 else flow.selectedRows.size,
+                    ),
                 actions =
                     SendAmountActions(
                         onAmount = { flow.amount = it },
@@ -252,7 +258,7 @@ private fun SendBroadcast(flow: SendFlow) {
 @Composable
 private fun SendReview(flow: SendFlow) {
     val amount = flow.amountSats
-    val blocked = sendAmountUnavailable(flow.amount, flow.walletTotalSats, flow.coinAvailability)
+    val blocked = sendAmountUnavailable(flow.amount, flow.amountCapSats, flow.coinAvailability, flow.selectedKeys.isNotEmpty())
     if (amount == null || blocked != null) {
         SendStepFrame(
             title = "Review",

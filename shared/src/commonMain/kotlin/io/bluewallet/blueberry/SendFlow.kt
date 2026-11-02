@@ -152,11 +152,14 @@ internal class SendFlow(
     val spendableRows: List<WalletUtxoRow>
         get() = snap.utxos.filter { !it.isFrozen && it.key !in heldOutpoints }
     val walletTotalSats: Long get() = spendableRows.sumOf { it.valueSats }
+
+    /** Coins chosen before this amount, or the whole spendable wallet when none are chosen. */
+    val amountCapSats: Long get() = if (selectedKeys.isEmpty()) walletTotalSats else selectedRows.sumOf { it.valueSats }
     val coinAvailability: CoinAvailability get() = coinAvailability(snap.utxos, heldOutpoints)
 
     /** Unfrozen value held by other payments that are still sending. */
     val sendingSats: Long get() = snap.utxos.filter { !it.isFrozen && it.key in heldOutpoints }.sumOf { it.valueSats }
-    val amountSats: SendAmount? get() = (checkSendAmount(amount, walletTotalSats) as? SendAmountCheck.Ok)?.amount
+    val amountSats: SendAmount? get() = (checkSendAmount(amount, amountCapSats) as? SendAmountCheck.Ok)?.amount
     val selectedRows: List<WalletUtxoRow> get() = spendableRows.filter { it.key in selectedKeys }
     val selectedInputs: List<SendInputUtxo>
         get() = selectedRows.map { SendInputUtxo(it.txid, it.vout, it.valueSats, it.scriptPubKey) }

@@ -41,4 +41,14 @@ class SendStepsValidationTest {
         assertEquals("", type("$NUMBER_PAD_BACKSPACE"))
         assertEquals("3", numberPadInput("MAX", '3'))
     }
+
+    @Test
+    fun amount_cap_copy_names_the_selected_coin() {
+        assertEquals(" in your wallet", amountCapSuffix(0))
+        assertEquals(" in this coin", amountCapSuffix(1))
+        assertEquals(" in the selected coins", amountCapSuffix(2))
+        assertEquals("Everything you pick next, minus the fee.", amountMaxHint(0))
+        assertEquals("This coin, minus the fee.", amountMaxHint(1))
+        assertEquals("More than this coin holds.", amountOverCapMessage(1))
+    }
 }

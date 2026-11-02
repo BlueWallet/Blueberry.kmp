@@ -118,6 +118,25 @@ class SendFlowTest {
         }
 
     @Test
+    fun amount_max_is_the_selected_coin_not_the_wallet() =
+        runFlow { _, _, flow ->
+            val small = coin("11", 50_000)
+            val big = coin("22", 100_000_000)
+            flow.snap = WalletTxsSnapshot(utxos = listOf(small, big), utxosReady = true)
+            flow.selectedKeys = setOf(small.key)
+            assertEquals(50_000, flow.amountCapSats)
+            assertEquals(100_050_000, flow.walletTotalSats)
+            flow.amount = "0.0005"
+            assertEquals(SendAmount.Exact(50_000), flow.amountSats)
+            flow.amount = "0.00050001"
+            assertNull(flow.amountSats)
+            flow.amount = "MAX"
+            assertEquals(SendAmount.Max, flow.amountSats)
+            flow.selectedKeys = emptySet()
+            assertEquals(flow.walletTotalSats, flow.amountCapSats)
+        }
+
+    @Test
     fun coins_opened_from_amount_go_back_to_amount() =
         runFlow { _, _, flow ->
             prime(flow, coin("11", 100_000_000))
