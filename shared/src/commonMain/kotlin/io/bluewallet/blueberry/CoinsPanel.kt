@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.bluewallet.blueberry.ui.BwColors
@@ -82,7 +83,7 @@ fun CoinsPanel(
                     .background(BwColors.Card, shape)
                     .padding(horizontal = 20.dp, vertical = 16.dp)
                     .then(if (dimmed) Modifier.alpha(0.5f) else Modifier),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             CoinsPanelHeader(control = control, placeholder = placeholder)
             when {
@@ -99,11 +100,17 @@ fun CoinsPanel(
             }
             if (!placeholder) {
                 val linked = control.groups.filter { it.linked }
-                if (linked.any { it.provable }) {
-                    CoinsPanelLegend(provable = true, text = "Outlined coins already share on-chain history")
-                }
-                if (linked.any { !it.provable }) {
-                    CoinsPanelLegend(provable = false, text = "Dashed coins are probably linked through change")
+                val showProvable = linked.any { it.provable }
+                val showProbable = linked.any { !it.provable }
+                if (showProvable || showProbable) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        if (showProvable) {
+                            CoinsPanelLegend(provable = true, text = "Already share onchain history")
+                        }
+                        if (showProbable) {
+                            CoinsPanelLegend(provable = false, text = "Probably linked through change")
+                        }
+                    }
                 }
             }
         }
@@ -154,6 +161,8 @@ private fun CoinsPanelLegend(
             color = BwColors.InkSecondary,
             fontFamily = BwFontFamily,
             fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -163,42 +172,73 @@ private fun CoinsPanelHeader(
     control: CoinControlSnapshot,
     placeholder: Boolean,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                text = if (placeholder) "—" else formatGrouped(control.coins.size),
-                color = BwColors.Ink,
-                fontFamily = numberFontFamily(BwType.Value),
-                fontSize = 28.sp,
-                fontWeight = BwType.Value,
-            )
-            Text(
-                text = if (control.coins.size == 1) "coin" else "coins",
-                color = BwColors.InkSecondary,
-                fontFamily = BwFontFamily,
-                fontSize = 15.sp,
-                modifier = Modifier.padding(bottom = 3.dp),
+    val parts =
+        if (placeholder || control.coins.isEmpty()) {
+            emptyList()
+        } else {
+            coinControlHeaderParts(
+                control.linkedGroupCount,
+                control.soloCount,
+                control.probableGroupCount,
             )
         }
-        if (!placeholder && control.coins.isNotEmpty()) {
-            val right =
-                coinControlHeaderRight(
-                    control.linkedGroupCount,
-                    control.soloCount,
-                    control.probableGroupCount,
-                )
-            Text(
-                text = right,
-                color = BwColors.InkSecondary,
-                fontFamily = BwFontFamily,
-                fontSize = 14.sp,
-            )
+    val summary = parts.joinToString(" · ")
+    if (parts.size >= 3) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            CoinsPanelCount(control, placeholder)
+            CoinsPanelSummary(summary)
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CoinsPanelCount(control, placeholder)
+            if (summary.isNotEmpty()) {
+                CoinsPanelSummary(summary, modifier = Modifier.padding(start = 12.dp).weight(1f, fill = false))
+            }
         }
     }
+}
+
+@Composable
+private fun CoinsPanelCount(
+    control: CoinControlSnapshot,
+    placeholder: Boolean,
+) {
+    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = if (placeholder) "—" else formatGrouped(control.coins.size),
+            color = BwColors.Ink,
+            fontFamily = numberFontFamily(BwType.Value),
+            fontSize = 28.sp,
+            fontWeight = BwType.Value,
+        )
+        Text(
+            text = if (control.coins.size == 1) "coin" else "coins",
+            color = BwColors.InkSecondary,
+            fontFamily = BwFontFamily,
+            fontSize = 15.sp,
+            modifier = Modifier.padding(bottom = 3.dp),
+        )
+    }
+}
+
+@Composable
+private fun CoinsPanelSummary(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = text,
+        color = BwColors.InkSecondary,
+        fontFamily = BwFontFamily,
+        fontSize = 14.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
+    )
 }
 
 /** Vertical room for the largest bubble plus linked-group stadium padding. */
