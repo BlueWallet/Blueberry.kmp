@@ -1,7 +1,5 @@
 package io.bluewallet.blueberry
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,20 +7,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.ui.AddressGroups
 import io.bluewallet.blueberry.ui.AmountHero
 import io.bluewallet.blueberry.ui.BtcAmountText
@@ -164,33 +155,19 @@ internal fun SendReviewStep(
 
 @Composable
 private fun CoinsMoveCard(summary: TxSummary) {
-    val description =
-        "Spends ${summary.inputs.size} coins totaling ${formatBtc(summary.inputs.sumOf { it.valueSats })}. " +
-            summary.outputs.joinToString(" ") { "${it.label}: ${formatBtc(it.sats)}." }
-    SendCard(modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = description }) {
+    val inputs = reviewFlowInputs(summary)
+    val outputs = reviewFlowOutputs(summary)
+    SendCard {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             CardTitle("How your coins move", Modifier.weight(1f))
             Text(
-                text = "${summary.inputs.size} in · ${summary.chainOutputs} out",
+                text = "${inputs.size} in · ${outputs.size} out",
                 color = BwColors.InkQuiet,
                 fontFamily = BwFontFamily,
                 fontSize = BwType.LabelSize,
             )
         }
-        SectionLabel("From your coins")
-        for (input in summary.inputs) {
-            SummaryLine(sats = input.valueSats, label = input.title, dot = { CoinDot(input.argb) })
-        }
-        HorizontalDivider(color = BwColors.Section)
-        SectionLabel("To")
-        for (output in summary.outputs) {
-            SummaryLine(
-                sats = output.sats,
-                label = output.label,
-                emphasized = output.kind == TxOutputKind.Recipient,
-                dot = { OutputDot(output.kind) },
-            )
-        }
+        TxFlowGraph(inputs, outputs, reviewFlowDescription(summary))
     }
 }
 
@@ -264,42 +241,6 @@ private fun PrivateSendRow(
 }
 
 @Composable
-private fun SummaryLine(
-    sats: Long,
-    label: String?,
-    emphasized: Boolean = false,
-    dot: @Composable () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        dot()
-        Text(
-            text = label.orEmpty(),
-            modifier = Modifier.weight(1f),
-            color = if (emphasized) BwColors.Accent else BwColors.InkQuiet,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.LabelSize,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        BtcAmountText(sats = sats, color = if (emphasized) BwColors.Accent else BwColors.Ink, fontSize = BwType.LabelSize)
-    }
-}
-
-@Composable
-private fun OutputDot(kind: TxOutputKind) {
-    val base = Modifier.size(12.dp).clip(CircleShape)
-    when (kind) {
-        TxOutputKind.Recipient -> Box(base.background(BwColors.Accent))
-        TxOutputKind.Change -> Box(base.border(2.dp, BwColors.InkQuiet, CircleShape))
-        TxOutputKind.Fee -> Box(base.background(BwColors.InkMuted))
-    }
-}
-
-@Composable
 internal fun CardTitle(
     text: String,
     modifier: Modifier = Modifier,
@@ -312,12 +253,4 @@ internal fun CardTitle(
         fontSize = BwType.BodySize,
         fontWeight = BwType.Label,
     )
-}
-
-@Composable
-private fun SectionLabel(
-    text: String,
-    modifier: Modifier = Modifier,
-) {
-    Text(text = text, modifier = modifier, color = BwColors.InkQuiet, fontFamily = BwFontFamily, fontSize = BwType.CaptionSize)
 }

@@ -1,5 +1,6 @@
 package io.bluewallet.blueberry
 
+import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.PsbtSendResult
 import io.bluewallet.blueberry.wallet.SendAmount
@@ -116,4 +117,47 @@ fun checkFeeDraft(
         is SendFeeEstimate.Ok -> FeeDraftCheck.Ok(rate, est)
         is SendFeeEstimate.Short -> FeeDraftCheck.Short(est.missingSats)
     }
+}
+
+/** Review's coins, as graph inputs. The graph itself does not know this is a send. */
+internal fun reviewFlowInputs(summary: TxSummary): List<TxFlowNode> =
+    summary.inputs.map { input ->
+        TxFlowNode(
+            sats = input.valueSats,
+            label = input.title?.takeIf { it.isNotBlank() } ?: "Coin",
+            role = TxFlowRole.Input,
+            colorArgb = input.argb,
+        )
+    }
+
+/** Recipient, change, and fee, in the order Review shows them. A blank name reads as "recipient". */
+internal fun reviewFlowOutputs(summary: TxSummary): List<TxFlowNode> =
+    summary.outputs.map { output ->
+        when (output.kind) {
+            TxOutputKind.Recipient ->
+                TxFlowNode(output.sats, "To ${output.label.ifBlank { "recipient" }}", TxFlowRole.Payment)
+            TxOutputKind.Change -> TxFlowNode(output.sats, "Your change", TxFlowRole.Change)
+            TxOutputKind.Fee -> TxFlowNode(output.sats, "Network fee", TxFlowRole.Fee)
+        }
+    }
+
+/** One sentence for the graph, read instead of the individual chips. */
+internal fun reviewFlowDescription(summary: TxSummary): String {
+    val coins = summary.inputs.size
+    val coinWord = if (coins == 1) "coin" else "coins"
+    val who =
+        summary.outputs
+            .firstOrNull { it.kind == TxOutputKind.Recipient }
+            ?.label
+            ?.ifBlank { null } ?: "recipient"
+    val change =
+        if (summary.changeSats > 0) {
+            "returns ${formatBtc(summary.changeSats)} as change"
+        } else {
+            "with no change"
+        }
+    val total = formatBtc(summary.inputs.sumOf { it.valueSats })
+    return "Spends $coins $coinWord totaling $total. " +
+        "Pays ${formatBtc(summary.paidSats)} to $who, $change, " +
+        "and ${formatBtc(summary.feeSats)} in network fees."
 }

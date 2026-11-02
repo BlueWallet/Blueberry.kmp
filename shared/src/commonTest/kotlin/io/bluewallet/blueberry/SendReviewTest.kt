@@ -107,4 +107,34 @@ class SendReviewTest {
         val applied = checkFeeDraft("2.5", { ok })
         assertTrue(applied is FeeDraftCheck.Ok && applied.rate == 2.5)
     }
+
+    @Test
+    fun review_maps_a_summary_onto_payment_change_and_fee() {
+        val summary =
+            txSummary(listOf(utxo(1, 100_000, "Salary")), SendAmount.Exact(40_000), BuiltSend("t", 500, 59_500, 141, listOf(1)), "Rent")
+        val inputs = reviewFlowInputs(summary)
+        val outputs = reviewFlowOutputs(summary)
+        assertEquals("Salary", inputs.single().label)
+        assertEquals(TxFlowRole.Input, inputs.single().role)
+        assertEquals(listOf(TxFlowRole.Payment, TxFlowRole.Change, TxFlowRole.Fee), outputs.map { it.role })
+        assertEquals("To Rent", outputs.first().label)
+        assertEquals(
+            "Spends 1 coin totaling 0.00100000 BTC. " +
+                "Pays 0.00040000 BTC to Rent, returns 0.00059500 BTC as change, " +
+                "and 0.00000500 BTC in network fees.",
+            reviewFlowDescription(summary),
+        )
+    }
+
+    @Test
+    fun a_max_send_says_there_is_no_change() {
+        val summary = txSummary(listOf(utxo(1, 100_000)), SendAmount.Max, BuiltSend("t", 300, 0, 110, emptyList()), "")
+        assertEquals("To recipient", reviewFlowOutputs(summary).first().label)
+        assertEquals(
+            "Spends 1 coin totaling 0.00100000 BTC. " +
+                "Pays 0.00099700 BTC to recipient, with no change, " +
+                "and 0.00000300 BTC in network fees.",
+            reviewFlowDescription(summary),
+        )
+    }
 }
