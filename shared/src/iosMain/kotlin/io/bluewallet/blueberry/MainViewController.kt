@@ -3,6 +3,7 @@ package io.bluewallet.blueberry
 import androidx.compose.ui.uikit.ComposeUIViewControllerDelegate
 import androidx.compose.ui.window.ComposeUIViewController
 import io.bluewallet.blueberry.boot.blueberrySqlitePath
+import io.bluewallet.blueberry.boot.installTorDirCache
 import io.bluewallet.blueberry.ui.iosPreferredStatusBarStyle
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSApplicationSupportDirectory
@@ -36,5 +37,6 @@ private fun iosDatabasePath(): String {
             error = null,
         )
     val directory = requireNotNull(url?.path) { "Application Support directory is missing" }
+    installTorDirCache(directory)
     return blueberrySqlitePath(directory)
 }

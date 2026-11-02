@@ -1,0 +1,7 @@
+# Maestro workspace config for iosApp/maestro/flows. Every *.yaml here except this file is a flow.
+# Flows listed below run first, in this order; any other flow runs after them.
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - test-tor-cold
+    - test-tor-warm

@@ -15,6 +15,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import blueberry.shared.generated.resources.Res
 import blueberry.shared.generated.resources.blueberry_mark
@@ -42,7 +45,8 @@ internal fun HomeOverflowDots(
                 .clip(CircleShape)
                 .background(BwColors.Card)
                 .border(1.dp, BwColors.BarTrack, CircleShape)
-                .clickable(onClick = onClick),
+                .clickable(role = Role.Button, onClick = onClick)
+                .semantics { contentDescription = "Settings" },
         contentAlignment = Alignment.Center,
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {

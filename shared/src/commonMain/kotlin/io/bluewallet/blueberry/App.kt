@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,14 +20,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import io.bluewallet.blueberry.boot.AppearancePreference
 import io.bluewallet.blueberry.boot.OnboardingGate
+import io.bluewallet.blueberry.boot.applyTorDirectRelay
 import io.bluewallet.blueberry.boot.deleteSqliteDatabaseFiles
 import io.bluewallet.blueberry.boot.inspectSyncFromYear
 import io.bluewallet.blueberry.boot.loadAlwaysShowSyncProgress
 import io.bluewallet.blueberry.boot.loadAppearance
+import io.bluewallet.blueberry.boot.loadTorDirectRelay
+import io.bluewallet.blueberry.boot.loadTorWarmUp
 import io.bluewallet.blueberry.boot.resolveDarkTheme
 import io.bluewallet.blueberry.boot.resolveOnboardingGate
 import io.bluewallet.blueberry.boot.saveAlwaysShowSyncProgress
 import io.bluewallet.blueberry.boot.saveAppearance
+import io.bluewallet.blueberry.boot.startTorWarmUp
 import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.onboarding.DatabaseOpenErrorScreen
 import io.bluewallet.blueberry.onboarding.InvalidSecretScreen
@@ -93,6 +98,12 @@ fun App(databasePath: String) {
                 return@BwTheme
             }
             checkNotNull(db)
+            LaunchedEffect(databasePath, session) {
+                // Before the warm-up, so it bootstraps the saved route; switches the live
+                // connection over if another database chose differently.
+                applyTorDirectRelay(loadTorDirectRelay(db))
+                if (loadTorWarmUp(db)) startTorWarmUp()
+            }
             var alwaysShowSync by remember(databasePath, session) {
                 mutableStateOf(loadAlwaysShowSyncProgress(db))
             }

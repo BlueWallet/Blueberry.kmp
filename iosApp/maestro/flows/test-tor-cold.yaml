@@ -1,0 +1,12 @@
+# First "Test Tor" tap after a fresh install (default settings: meek, no warm-up), real Tor network.
+# Checked afterwards by test-tor-cold.check.sh (app log must show a successful HTTP fetch over Tor).
+appId: io.bluewallet.blueberry
+name: test-tor-cold
+---
+- runFlow: ../common/open-settings.yaml
+- takeScreenshot: 01-settings
+- tapOn: "Test Tor"
+- extendedWaitUntil:
+    visible: "OK"
+    timeout: 200000
+- takeScreenshot: 02-test-tor-ok
