@@ -3,6 +3,8 @@ package io.bluewallet.blueberry
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import io.bluewallet.blueberry.ui.BwSwitch
 import io.bluewallet.blueberry.ui.MetricCard
 
@@ -40,7 +42,12 @@ internal fun TorToggleCard(
         caption = slots.caption,
         modifier = Modifier.fillMaxWidth(),
         trailing = {
-            BwSwitch(checked = checked, onCheckedChange = onCheckedChange)
+            BwSwitch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                // The card's title is separate text; name the switch for screen readers.
+                modifier = Modifier.semantics { contentDescription = slots.value },
+            )
         },
     )
 }

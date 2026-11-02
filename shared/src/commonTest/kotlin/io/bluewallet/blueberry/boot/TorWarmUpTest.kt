@@ -87,11 +87,12 @@ class TorWarmUpTest {
         }
 
     @Test
-    fun cancelling_the_caller_does_not_stop_a_route_switch_halfway() =
+    fun cancelling_the_caller_finishes_the_route_switch_then_stops_the_caller() =
         runBlocking {
             val started = CompletableDeferred<Unit>()
             val release = CompletableDeferred<Unit>()
             var finished = false
+            var ranAfter = false
             val caller =
                 launch(start = CoroutineStart.UNDISPATCHED) {
                     applyTorDirectRelay(true) {
@@ -99,12 +100,15 @@ class TorWarmUpTest {
                         release.await()
                         finished = true
                     }
+                    // e.g. App.kt then reads the database, which may be closed by now.
+                    ranAfter = true
                 }
             started.await()
             caller.cancel()
             release.complete(Unit)
             caller.join()
             assertTrue(finished)
+            assertFalse(ranAfter)
             assertTrue(caller.isCancelled)
         }
 }

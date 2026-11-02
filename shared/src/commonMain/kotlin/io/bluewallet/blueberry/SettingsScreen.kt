@@ -28,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import io.bluewallet.blueberry.boot.AppearancePreference
 import io.bluewallet.blueberry.boot.appearanceLabel
 import io.bluewallet.blueberry.boot.cycleAppearance
@@ -204,7 +206,11 @@ private fun AlwaysShowSyncCard(
         caption = slots.caption,
         modifier = Modifier.fillMaxWidth(),
         trailing = {
-            BwSwitch(checked = checked, onCheckedChange = onCheckedChange)
+            BwSwitch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                modifier = Modifier.semantics { contentDescription = slots.value },
+            )
         },
     )
 }

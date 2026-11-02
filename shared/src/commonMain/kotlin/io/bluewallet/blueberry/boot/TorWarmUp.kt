@@ -11,6 +11,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.concurrent.Volatile
@@ -54,7 +56,12 @@ fun saveTorDirectRelay(
 suspend fun applyTorDirectRelay(
     enabled: Boolean,
     apply: suspend (Boolean) -> Unit = { Echalote.setDirectRelay(it) },
-) = withContext(NonCancellable) { apply(enabled) }
+) {
+    withContext(NonCancellable) { apply(enabled) }
+    // NonCancellable also hides a cancellation from the caller: rethrow it here so the caller
+    // stops instead of carrying on (e.g. reading a database that was closed meanwhile).
+    currentCoroutineContext().ensureActive()
+}
 
 private val directRelayScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
