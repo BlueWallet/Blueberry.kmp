@@ -99,6 +99,8 @@ fun App(databasePath: String) {
             }
             checkNotNull(db)
             LaunchedEffect(databasePath, session) {
+                // Before the warm-up, so it bootstraps the saved route; switches the live
+                // connection over if another database chose differently.
                 applyTorDirectRelay(loadTorDirectRelay(db))
                 if (loadTorWarmUp(db)) startTorWarmUp()
             }

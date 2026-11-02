@@ -30,8 +30,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import io.bluewallet.blueberry.boot.AppearancePreference
 import io.bluewallet.blueberry.boot.appearanceLabel
-import io.bluewallet.blueberry.boot.applyTorDirectRelay
 import io.bluewallet.blueberry.boot.cycleAppearance
+import io.bluewallet.blueberry.boot.launchTorDirectRelay
 import io.bluewallet.blueberry.boot.loadAppearance
 import io.bluewallet.blueberry.boot.loadTorDirectRelay
 import io.bluewallet.blueberry.boot.loadTorWarmUp
@@ -130,7 +130,7 @@ fun SettingsScreen(
                     onCheckedChange = { on ->
                         torDirect = on
                         saveTorDirectRelay(db, on)
-                        applyTorDirectRelay(on)
+                        launchTorDirectRelay(on)
                     },
                 )
                 SecretCard(secret = secret, onShow = onOpenSecret)
@@ -196,14 +196,14 @@ internal fun torWarmUpSlots(): SettingsMetricSlots =
     SettingsMetricSlots(
         label = "",
         value = "Warm up Tor at launch",
-        caption = "Faster first Tor request; connects to the Tor bridge every launch",
+        caption = "Connects at launch, faster requests",
     )
 
 internal fun torDirectRelaySlots(): SettingsMetricSlots =
     SettingsMetricSlots(
         label = "",
         value = "Connect to Tor directly",
-        caption = "Much faster, but reveals Tor use to your network; falls back to the bridge if blocked. Applies after restart",
+        caption = "Faster, but your network sees Tor",
     )
 
 @Composable

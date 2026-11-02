@@ -1,6 +1,7 @@
 package io.bluewallet.blueberry.boot
 
 import io.bluewallet.blueberry.storage.createSqliteDatabase
+import io.bluewallet.echalote.Echalote
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -35,6 +36,28 @@ class TorWarmUpTest {
         assertFalse(loadTorDirectRelay(db))
         db.close()
     }
+
+    @Test
+    fun direct_relay_switch_applies_to_echalote_now_in_tap_order() =
+        runBlocking {
+            val applied = mutableListOf<Boolean>()
+            val jobs = listOf(true, false, true).map { on -> launchTorDirectRelay(on) { applied += it } }
+            jobs.forEach { it.join() }
+            assertEquals(listOf(true, false, true), applied)
+        }
+
+    @Test
+    fun applying_direct_relay_sets_echalote_without_a_restart() =
+        runBlocking {
+            try {
+                applyTorDirectRelay(true)
+                assertTrue(Echalote.directRelay)
+                applyTorDirectRelay(false)
+                assertFalse(Echalote.directRelay)
+            } finally {
+                Echalote.directRelay = false
+            }
+        }
 
     @Test
     fun a_second_start_while_running_reuses_the_first() =

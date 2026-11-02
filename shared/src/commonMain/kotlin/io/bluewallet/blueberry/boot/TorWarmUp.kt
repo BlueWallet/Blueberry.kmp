@@ -5,6 +5,7 @@ import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.echalote.Echalote
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -38,10 +39,26 @@ fun saveTorDirectRelay(
     db.keyValue.set(TOR_DIRECT_RELAY_KEY, if (enabled) "1" else "0")
 }
 
-/** Applies the saved choice to echalote; it takes effect on the next Tor bootstrap. */
-fun applyTorDirectRelay(enabled: Boolean) {
-    Echalote.directRelay = enabled
-}
+/**
+ * Applies the saved choice to echalote right away: if it changes the route in use, echalote
+ * drops the current Tor connection and HTTPS sessions so the next request reconnects the new
+ * way (requests in flight are retried on the new connection).
+ */
+suspend fun applyTorDirectRelay(
+    enabled: Boolean,
+    apply: suspend (Boolean) -> Unit = { Echalote.setDirectRelay(it) },
+) = apply(enabled)
+
+private val directRelayScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+/**
+ * [applyTorDirectRelay] from a non-suspending caller such as a switch. The call starts in the
+ * caller's thread, so quick on/off/on taps reach echalote's (fair) lock in tap order.
+ */
+fun launchTorDirectRelay(
+    enabled: Boolean,
+    apply: suspend (Boolean) -> Unit = { Echalote.setDirectRelay(it) },
+): Job = directRelayScope.launch(start = CoroutineStart.UNDISPATCHED) { applyTorDirectRelay(enabled, apply) }
 
 private val warmUpScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
