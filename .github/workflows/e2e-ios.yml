@@ -1,19 +1,19 @@
-name: iOS simulator Test Tor
+name: E2E
 
 on:
   pull_request:
   workflow_dispatch:
 
 concurrency:
-  group: ios-sim-tor-${{ github.ref }}
+  group: e2e-ios-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  ios-sim-tor:
-    name: ios-simulator-test-tor
+  ios-simulator:
+    name: ios-simulator
     runs-on: macos-latest
     timeout-minutes: 75
     steps:
@@ -76,16 +76,18 @@ jobs:
           unzip -q "$RUNNER_TEMP/maestro.zip" -d "$HOME/.maestro-cli"
           echo "$HOME/.maestro-cli/maestro/bin" >> "$GITHUB_PATH"
 
-      - name: Run Test Tor on an iPhone simulator (real Tor network)
+      # Runs every flow in iosApp/maestro/flows (see iosApp/maestro/README.md). Test Tor flows use the
+      # live Tor network, no mocks.
+      - name: Run Maestro flows on an iPhone simulator
         env:
           MAESTRO_CLI_NO_ANALYTICS: "1"
           MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: "true"
-        run: iosApp/maestro/run-test-tor.sh app/Blueberry.app ios-sim-tor-out
+        run: iosApp/maestro/run-e2e.sh app/Blueberry.app e2e-ios-out
 
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: ios-sim-test-tor
-          path: ios-sim-tor-out
+          name: e2e-ios
+          path: e2e-ios-out
           if-no-files-found: warn
           retention-days: 14

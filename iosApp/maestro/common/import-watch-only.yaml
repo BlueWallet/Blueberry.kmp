@@ -1,0 +1,26 @@
+# Onboarding: imports a public watch-only address. Never opens Create wallet, so no seed is ever shown.
+appId: io.bluewallet.blueberry
+---
+- extendedWaitUntil:
+    visible: "Import wallet"
+    timeout: 60000
+- takeScreenshot: onboarding-01-welcome
+- tapOn: "Import wallet"
+- extendedWaitUntil:
+    visible: "seed words, zpub, WIF, or address…"
+    timeout: 30000
+- tapOn: "seed words, zpub, WIF, or address…"
+- inputText: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
+# Tapping the instructions closes the keyboard.
+- tapOn: "Enter BIP39 seed, account zpub, WIF private key, or address"
+- takeScreenshot: onboarding-02-import-address
+- tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "Sync from"
+    timeout: 60000
+- takeScreenshot: onboarding-03-sync-from
+- tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 120000
+- takeScreenshot: onboarding-04-home

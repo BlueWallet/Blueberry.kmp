@@ -67,7 +67,9 @@ suspend fun checkTorExit(
                     "IsTor=false IP=${got.ip} attempt=$attempt seen=${seenIps.joinToString(",")}",
                 )
             }
-            return listOf("ok", formatTorCheckElapsed(nowMs() - started))
+            val elapsed = formatTorCheckElapsed(nowMs() - started)
+            println("TORCHECK done ok elapsed=$elapsed attempt=$attempt")
+            return listOf("ok", elapsed)
         } catch (err: Throwable) {
             println("TORCHECK fail attempt=$attempt ${err.message}")
             lastError = err
