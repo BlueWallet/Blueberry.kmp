@@ -10,6 +10,20 @@ class SendFormatTest {
     fun short_address_keeps_both_ends() {
         assertEquals("bc1qcr…6fyu", shortAddress("bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"))
         assertEquals("bc1qshort", shortAddress(" bc1qshort "))
+        assertEquals("bc1q…6fyu", shortAddress("bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", head = 4, tail = 4))
+    }
+
+    @Test
+    fun flow_chip_shortens_only_addresses() {
+        val address = "bc1qhezl2peu0uv6qxjh0lmznp7vq8htm8gwryfcr9"
+        assertEquals("bc1q…fcr9", flowChipLabel(address))
+        assertEquals("bc1q…fcr9", flowChipLabel("bc1qhezl…gwryfcr9"))
+        assertEquals("To bc1q…fcr9", flowChipLabel("To $address"))
+        assertEquals("19GU…UHLE", flowChipLabel("19GUye5w7vYqR7W58BUdprd8RqRHs5UHLE"))
+        assertEquals("Salary", flowChipLabel("Salary"))
+        assertEquals("To Rent", flowChipLabel("To Rent"))
+        assertEquals("Your change", flowChipLabel("Your change"))
+        assertEquals("+2 more coins", flowChipLabel("+2 more coins"))
     }
 
     @Test

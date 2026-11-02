@@ -6,9 +6,41 @@ data class SendRecipient(
 )
 
 /** "bc1q2d…welh": enough of each end to check against the source. */
-fun shortAddress(address: String): String {
+fun shortAddress(
+    address: String,
+    head: Int = 6,
+    tail: Int = 4,
+): String {
     val a = address.trim()
-    return if (a.length <= 14) a else "${a.take(6)}…${a.takeLast(4)}"
+    if (a.length <= head + tail) return a
+    return "${a.take(head)}…${a.takeLast(tail)}"
+}
+
+/**
+ * Chip label. An address keeps four characters from each end ("bc1q…fcr9").
+ * A name, "To Rent", or "Your change" stays whole.
+ */
+fun flowChipLabel(label: String): String {
+    val trimmed = label.trim()
+    val to = "To "
+    if (trimmed.startsWith(to)) {
+        val rest = trimmed.removePrefix(to)
+        val shortened = shortenAddress(rest)
+        return if (shortened == rest) trimmed else to + shortened
+    }
+    return shortenAddress(trimmed)
+}
+
+private fun shortenAddress(value: String): String = if (isFlowAddress(value)) shortAddress(value, head = 4, tail = 4) else value
+
+private val FLOW_ADDRESS_PREFIXES = listOf("bc1", "tb1", "bcrt1")
+
+private fun isFlowAddress(value: String): Boolean {
+    if (value.isEmpty() || value.any { it.isWhitespace() }) return false
+    val head = value.substringBefore('…')
+    val bech32 = FLOW_ADDRESS_PREFIXES.any { head.startsWith(it, ignoreCase = true) }
+    val legacy = (value.startsWith("1") || value.startsWith("3")) && value.length >= 16
+    return bech32 || legacy
 }
 
 /** The address in 4-character groups, for reading it back aloud. */
