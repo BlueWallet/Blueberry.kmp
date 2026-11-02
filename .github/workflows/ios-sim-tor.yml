@@ -65,10 +65,16 @@ jobs:
           mkdir -p app
           cp -R iosApp/build/DerivedData/Build/Products/Debug-iphonesimulator/Blueberry.app app/
 
-      - name: Install Maestro
+      - name: Install Maestro (pinned, checksum verified)
+        env:
+          MAESTRO_VERSION: "2.12.1"
+          MAESTRO_SHA256: "54dbb0716425626604973cbb374c585ca30272375d9ce15177a1152765ddd9d7"
         run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+          curl -fsSL -o "$RUNNER_TEMP/maestro.zip" \
+            "https://github.com/mobile-dev-inc/maestro/releases/download/cli-${MAESTRO_VERSION}/maestro.zip"
+          echo "${MAESTRO_SHA256}  $RUNNER_TEMP/maestro.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$HOME/.maestro-cli"
+          echo "$HOME/.maestro-cli/maestro/bin" >> "$GITHUB_PATH"
 
       - name: Run Test Tor on an iPhone simulator (real Tor network)
         env:

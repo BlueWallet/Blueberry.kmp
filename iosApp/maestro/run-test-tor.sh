@@ -88,4 +88,9 @@ OK_LINES="$(grep -c 'TORCHECK http status=2' "$OUT/app-stdout.log" || true)"
   echo "| HTTP 2xx over Tor (app log) | $OK_LINES |"
 } | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
 echo "TEST_TOR_COLD=$COLD TEST_TOR_WARM=$WARM"
+# Each tap must produce its own HTTP 2xx in the app log, so a stale "OK" can't pass the warm step.
+if [ "$STATUS" -eq 0 ] && [ "${OK_LINES:-0}" -lt 2 ]; then
+  echo "Expected 2 successful Tor fetches in the app log, got ${OK_LINES:-0}" >&2
+  STATUS=1
+fi
 exit "$STATUS"
