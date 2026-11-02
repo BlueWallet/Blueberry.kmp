@@ -18,9 +18,11 @@ for runtime, devices in data.items():
         continue
     version = (int(m.group(1)), int(m.group(2)))
     for d in devices:
-        if not d["name"].startswith("iPhone") or "Pro" in d["name"] or "Plus" in d["name"]:
+        name = d["name"]
+        if not name.startswith("iPhone"):
             continue
-        key = (version, d["name"])
+        plain = re.fullmatch(r"iPhone (\d+)", name)
+        key = (plain is not None, version, int(plain.group(1)) if plain else 0)
         if best is None or key > best[0]:
             best = (key, d["udid"], d["name"], runtime)
 print(best[1]); print(best[2] + " / " + best[3], file=sys.stderr)
@@ -56,6 +58,9 @@ if start >= 0:
 print(found[0] if found else "unknown")
 PY
 }
+
+# The first XCTest driver start on a fresh runner can take minutes.
+export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-600000}"
 
 STATUS=0
 maestro --udid "$UDID" test --test-output-dir "$OUT/maestro" "$HERE/test-tor-cold.yaml" || STATUS=$?
