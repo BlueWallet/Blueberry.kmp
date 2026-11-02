@@ -18,7 +18,21 @@ import io.bluewallet.blueberry.ui.BwFontFamily
 /** Frozen value sits outside the spendable headline, so it is named separately. */
 @Composable
 internal fun FrozenBalancePill(frozenSats: Long) {
-    if (frozenSats <= 0L) return
+    HeldBalancePill(frozenSats, "frozen")
+}
+
+/** Value held by a payment that is still sending sits outside the spendable headline too. */
+@Composable
+internal fun SendingBalancePill(sendingSats: Long) {
+    HeldBalancePill(sendingSats, "sending")
+}
+
+@Composable
+private fun HeldBalancePill(
+    sats: Long,
+    word: String,
+) {
+    if (sats <= 0L) return
     Row(
         modifier =
             Modifier
@@ -28,13 +42,13 @@ internal fun FrozenBalancePill(frozenSats: Long) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BtcAmountText(
-            sats = frozenSats,
+            sats = sats,
             color = BwColors.Ink,
             trailingColor = BwColors.InkSecondary,
             fontSize = 13.sp,
         )
         Text(
-            text = " frozen",
+            text = " $word",
             color = BwColors.InkSecondary,
             fontFamily = BwFontFamily,
             fontSize = 13.sp,

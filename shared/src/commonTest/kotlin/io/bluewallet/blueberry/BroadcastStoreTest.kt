@@ -5,6 +5,8 @@ import io.bluewallet.blueberry.bus.BroadcastPhase
 import io.bluewallet.blueberry.bus.BroadcastProgressPayload
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class BroadcastStoreTest {
@@ -15,8 +17,8 @@ class BroadcastStoreTest {
         store.applyProgress(
             BroadcastProgressPayload("1", BroadcastPhase.ATTEMPT, attempt = 1, maxAttempts = 20, peer = "1.1.1.1:8333"),
         )
-        assertEquals("attempt", store.get().phase)
-        assertEquals(1, store.get().attempt)
+        assertEquals("attempt", store.get("1")?.phase)
+        assertEquals(1, store.get("1")?.attempt)
         store.applyProgress(
             BroadcastProgressPayload(
                 "1",
@@ -28,14 +30,28 @@ class BroadcastStoreTest {
                 stage = "Building circuit",
             ),
         )
-        assertEquals(55, store.get().percent)
-        assertEquals("Building circuit", store.get().stage)
+        assertEquals(55, store.get("1")?.percent)
+        assertEquals("Building circuit", store.get("1")?.stage)
         assertEquals("Tor: Building circuit", broadcastTorCaption("Building circuit"))
         store.applyDone(BroadcastDonePayload.Ok("1", "1.1.1.1:8333"))
-        assertEquals("success", store.get().phase)
-        assertTrue(!broadcastJobInFlight(store.get().phase))
+        assertEquals("success", store.get("1")?.phase)
+        assertTrue(!broadcastJobInFlight(store.get("1")?.phase))
         store.reset()
-        assertEquals(null, store.get().id)
+        assertNull(store.get("1"))
+    }
+
+    @Test
+    fun progress_for_one_job_does_not_change_another() {
+        val store = createBroadcastStore()
+        store.start("1", "aa")
+        store.start("2", "bb")
+        store.applyProgress(
+            BroadcastProgressPayload("1", BroadcastPhase.ATTEMPT, attempt = 3, peer = "1.1.1.1:8333"),
+        )
+        assertEquals("attempt", store.get("1")?.phase)
+        assertEquals(3, store.get("1")?.attempt)
+        assertEquals("starting", store.get("2")?.phase)
+        assertEquals("bb", store.get("2")?.txHex)
     }
 
     @Test
@@ -46,45 +62,44 @@ class BroadcastStoreTest {
         store.applyProgress(
             BroadcastProgressPayload("old-job", BroadcastPhase.ATTEMPT, attempt = 2, peer = "1.1.1.1:8333"),
         )
-        assertEquals(null, store.get().id)
-        assertEquals(null, store.get().phase)
+        assertNull(store.get("old-job"))
         store.applyDone(BroadcastDonePayload.Ok("old-job", "1.1.1.1:8333"))
-        assertEquals(null, store.get().id)
-        assertEquals(null, store.get().phase)
+        assertNull(store.get("old-job"))
     }
 
     @Test
-    fun enqueue_armed_broadcast_does_not_arm_when_a_job_is_in_flight() {
+    fun enqueue_armed_broadcast_leaves_another_job_running() {
         val store = createBroadcastStore()
         store.start("1", "aa")
-        var armed = "aa"
-        val req =
-            enqueueArmedBroadcast(store, "bb") {
-                armed = "bb"
-            }
-        assertEquals(null, req)
-        assertEquals("aa", armed)
-        store.applyDone(BroadcastDonePayload.Ok("1", "1.1.1.1:8333"))
-        val started =
-            enqueueArmedBroadcast(store, "bb") {
-                armed = "bb"
-            }
-        assertTrue(started != null)
-        assertEquals("bb", armed)
+        var armed: String? = null
+        val req = enqueueArmedBroadcast(store, "bb") { id -> armed = id }
+        assertEquals("bb", store.get(req!!.id)?.txHex)
+        assertEquals(req.id, armed)
+        assertEquals("starting", store.get("1")?.phase)
+        assertEquals("aa", store.get("1")?.txHex)
     }
 
     @Test
-    fun prepareUiBroadcast_ignores_in_flight_and_same_success_hex() {
+    fun enqueue_does_not_arm_the_same_hex_twice() {
+        val store = createBroadcastStore()
+        store.start("1", "aa")
+        var armed = false
+        val req = enqueueArmedBroadcast(store, "aa") { armed = true }
+        assertNull(req)
+        assertFalse(armed)
+    }
+
+    @Test
+    fun prepareUiBroadcast_starts_another_hex_and_refuses_the_same_success() {
         val store = createBroadcastStore()
         val first = prepareUiBroadcast(store, "aa")
-        assertEquals(store.get().id, first)
-        assertEquals(null, prepareUiBroadcast(store, "bb"))
-        assertEquals(first, store.get().id)
-        store.applyDone(BroadcastDonePayload.Ok(first!!, "1.1.1.1:8333"))
-        assertEquals(null, prepareUiBroadcast(store, "aa"))
-        val second = prepareUiBroadcast(store, "bb")
-        assertTrue(second != null && second != first)
-        assertEquals("bb", store.get().txHex)
+        val other = prepareUiBroadcast(store, "bb")
+        assertEquals(first, store.get(first!!)?.id)
+        assertTrue(other != null && other != first)
+        assertEquals("aa", store.get(first)?.txHex)
+        assertEquals("bb", store.get(other)?.txHex)
+        store.applyDone(BroadcastDonePayload.Ok(first, "1.1.1.1:8333"))
+        assertNull(prepareUiBroadcast(store, "aa"))
     }
 
     @Test
@@ -98,18 +113,11 @@ class BroadcastStoreTest {
             BroadcastProgressPayload(first, BroadcastPhase.FAILED_ATTEMPT, peer = "2.2.2.2:8333"),
         )
         store.applyDone(BroadcastDonePayload.Error(first, "eof"))
-        assertEquals(setOf("1.1.1.1:8333", "2.2.2.2:8333"), store.get().triedPeers)
+        assertEquals(setOf("1.1.1.1:8333", "2.2.2.2:8333"), store.get(first)?.triedPeers)
         val retry = enqueueBroadcast(store, "aa")!!
         assertTrue(retry.id != first)
+        assertNull(store.get(first))
         assertEquals(setOf("1.1.1.1:8333", "2.2.2.2:8333"), retry.excludePeers)
-        assertEquals(setOf("1.1.1.1:8333", "2.2.2.2:8333"), store.get().triedPeers)
-    }
-
-    @Test
-    fun inFlightBroadcastEscape_cancels_then_force_closes() {
-        assertEquals(BroadcastEscape.Cancel, inFlightBroadcastEscape("starting", "job-1", null))
-        assertEquals(BroadcastEscape.ForceClose, inFlightBroadcastEscape("attempt", "job-1", "job-1"))
-        assertEquals(BroadcastEscape.Ignore, inFlightBroadcastEscape("success", "job-1", "job-1"))
-        assertEquals(BroadcastEscape.Ignore, inFlightBroadcastEscape("attempt", null, null))
+        assertEquals(setOf("1.1.1.1:8333", "2.2.2.2:8333"), store.get(retry.id)?.triedPeers)
     }
 }

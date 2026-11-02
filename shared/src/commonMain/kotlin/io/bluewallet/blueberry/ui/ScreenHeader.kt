@@ -8,13 +8,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 
-/** Title plus header Back — same text action as home Settings. */
+/** Title plus header Back — same text action as home Settings. [action] names it, e.g. Close. */
 @Composable
 fun ScreenHeader(
     title: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    action: String = "Back",
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -38,6 +39,6 @@ fun ScreenHeader(
                 )
             }
         }
-        TextAction(text = "Back", onClick = onBack)
+        TextAction(text = action, onClick = onBack)
     }
 }

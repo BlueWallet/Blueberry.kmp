@@ -36,8 +36,8 @@ Use the full Superpowers workflow on every coding task in this repo (brainstormi
 ## Screen chrome
 
 - Header actions (Settings, Back, Cancel) use `TextAction`.
-- New title + Back screens use `ScreenHeader`.
-- Primary actions (Receive, Send, Clear, Continue) use `PillButton`.
+- New title + Back screens use `PlatformScreenHeader` over a `PlatformScrollEdge` with `PlatformLargeTitle` (see Settings and the Send steps). `ScreenHeader` is legacy.
+- Primary actions (Receive, Send, Clear, Continue) use `PillButton`. Full-width bottom actions on Send steps use `TintedPillButton`.
 - Do not put `PillButton` in a screen header.
 
 ## ktlint

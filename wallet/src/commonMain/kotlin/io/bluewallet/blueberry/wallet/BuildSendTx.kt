@@ -61,6 +61,7 @@ data class BuildSendTxResult(
 data class BuildSendPsbtResult(
     val kind: String = "psbt",
     val psbtHex: String,
+    val unsignedTxHex: String,
     val txid: String,
     val feeSats: Long,
     val vsize: Int,
@@ -81,6 +82,8 @@ data class SignedSendResult(
 
 data class PsbtSendResult(
     val psbtHex: String,
+    /** The transaction the PSBT spends, without signatures. Same txid once signed for segwit inputs. */
+    val unsignedTxHex: String,
     val txid: String,
     val feeSats: Long,
     val vsize: Int,
@@ -542,11 +545,56 @@ fun buildSignedSendTx(params: BuildSendTxParams): BuildSendTxResult {
  */
 fun buildUnsignedSendPsbt(params: BuildSendTxParams): BuildSendPsbtResult {
     val draft = buildDraftSendTx(params)
-    val fingerprint = draft.account.fingerprint()
+    val psbt = unsignedPsbt(draft.unsignedTx, draft.inputs, draft.account)
+    return BuildSendPsbtResult(
+        psbtHex = hexFromBytes(Psbt.write(psbt).toByteArray()),
+        unsignedTxHex = hexFromBytes(Transaction.write(draft.unsignedTx)),
+        txid = draft.unsignedTx.txid.toString(),
+        feeSats = draft.feeSats,
+        vsize = draft.vsize,
+        changeSats = draft.changeSats,
+        changeVouts = draft.changeVouts,
+    )
+}
 
-    var psbt = Psbt(draft.unsignedTx)
-    draft.inputs.forEachIndexed { index, input ->
-        val outPoint = draft.unsignedTx.txIn[index].outPoint
+/**
+ * The PSBT for a stored unsigned transaction, so it can be shown again after the send screen closed.
+ * [utxos] are the coins it spends; legacy coins need their previous transaction.
+ */
+fun rebuildSendPsbt(
+    secret: String,
+    wallet: WatchWallet,
+    unsignedTxHex: String,
+    utxos: List<SendInputUtxo>,
+): String {
+    val tx = Transaction.read(unsignedTxHex)
+    val account = sendAccountFor(parseWalletSecret(secret))
+    val byScript = watchAddressesByScript(wallet)
+    val byOutpoint = utxos.associateBy { outPointFor(it) }
+    val inputs =
+        tx.txIn.map { txIn ->
+            val utxo = byOutpoint[txIn.outPoint] ?: throw IllegalArgumentException("missing coin for a PSBT input")
+            val addr = addressForScript(byScript, utxo.scriptPubKey)
+            DraftInput(
+                utxo = utxo,
+                scriptType = addr.resolvedScriptType(),
+                signPath = addr.path,
+                publicKey = account.publicKeyAt(addr),
+                bip32Path = account.bip32PathNums(addr),
+            )
+        }
+    return hexFromBytes(Psbt.write(unsignedPsbt(tx, inputs, account)).toByteArray())
+}
+
+private fun unsignedPsbt(
+    unsignedTx: Transaction,
+    inputs: List<DraftInput>,
+    account: SendAccount,
+): Psbt {
+    val fingerprint = account.fingerprint()
+    var psbt = Psbt(unsignedTx)
+    inputs.forEachIndexed { index, input ->
+        val outPoint = unsignedTx.txIn[index].outPoint
         val txOut = TxOut(Satoshi(input.utxo.valueSats), input.utxo.scriptPubKey)
         val derivationPaths =
             if (input.publicKey != null && input.bip32Path != null && fingerprint != null) {
@@ -586,15 +634,7 @@ fun buildUnsignedSendPsbt(params: BuildSendTxParams): BuildSendPsbtResult {
             }
         psbt = updated.right ?: throw IllegalStateException("failed to update PSBT input $index: ${updated.left}")
     }
-
-    return BuildSendPsbtResult(
-        psbtHex = hexFromBytes(Psbt.write(psbt).toByteArray()),
-        txid = draft.unsignedTx.txid.toString(),
-        feeSats = draft.feeSats,
-        vsize = draft.vsize,
-        changeSats = draft.changeSats,
-        changeVouts = draft.changeVouts,
-    )
+    return psbt
 }
 
 /**
@@ -627,6 +667,7 @@ fun buildSend(params: BuildSendTxParams): BuildSendResult {
     val result = buildUnsignedSendPsbt(effectiveParams)
     return PsbtSendResult(
         psbtHex = result.psbtHex,
+        unsignedTxHex = result.unsignedTxHex,
         txid = result.txid,
         feeSats = result.feeSats,
         vsize = result.vsize,
@@ -634,3 +675,19 @@ fun buildSend(params: BuildSendTxParams): BuildSendResult {
         changeVouts = result.changeVouts,
     )
 }
+
+/** True when every input carries a signature script or witness, so the transaction can be published as is. */
+fun isSignedTxHex(txHex: String): Boolean =
+    runCatching {
+        Transaction.read(txHex).txIn.all { it.signatureScript.size() > 0 || it.witness.isNotNull() }
+    }.getOrDefault(false)
+
+/**
+ * The txid with every signature script and witness removed. Signing never changes it, even for legacy
+ * and nested-segwit inputs whose signatures change the real txid.
+ */
+fun unsignedTxid(txBytes: ByteArray): String? =
+    runCatching {
+        val tx = Transaction.read(txBytes)
+        tx.copy(txIn = tx.txIn.map { TxIn(it.outPoint, ByteVector.empty, it.sequence) }).txid.toString()
+    }.getOrNull()

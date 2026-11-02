@@ -1,6 +1,9 @@
 package io.bluewallet.blueberry.parse
 
+import fr.acinq.bitcoin.Transaction
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.storage.PrivateSendCoin
+import io.bluewallet.blueberry.wallet.AddressScriptType
 import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.HD_SCRIPT_TYPES
 import io.bluewallet.blueberry.wallet.MAX_WATCH_COUNT
@@ -18,9 +21,15 @@ import io.bluewallet.blueberry.wallet.loadHdWatchGaps
 import io.bluewallet.blueberry.wallet.loadWalletSecret
 import io.bluewallet.blueberry.wallet.pickMnemonicChange
 import io.bluewallet.blueberry.wallet.preferredWifReceiveAddress
+import io.bluewallet.blueberry.wallet.rebuildSendPsbt
 import io.bluewallet.blueberry.wallet.resolvedScriptType
 import io.bluewallet.blueberry.wallet.saveHdWatchGaps
+import kotlinx.coroutines.CancellationException
 import kotlin.random.Random
+
+private fun requireAccepted(accept: () -> Boolean) {
+    if (!accept()) throw CancellationException("build dropped")
+}
 
 data class SendBuildParams(
     val utxos: List<SendInputUtxo>,
@@ -63,10 +72,53 @@ private fun attachNonWitnessUtxos(
         utxo.copy(nonWitnessUtxo = prev.tx)
     }
 
+/** The PSBT for a stored unsigned send. Each coin's script comes from its stored parent transaction. */
+fun storedSendPsbt(
+    db: Database,
+    wallet: Wallet,
+    unsignedTxHex: String,
+    coins: List<PrivateSendCoin>,
+): String {
+    val utxos =
+        coins.map { coin ->
+            val parent = db.transactions.get(coin.txid)?.tx ?: throw IllegalArgumentException("missing parent transaction")
+            val script = Transaction.read(parent).txOut[coin.vout].publicKeyScript
+            SendInputUtxo(coin.txid, coin.vout, coin.valueSats, script.toByteArray(), nonWitnessUtxo = parent)
+        }
+    return rebuildSendPsbt(loadWalletSecret(db), wallet.snapshot(), unsignedTxHex, utxos)
+}
+
 internal fun grownInternalCount(
     current: Int,
     pickedIndex: Int,
 ): Int = minOf(maxOf(current, pickedIndex + 1), MAX_WATCH_COUNT)
+
+/**
+ * Grows one internal watch count inside a transaction, keeping whichever window is larger.
+ * A dropped build writes nothing. A stale snapshot cannot shrink a window parse already grew.
+ */
+internal fun growWatchGap(
+    db: Database,
+    scriptType: AddressScriptType,
+    index: Int,
+    accept: () -> Boolean,
+): Boolean {
+    if (!accept()) return false
+    var saved = false
+    db.transaction {
+        if (!accept()) return@transaction
+        val fresh = loadHdWatchGaps(db)
+        val current = fresh[scriptType]
+        val bumped =
+            fresh.with(
+                scriptType,
+                WatchGaps(current.external, grownInternalCount(current.internal, index)),
+            )
+        saveHdWatchGaps(db, fresh.mergeMax(bumped))
+        saved = true
+    }
+    return saved && accept()
+}
 
 internal fun findMnemonicChangeAddress(
     watch: WatchWallet,
@@ -90,7 +142,9 @@ fun buildActiveSendTx(
     wallet: Wallet,
     params: SendBuildParams,
     random: Random = Random.Default,
+    accept: () -> Boolean = { true },
 ): BuildSendResult {
+    requireAccepted(accept)
     wallet.syncFromDb()
     var watch = wallet.snapshot()
     val changeAddress =
@@ -115,10 +169,9 @@ fun buildActiveSendTx(
                 if (existing != null) {
                     existing.address
                 } else {
-                    val gaps = loadHdWatchGaps(db)
-                    val current = gaps[pick.scriptType]
-                    val next = WatchGaps(current.external, grownInternalCount(current.internal, pick.index))
-                    saveHdWatchGaps(db, gaps.with(pick.scriptType, next))
+                    requireAccepted(accept)
+                    val saved = growWatchGap(db, pick.scriptType, pick.index, accept)
+                    requireAccepted { saved && accept() }
                     watch = wallet.refresh()
                     findMnemonicChangeAddress(watch, pick).address
                 }

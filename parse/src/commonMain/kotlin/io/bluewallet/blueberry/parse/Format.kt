@@ -104,6 +104,9 @@ fun formatBtc(sats: Long): String {
     return "${p.sign}${p.whole}.${p.fracSignificant}${p.fracTrailing} BTC"
 }
 
+/** 21 million fits in eight digits; more would overflow sats as a Long. */
+private const val MAX_BTC_WHOLE_DIGITS = 8
+
 /** Parse a BTC decimal string to sats; null if not a valid non-negative amount. */
 fun parseBtcToSats(input: String): Long? {
     val t = input.trim().replace(Regex("\\s*BTC\\s*$", RegexOption.IGNORE_CASE), "")
@@ -111,7 +114,7 @@ fun parseBtcToSats(input: String): Long? {
     val parts = t.split('.')
     val whole = parts[0]
     val frac = if (parts.size > 1) parts[1] else ""
-    if (frac.length > 8) return null
+    if (frac.length > 8 || whole.trimStart('0').length > MAX_BTC_WHOLE_DIGITS) return null
     return whole.toLong() * 100_000_000L + frac.padEnd(8, '0').toLong()
 }
 

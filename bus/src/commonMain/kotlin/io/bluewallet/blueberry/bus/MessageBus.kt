@@ -30,8 +30,8 @@ fun createMessageBus(): MessageBus {
         override fun <T> emit(
             event: Event<T>,
             payload: T,
-        ) {
-            val snapshot = listeners.load()[event] ?: return
+        ): Boolean {
+            val snapshot = listeners.load()[event] ?: return false
             for (handler in snapshot) {
                 try {
                     @Suppress("UNCHECKED_CAST")
@@ -40,6 +40,7 @@ fun createMessageBus(): MessageBus {
                     // isolate subscriber failures
                 }
             }
+            return true
         }
     }
 }

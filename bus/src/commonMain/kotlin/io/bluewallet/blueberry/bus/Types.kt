@@ -176,8 +176,13 @@ data class BroadcastRequestPayload(
     val excludePeers: Set<String> = emptySet(),
 )
 
-/** Cancel the broadcast job with this [id], if it is active. */
-data class BroadcastCancelPayload(
+/** A node was given the raw transaction for the job with this [id]. It may relay it from now on. */
+data class BroadcastHandedOffPayload(
+    val id: String,
+)
+
+/** Asks the job with this [id] to stop. Ignored once a node was given the transaction. */
+data class BroadcastStopPayload(
     val id: String,
 )
 
@@ -210,11 +215,15 @@ sealed class BroadcastDonePayload {
     data class Ok(
         override val id: String,
         val peer: String,
+        /** False when nodes were given the transaction but none confirmed taking it. */
+        val acknowledged: Boolean = true,
     ) : BroadcastDonePayload()
 
     data class Error(
         override val id: String,
         val error: String,
+        /** Every node that was given the transaction explicitly refused it, so none holds it. */
+        val refused: Boolean = false,
     ) : BroadcastDonePayload()
 }
 
@@ -327,8 +336,11 @@ sealed class Event<T>(
     /** Start broadcasting one raw transaction. */
     data object BroadcastRequest : Event<BroadcastRequestPayload>("broadcast:request")
 
-    /** Cancel the broadcast job with this `id`, if it is active. */
-    data object BroadcastCancel : Event<BroadcastCancelPayload>("broadcast:cancel")
+    /** A node was given the raw transaction for this `id`. Emitted before the ack wait. */
+    data object BroadcastHandedOff : Event<BroadcastHandedOffPayload>("broadcast:handed-off")
+
+    /** Stops a job that has not handed the transaction to any node. Its outcome arrives on `broadcast:done`. */
+    data object BroadcastStop : Event<BroadcastStopPayload>("broadcast:stop")
 
     /**
      * Broadcast job progress.
@@ -351,8 +363,9 @@ sealed class Event<T>(
 /**
  * In-process typed pub/sub.
  *
- * `emit` calls handlers in the same turn. Handlers must be synchronous;
- * thrown errors are swallowed. `on` returns an unsubscribe function.
+ * `emit` calls handlers in the same turn and returns false when nobody is
+ * subscribed. Handlers must be synchronous; thrown errors are swallowed.
+ * `on` returns an unsubscribe function.
  * `on` / `emit` / unsubscribe are safe to call from concurrent module loops.
  */
 interface MessageBus {
@@ -364,5 +377,5 @@ interface MessageBus {
     fun <T> emit(
         event: Event<T>,
         payload: T,
-    )
+    ): Boolean
 }

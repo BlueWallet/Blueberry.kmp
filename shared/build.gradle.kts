@@ -103,6 +103,7 @@ kotlin {
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.qrose)
                 implementation(libs.haze)
+                implementation(libs.haze.blur)
                 implementation(libs.androidx.lifecycle.viewmodelCompose)
                 implementation(libs.androidx.lifecycle.runtimeCompose)
                 implementation(libs.bitcoin.headers)

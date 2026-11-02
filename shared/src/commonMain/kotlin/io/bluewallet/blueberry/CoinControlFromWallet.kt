@@ -6,6 +6,7 @@ import io.bluewallet.blueberry.parse.CoinLinkage
 fun coinControlSnapshotFrom(
     snap: WalletTxsSnapshot,
     feeRateSatPerVb: Double? = null,
+    sending: Set<String> = emptySet(),
 ): CoinControlSnapshot {
     val frozen =
         snap.utxos
@@ -17,5 +18,5 @@ fun coinControlSnapshotFrom(
         CoinLinkage(certain = snap.coinCertainGroupIds, likely = snap.coinGroupIds),
         frozen,
         feeRateSatPerVb,
-    )
+    ).markedSending(sending)
 }

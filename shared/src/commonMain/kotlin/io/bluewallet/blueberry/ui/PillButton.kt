@@ -125,6 +125,7 @@ fun TintedPillButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: Painter? = null,
+    enabled: Boolean = true,
 ) {
     WashPill(
         text = text,
@@ -132,6 +133,7 @@ fun TintedPillButton(
         modifier = modifier,
         fill = if (LocalDarkPalette.current) TintedPillFillDark else BwPalette.Light.AccentSoft,
         icon = icon,
+        enabled = enabled,
     )
 }
 
@@ -145,6 +147,7 @@ fun PlainPillButton(
     WashPill(text = text, onClick = onClick, modifier = modifier, fill = Color.Transparent)
 }
 
+@Suppress("LongParameterList")
 @Composable
 private fun WashPill(
     text: String,
@@ -152,15 +155,16 @@ private fun WashPill(
     modifier: Modifier,
     fill: Color,
     icon: Painter? = null,
+    enabled: Boolean = true,
 ) {
     PressablePill(
         text = text,
         onClick = onClick,
         modifier = modifier.semantics { contentDescription = text },
-        enabled = true,
+        enabled = enabled,
         height = ProminentButtonHeight,
-        fill = fill,
-        label = BwColors.Accent,
+        fill = if (enabled) fill else BwColors.BarTrack,
+        label = if (enabled) BwColors.Accent else BwColors.InkQuiet,
         icon = icon,
     )
 }

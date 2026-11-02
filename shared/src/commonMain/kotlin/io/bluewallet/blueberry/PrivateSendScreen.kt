@@ -22,7 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import io.bluewallet.blueberry.parse.SendBuildParams
-import io.bluewallet.blueberry.parse.buildActiveSendTx
 import io.bluewallet.blueberry.parse.savePaymentLabel
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendRow
@@ -33,6 +32,7 @@ import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.ProgressMetricCard
 import io.bluewallet.blueberry.ui.alwaysBounceTail
+import io.bluewallet.blueberry.wallet.BuildSendResult
 import io.bluewallet.blueberry.wallet.SendAmount
 import io.bluewallet.blueberry.wallet.SignedSendResult
 import io.bluewallet.blueberry.wallet.Wallet
@@ -47,6 +47,7 @@ class PrivateSendCallbacks(
     val onSigned: (SignedSendResult) -> Unit,
     val onBroadcast: (SignedSendResult, PrivateSendRow) -> Unit,
     val finish: BroadcastFinishActions,
+    val sign: suspend (SendBuildParams) -> BuildSendResult,
 )
 
 class PrivateSendHost(
@@ -184,7 +185,7 @@ internal suspend fun finishPrivateSend(
     return when {
         err != null -> PrivateSendUi.Error(err)
         pay == null || w == null -> PrivateSendUi.Error("missing wallet")
-        else -> signedPrivateSend(session, swap, host, pay, w)
+        else -> signedPrivateSend(session, swap, host, pay)
     }
 }
 
@@ -204,12 +205,9 @@ private suspend fun signedPrivateSend(
     swap: RocketxSwap,
     host: PrivateSendHost,
     pay: SendAmount,
-    wallet: Wallet,
 ): PrivateSendUi {
     val built =
-        buildActiveSendTx(
-            host.db,
-            wallet,
+        host.callbacks.sign(
             SendBuildParams(
                 utxos = session.utxos,
                 toAddress = swap.address,

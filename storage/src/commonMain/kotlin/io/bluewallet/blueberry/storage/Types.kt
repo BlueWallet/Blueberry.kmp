@@ -312,6 +312,8 @@ interface PrivateSendsRepository {
         height: Long,
     )
 
+    fun delete(txid: String)
+
     fun list(): List<PrivateSendRow>
 }
 
@@ -333,6 +335,8 @@ interface SendsRepository {
         txid: String,
         height: Long,
     )
+
+    fun delete(txid: String)
 
     fun list(): List<SendRow>
 }

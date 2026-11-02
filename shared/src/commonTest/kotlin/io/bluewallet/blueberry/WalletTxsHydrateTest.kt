@@ -1,5 +1,6 @@
 package io.bluewallet.blueberry
 
+import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.OutPoint
 import fr.acinq.bitcoin.Satoshi
 import fr.acinq.bitcoin.Transaction
@@ -21,6 +22,7 @@ import io.bluewallet.blueberry.storage.PrivateSendCoin
 import io.bluewallet.blueberry.storage.PrivateSendRow
 import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.storage.StoredTx
+import io.bluewallet.blueberry.storage.TxPaymentLabelRow
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.AddressScriptType
 import io.bluewallet.blueberry.wallet.createWallet
@@ -275,6 +277,63 @@ class WalletTxsHydrateTest {
         assertEquals(2L, store.get().at)
         hydrateWallet(db, store, wallet, 3)
         assertEquals(2L, store.get().at)
+        db.close()
+    }
+
+    private fun spendOf(
+        outputs: List<TxOut>,
+        scriptSig: ByteArray = ByteArray(0),
+    ): Transaction =
+        Transaction(
+            2L,
+            listOf(TxIn(OutPoint(TxHash(ByteArray(32) { 0xbb.toByte() }), 0L), ByteVector(scriptSig), 0xffffffffL)),
+            outputs,
+            0L,
+        )
+
+    @Test
+    fun a_psbt_signed_with_a_new_txid_settles_its_stored_send_and_keeps_the_note() {
+        val db = createSqliteDatabase(":memory:")
+        saveWalletSecret(db, "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about")
+        val wallet = createWallet(db)
+        val dest = wallet.snapshot().addresses.first { !it.change && it.index == 1 }
+        val unsigned = spendOf(listOf(TxOut(Satoshi(40_000L), dest.scriptPubKey)))
+        val signed = spendOf(unsigned.txOut, scriptSig = byteArrayOf(1, 2, 3))
+        val txid = unsigned.txid.toString()
+        assertNotEquals(txid, signed.txid.toString())
+        db.sends.upsert(SendRow(txid, hexFromBytes(Transaction.write(unsigned)), dest.address, listOf(PrivateSendCoin("bb".repeat(32), 0, 50_000L))))
+        db.txPaymentLabels.upsert(TxPaymentLabelRow(txid, "rent"))
+        assertEquals(listOf(txid), snapshotFromDb(db, 1, 1).txs.map { it.txid })
+
+        db.transactions.upsert(StoredTx(signed.txid.toString(), 300, 0, "33".repeat(32), Transaction.write(signed), -41_000L))
+        val snap = snapshotFromDb(db, 2, 2)
+
+        assertEquals(listOf(signed.txid.toString()), snap.txs.map { it.txid })
+        assertEquals(300L, db.sends.get(txid)!!.confirmedInBlock)
+        assertTrue(loadStoredHolds(db).isEmpty())
+        assertEquals("rent", db.txPaymentLabels.get(signed.txid.toString())?.label)
+        db.close()
+    }
+
+    @Test
+    fun a_conflicting_spend_settles_the_stored_send_without_taking_its_note() {
+        val db = createSqliteDatabase(":memory:")
+        saveWalletSecret(db, "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about")
+        val wallet = createWallet(db)
+        val dest = wallet.snapshot().addresses.first { !it.change && it.index == 1 }
+        val other = wallet.snapshot().addresses.first { !it.change && it.index == 2 }
+        val unsigned = spendOf(listOf(TxOut(Satoshi(40_000L), dest.scriptPubKey)))
+        val conflict = spendOf(listOf(TxOut(Satoshi(45_000L), other.scriptPubKey)), scriptSig = byteArrayOf(4))
+        val txid = unsigned.txid.toString()
+        db.sends.upsert(SendRow(txid, hexFromBytes(Transaction.write(unsigned)), dest.address, listOf(PrivateSendCoin("bb".repeat(32), 0, 50_000L))))
+        db.txPaymentLabels.upsert(TxPaymentLabelRow(txid, "rent"))
+
+        db.transactions.upsert(StoredTx(conflict.txid.toString(), 301, 0, "34".repeat(32), Transaction.write(conflict), -46_000L))
+        snapshotFromDb(db, 1, 1)
+
+        assertEquals(301L, db.sends.get(txid)!!.confirmedInBlock)
+        assertTrue(loadStoredHolds(db).isEmpty())
+        assertNull(db.txPaymentLabels.get(conflict.txid.toString()))
         db.close()
     }
 

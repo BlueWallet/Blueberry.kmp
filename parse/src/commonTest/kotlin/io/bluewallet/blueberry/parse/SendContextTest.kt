@@ -194,4 +194,27 @@ class SendContextTest {
         )
         assertEquals(PickUtxos.Error("no UTXOs selected"), pickUtxosByKeys(rows, emptyList()) { it.key })
     }
+
+    @Test
+    fun a_dropped_build_does_not_grow_the_watch_window() {
+        val db = createSqliteDatabase(":memory:")
+        val before = loadHdWatchGaps(db)
+        assertEquals(false, growWatchGap(db, AddressScriptType.P2WPKH, 40) { false })
+        assertEquals(before, loadHdWatchGaps(db))
+        db.close()
+    }
+
+    @Test
+    fun growing_a_watch_gap_keeps_the_larger_window() {
+        val db = createSqliteDatabase(":memory:")
+        val wide = HdWatchGaps.initial().with(AddressScriptType.P2WPKH, WatchGaps(20, 40))
+        saveHdWatchGaps(db, wide)
+        assertEquals(true, growWatchGap(db, AddressScriptType.P2WPKH, 3) { true })
+        val kept = loadHdWatchGaps(db)[AddressScriptType.P2WPKH]
+        assertEquals(20, kept.external)
+        assertEquals(40, kept.internal)
+        assertEquals(true, growWatchGap(db, AddressScriptType.P2WPKH, 50) { true })
+        assertEquals(51, loadHdWatchGaps(db)[AddressScriptType.P2WPKH].internal)
+        db.close()
+    }
 }

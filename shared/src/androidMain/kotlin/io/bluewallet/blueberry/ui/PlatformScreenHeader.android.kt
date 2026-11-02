@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
 
 @Suppress("UnusedParameter", "LongParameterList")
 @Composable
@@ -17,6 +18,9 @@ actual fun PlatformScreenHeader(
     showBarTitle: Boolean,
     trailingText: String?,
     onTrailing: (() -> Unit)?,
+    menu: List<HeaderMenuItem>,
+    showBack: Boolean,
+    onClose: (() -> Unit)?,
 ) {
     MaterialScreenHeader(
         title = title,
@@ -25,6 +29,9 @@ actual fun PlatformScreenHeader(
         enabled = enabled,
         trailingText = trailingText,
         onTrailing = onTrailing,
+        menu = menu,
+        showBack = showBack,
+        onClose = onClose,
     )
 }
 
@@ -49,9 +56,16 @@ actual fun PlatformLargeTitle(
 actual fun PlatformScrollEdge(
     modifier: Modifier,
     top: Dp,
-    bottom: Dp,
+    bottom: Dp?,
     showEdges: Boolean,
     content: @Composable () -> Unit,
 ) {
     Box(modifier) { content() }
 }
+
+@Suppress("UnusedParameter")
+@Composable
+actual fun PlatformBottomEdgeBlur(
+    hazeState: HazeState,
+    modifier: Modifier,
+) = Unit

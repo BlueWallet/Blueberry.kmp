@@ -1,6 +1,5 @@
 package io.bluewallet.blueberry
 
-import io.bluewallet.blueberry.wallet.SendAmount
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -9,44 +8,40 @@ import kotlin.test.assertTrue
 
 class SendValidationTest {
     @Test
-    fun details_require_address_amount_or_max_and_label() {
-        val dest = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
-        assertTrue(validateSendDetails("not-an-address", "0.001", "rent", 100_000, "1") is SendDetailsValidation.Invalid)
-        assertTrue(validateSendDetails(dest, "0", "rent", 100_000, "1") is SendDetailsValidation.Invalid)
-        assertTrue(validateSendDetails(dest, "2", "rent", 100_000, "1") is SendDetailsValidation.Invalid)
-        assertTrue(validateSendDetails(dest, "0.00050000", "   ", 100_000, "1") is SendDetailsValidation.Invalid)
-        assertTrue(validateSendDetails(dest, "MAX", "", 100_000, "1") is SendDetailsValidation.Invalid)
-        val ok = validateSendDetails(dest, "0.00050000", "  groceries  ", 100_000, "1") as SendDetailsValidation.Ok
-        assertEquals(SendAmount.Exact(50_000L), ok.details.amountSats)
-        assertEquals("groceries", ok.details.paymentLabel)
-        val max = validateSendDetails(dest, " max ", "empty", 100_000, "10") as SendDetailsValidation.Ok
-        assertEquals(SendAmount.Max, max.details.amountSats)
-    }
-
-    @Test
-    fun details_require_positive_fee_rate() {
-        val dest = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
-        val bad = validateSendDetails(dest, "0.00050000", "rent", 100_000, "") as SendDetailsValidation.Invalid
-        assertEquals(SendField.FeeRate, bad.field)
-        val zero = validateSendDetails(dest, "0.00050000", "rent", 100_000, "0") as SendDetailsValidation.Invalid
-        assertEquals(SendField.FeeRate, zero.field)
-        val ok = validateSendDetails(dest, "0.00050000", "rent", 100_000, "1.5") as SendDetailsValidation.Ok
-        assertEquals(1.5, ok.feeRateSatPerVb)
-    }
-
-    @Test
-    fun continue_opens_private_send_when_checked() {
-        assertEquals(SendContinueTarget.PrivateSend, sendContinueTarget(privateSend = true))
-        assertEquals(SendContinueTarget.OnchainPreview, sendContinueTarget(privateSend = false))
-    }
-
-    @Test
     fun fee_rate_must_be_positive_finite() {
         assertNull(parseFeeRateSatPerVb(""))
         assertNull(parseFeeRateSatPerVb("0"))
         assertNull(parseFeeRateSatPerVb("-1"))
+        assertNull(parseFeeRateSatPerVb("0.5"))
+        assertNull(parseFeeRateSatPerVb("0.00001"))
+        assertEquals(1.0, parseFeeRateSatPerVb("1"))
         assertEquals(1.5, parseFeeRateSatPerVb("1.5"))
         assertEquals(10.0, parseFeeRateSatPerVb("10"))
+    }
+
+    @Test
+    fun an_empty_wallet_is_not_asked_for_an_amount() {
+        assertEquals("No spendable coins left", amountContinueLabel("0.5", 0))
+        assertEquals("Enter an amount", amountContinueLabel("", 50_000))
+        assertEquals("Continue", amountContinueLabel("0.0001", 50_000))
+        assertEquals("Every coin is frozen", amountContinueLabel("0.5", 0, CoinAvailability.AllFrozen))
+        assertEquals(ALL_FROZEN_NOTICE, sendAmountUnavailable("0.5", 0, CoinAvailability.AllFrozen))
+    }
+
+    @Test
+    fun a_wallet_whose_coins_are_all_sending_says_so() {
+        assertEquals("Every coin is sending", amountContinueLabel("0.5", 0, CoinAvailability.AllSending))
+        assertEquals(ALL_SENDING_NOTICE, sendAmountUnavailable("0.5", 0, CoinAvailability.AllSending))
+        assertEquals(ALL_SENDING_NOTICE, noSpendableNotice(0, CoinAvailability.AllSending))
+        assertNull(noSpendableNotice(50_000, CoinAvailability.Spendable))
+    }
+
+    @Test
+    fun review_says_why_an_amount_is_no_longer_payable() {
+        assertEquals("No spendable coins left.", sendAmountUnavailable("0.5", 0))
+        assertEquals("The wallet can no longer cover this amount.", sendAmountUnavailable("0.5", 1_000))
+        assertEquals("Enter an amount.", sendAmountUnavailable("", 50_000))
+        assertNull(sendAmountUnavailable("0.0001", 50_000))
     }
 
     @Test

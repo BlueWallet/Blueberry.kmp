@@ -11,9 +11,9 @@ import androidx.compose.ui.unit.dp
 
 /** Trailing ">" arrow for tappable rows. */
 @Composable
-fun Chevron() {
+fun Chevron(modifier: Modifier = Modifier) {
     val color = BwColors.InkMuted
-    Canvas(Modifier.size(width = 8.dp, height = 14.dp)) {
+    Canvas(modifier.size(width = 8.dp, height = 14.dp)) {
         val path =
             Path().apply {
                 moveTo(0f, 0f)

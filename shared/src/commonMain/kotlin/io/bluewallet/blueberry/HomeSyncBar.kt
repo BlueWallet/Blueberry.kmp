@@ -27,10 +27,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
@@ -112,7 +113,7 @@ fun HomeSyncBar(
                     .fillMaxWidth()
                     .border(1.dp, border, shape)
                     .clip(shape)
-                    .hazeEffect(state = hazeState, style = hazeStyle)
+                    .hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle)
                     .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -198,10 +199,10 @@ private val SyncDockLightBorder = Color(0xFF0C2550).copy(alpha = 0.18f)
 private const val SYNC_DOCK_LIGHT_ALPHA = 0.55f
 
 private fun syncDockHazeStyle(fill: Color) =
-    HazeStyle(
-        backgroundColor = Color.Transparent,
-        tint = HazeTint(fill),
-        blurRadius = 10.dp,
-        noiseFactor = 0f,
-        fallbackTint = HazeTint(fill),
-    )
+    HazeBlurStyle {
+        backgroundColor(Color.Transparent)
+        colorEffects(listOf(HazeColorEffect.tint(fill)))
+        blurRadius(10.dp)
+        noiseFactor(0f)
+        fallbackColorEffect(HazeColorEffect.tint(fill))
+    }

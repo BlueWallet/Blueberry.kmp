@@ -47,6 +47,26 @@ internal fun IosGlassBackButton(
     }
 }
 
+/** iOS close control. iOS 26 and later use a liquid-glass xmark; earlier systems use [HeaderCloseButton]. */
+@Composable
+internal fun IosGlassCloseButton(
+    onClose: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (rememberSupportsIosLiquidGlass()) {
+        IosGlassSymbolButton(
+            symbol = "xmark",
+            accessibilityLabel = "Close",
+            onClick = onClose,
+            enabled = enabled,
+            modifier = modifier,
+        )
+    } else {
+        HeaderCloseButton(onClick = onClose, enabled = enabled, modifier = modifier)
+    }
+}
+
 /** True on iOS 26 and later, where `glassButtonConfiguration` exists. */
 @Composable
 internal fun rememberSupportsIosLiquidGlass(): Boolean = remember { supportsIosLiquidGlass(UIDevice.currentDevice.systemVersion) }

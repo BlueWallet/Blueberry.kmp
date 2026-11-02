@@ -13,17 +13,21 @@ import io.bluewallet.blueberry.parse.formatBlockTimeLabel
 import io.bluewallet.blueberry.parse.formatBtc
 import io.bluewallet.blueberry.parse.formatNetDelta
 import io.bluewallet.blueberry.parse.inferPendingSendNetDelta
+import io.bluewallet.blueberry.parse.movePaymentLabel
+import io.bluewallet.blueberry.parse.outpointKey
 import io.bluewallet.blueberry.parse.padBlockTimeLabel
 import io.bluewallet.blueberry.parse.scanWatchTxs
 import io.bluewallet.blueberry.parse.scriptHex
 import io.bluewallet.blueberry.parse.shortOutpoint
 import io.bluewallet.blueberry.parse.shortTxid
+import io.bluewallet.blueberry.parse.spendingTxs
 import io.bluewallet.blueberry.parse.utxoValueBar
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.hexToBytes
+import io.bluewallet.blueberry.wallet.unsignedTxid
 import io.bluewallet.headers.decodeBlockHeader
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -213,10 +217,11 @@ private class TxRowLabels(
 
 private fun pendingSendRows(
     db: Database,
-    confirmedByTxid: Map<String, Long>,
+    stored: List<StoredTx>,
     labels: TxRowLabels,
     keepAddresses: List<String>,
 ): List<WalletTxRow> {
+    val confirmedByTxid = stored.associate { it.txid to it.height.toLong() }
     val candidates =
         db.sends.list().map { row ->
             PendingSendCandidate(
@@ -245,15 +250,34 @@ private fun pendingSendRows(
                 )
             }
     val stillPending = mutableListOf<PendingSendCandidate>()
-    for (row in candidates) {
+    val spenders by lazy { spendingTxs(stored.filter { it.height > 0 }.map { TxRow(it.txid, it.height, it.txIndex, it.tx) }) }
+    for (row in candidates.filter { it.confirmedInBlock == 0L }) {
         val confirmedHeight = confirmedByTxid[row.txid]
-        if (confirmedHeight != null) {
-            if (row.confirmedInBlock == 0L) row.markConfirmed(confirmedHeight)
-        } else if (row.confirmedInBlock == 0L) {
-            stillPending += row
+        val spender = if (confirmedHeight == null) row.coins.firstNotNullOfOrNull { spenders[outpointKey(it.txid, it.vout)] } else null
+        when {
+            confirmedHeight != null -> row.markConfirmed(confirmedHeight)
+            spender != null -> settleBySpender(db, row, spender)
+            else -> stillPending += row
         }
     }
     return pendingWalletRows(stillPending, labels)
+}
+
+/**
+ * A confirmed transaction spent this send's coins under another txid: the same payment signed with
+ * legacy or nested-segwit inputs, or a conflicting one. Either way it can no longer confirm as stored.
+ * The signed copy takes over its note.
+ */
+private fun settleBySpender(
+    db: Database,
+    row: PendingSendCandidate,
+    spender: TxRow,
+) {
+    val unsigned = runCatching { unsignedTxid(hexToBytes(row.txHex)) }.getOrNull()
+    if (unsigned != null && unsigned == unsignedTxid(spender.tx)) {
+        editLabels(db) { movePaymentLabel(db, row.txid, spender.txid) }
+    }
+    row.markConfirmed(spender.height.toLong())
 }
 
 private fun pendingWalletRows(
@@ -462,7 +486,7 @@ fun snapshotFromDb(
     val pending =
         pendingSendRows(
             db = db,
-            confirmedByTxid = stored.associate { it.txid to it.height.toLong() },
+            stored = stored,
             labels = labels,
             keepAddresses =
                 wallet

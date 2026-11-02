@@ -19,3 +19,9 @@ FROM private_sends ORDER BY txid;
 
 setConfirmedInBlock:
 UPDATE private_sends SET confirmed_in_block = ? WHERE txid = ?;
+
+delete:
+DELETE FROM private_sends WHERE txid = ?;
+
+reopenAbove:
+UPDATE private_sends SET confirmed_in_block = 0 WHERE confirmed_in_block > ?;

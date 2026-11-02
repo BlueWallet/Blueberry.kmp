@@ -59,6 +59,16 @@ fun scanWatchTxs(
     return WatchScan(utxos, fees)
 }
 
+/** Each outpoint a stored transaction spends, mapped to that transaction. A row that does not parse is skipped. */
+fun spendingTxs(txs: List<TxRow>): Map<String, TxRow> {
+    val spenders = mutableMapOf<String, TxRow>()
+    for (row in txs) {
+        val tx = runCatching { Transaction.read(row.tx) }.getOrNull()?.takeUnless { it.isCoinbase() } ?: continue
+        for (inn in tx.txIn) spenders[prevoutKey(inn)] = row
+    }
+    return spenders
+}
+
 fun netDeltasForTxs(
     txs: List<TxRow>,
     watchScripts: List<ByteArray>,

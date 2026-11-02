@@ -1511,6 +1511,7 @@ class PeersDiscoveryTest {
                         resolveSeeds = { emptyList() },
                         now = { 100_000 },
                         probeTimeoutMs = 3_000,
+                        retryProbeTimeoutMs = 15_000,
                         probe = { host, _, call ->
                             synchronized(lock) { timeouts[host] = call.timeoutMs }
                             ProbeResult.Err("skip")

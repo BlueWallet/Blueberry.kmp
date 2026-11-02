@@ -52,6 +52,11 @@ class RewindTest {
             ),
         )
 
+        db.sends.upsert(SendRow(txid = "bb".repeat(32), txHex = "00", destination = "x", coins = emptyList()))
+        db.sends.setConfirmedInBlock("bb".repeat(32), h2.toLong())
+        db.sends.upsert(SendRow(txid = "cc".repeat(32), txHex = "00", destination = "x", coins = emptyList()))
+        db.sends.setConfirmedInBlock("cc".repeat(32), h1.toLong())
+
         db.transaction {
             db.rewindAfter(h1)
             db.headers.replaceAfter(
@@ -73,6 +78,8 @@ class RewindTest {
         assertFalse(db.blocks.has(h2))
         assertFalse(db.parsedBlocks.has(h2))
         assertEquals(emptyList(), db.transactions.list())
+        assertEquals(0L, db.sends.get("bb".repeat(32))?.confirmedInBlock)
+        assertEquals(h1.toLong(), db.sends.get("cc".repeat(32))?.confirmedInBlock)
         db.close()
     }
 }
