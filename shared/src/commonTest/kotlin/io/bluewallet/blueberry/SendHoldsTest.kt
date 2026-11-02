@@ -13,6 +13,7 @@ import io.bluewallet.blueberry.storage.PrivateSendCoin
 import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.wallet.PsbtSendResult
 import io.bluewallet.blueberry.wallet.hexToBytes
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
@@ -254,8 +255,13 @@ class SendHoldsTest {
             val c = coin("11", 100_000_000)
             prime(flow, c)
             flow.build = ReviewBuild.Built(psbt("ee"), flow.draftStamp())
+            val rebuilt = CompletableDeferred<Unit>()
+            val stopWatching = runtime.walletTxsStore.subscribe { rebuilt.complete(Unit) }
             flow.send()
             assertEquals(SendStep.Psbt, flow.step)
+            // Storing the PSBT rebuilds the wallet off this thread and clears the hold cache.
+            withTimeout(5_000) { rebuilt.await() }
+            stopWatching()
             flow.goBack()
             flow.refreshHeldOutpoints()
             assertTrue(c.key in flow.selectedKeys)
