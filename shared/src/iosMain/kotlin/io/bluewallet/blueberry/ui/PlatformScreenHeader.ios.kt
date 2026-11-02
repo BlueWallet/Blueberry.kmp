@@ -112,7 +112,7 @@ actual fun PlatformScreenHeader(
 /** "…" button that opens a native pull-down menu. UIKit overlay for the same reason as [IosOverlayTextAction]. */
 @OptIn(ExperimentalForeignApi::class, ExperimentalComposeUiApi::class)
 @Composable
-private fun IosOverlayMenuButton(
+internal fun IosOverlayMenuButton(
     menu: List<HeaderMenuItem>,
     modifier: Modifier = Modifier,
 ) {
@@ -162,7 +162,7 @@ private fun IosOverlayMenuButton(
  */
 @OptIn(ExperimentalForeignApi::class, ExperimentalComposeUiApi::class)
 @Composable
-private fun IosBarTitle(
+internal fun IosBarTitle(
     title: String,
     modifier: Modifier = Modifier,
 ) {
@@ -200,7 +200,7 @@ private fun IosBarTitle(
  */
 @OptIn(ExperimentalForeignApi::class, ExperimentalComposeUiApi::class)
 @Composable
-private fun IosOverlayTextAction(
+internal fun IosOverlayTextAction(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -250,7 +250,7 @@ private class TrailingAction {
     var onClick: () -> Unit = {}
 }
 
-private fun Color.toUiColor(): UIColor =
+internal fun Color.toUiColor(): UIColor =
     UIColor.colorWithRed(
         red.toDouble(),
         green = green.toDouble(),

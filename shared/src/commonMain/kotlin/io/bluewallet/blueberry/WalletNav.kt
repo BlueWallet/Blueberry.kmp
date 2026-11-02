@@ -104,6 +104,16 @@ internal fun WalletNavHost(
                 navController.navigate(SendRoute) { launchSingleTop = true }
             }
         }
+    val onSendWithCoins: (Set<String>) -> Unit =
+        remember(navController) {
+            { keys ->
+                sendDraft = SendDraft.fromStandalone(keys)
+                navController.navigate(SendRoute) {
+                    popUpTo(HomeRoute) { inclusive = false }
+                    launchSingleTop = true
+                }
+            }
+        }
 
     var broadcastSessions by remember { mutableStateOf(runtime.broadcastStore.sessions()) }
     DisposableEffect(runtime.broadcastStore) {
@@ -189,14 +199,9 @@ internal fun WalletNavHost(
                     onBack = backFrom(entry),
                     initialSelectedKeys = sendDraft.selectedKeys,
                     feeRateSatPerVb = sendDraft.feeRateSatPerVb,
-                    onSendWithCoins = { keys ->
-                        sendDraft = SendDraft.fromStandalone(keys)
-                        navController.navigate(SendRoute) {
-                            popUpTo(HomeRoute) { inclusive = false }
-                            launchSingleTop = true
-                        }
-                    },
+                    onSendWithCoins = onSendWithCoins,
                     onFrozenKey = { key -> sendDraft = sendDraft.frozen(key) },
+                    onOpenTx = { txid -> navController.navigate(TxDetailsRoute(txid = txid)) { launchSingleTop = true } },
                 )
             }
             composable<TxDetailsRoute> { entry ->
@@ -207,6 +212,12 @@ internal fun WalletNavHost(
                     txid = route.txid,
                     onBack = backFrom(entry),
                     onShowPsbt = { navController.navigate(StoredPsbtRoute(route.txid)) { launchSingleTop = true } },
+                    coinNav =
+                        CoinSheetNav(
+                            onSend = { key -> onSendWithCoins(setOf(key)) },
+                            onOpenTx = { txid -> navController.navigate(TxDetailsRoute(txid = txid)) },
+                            onFrozen = { key -> sendDraft = sendDraft.frozen(key) },
+                        ),
                 )
             }
             composable<StoredPsbtRoute> { entry ->
