@@ -111,4 +111,42 @@ class TorWarmUpTest {
             assertFalse(ranAfter)
             assertTrue(caller.isCancelled)
         }
+
+    @Test
+    fun switching_the_route_with_warm_up_on_warms_up_the_new_route() =
+        runBlocking {
+            val events = mutableListOf<String>()
+            val oldStarted = CompletableDeferred<Unit>()
+            val oldRouteDropped = CompletableDeferred<Unit>()
+            // A warm-up still running on the old route: echalote fails it when the route changes.
+            val old =
+                startTorWarmUp("https://example.invalid/") {
+                    events += "old-warm-up"
+                    oldStarted.complete(Unit)
+                    oldRouteDropped.await()
+                    error("exit dialer disposed")
+                }
+            oldStarted.await()
+            val switch =
+                launchTorDirectRelay(
+                    enabled = true,
+                    warmUpAfter = true,
+                    apply = {
+                        events += "apply"
+                        oldRouteDropped.complete(Unit)
+                    },
+                    warmUp = { events += "new-warm-up" },
+                )
+            switch.join()
+            old.join()
+            assertEquals(listOf("old-warm-up", "apply", "new-warm-up"), events)
+        }
+
+    @Test
+    fun switching_the_route_with_warm_up_off_does_not_warm_up() =
+        runBlocking {
+            var warmed = false
+            launchTorDirectRelay(enabled = true, warmUpAfter = false, apply = {}, warmUp = { warmed = true }).join()
+            assertFalse(warmed)
+        }
 }
