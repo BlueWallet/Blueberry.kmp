@@ -28,10 +28,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import io.bluewallet.blueberry.boot.AppearancePreference
 import io.bluewallet.blueberry.boot.appearanceLabel
 import io.bluewallet.blueberry.boot.cycleAppearance
+import io.bluewallet.blueberry.boot.launchTorDirectRelay
 import io.bluewallet.blueberry.boot.loadAppearance
+import io.bluewallet.blueberry.boot.loadTorDirectRelay
+import io.bluewallet.blueberry.boot.loadTorWarmUp
+import io.bluewallet.blueberry.boot.saveTorDirectRelay
+import io.bluewallet.blueberry.boot.saveTorWarmUp
+import io.bluewallet.blueberry.boot.startTorWarmUp
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
@@ -66,6 +74,8 @@ fun SettingsScreen(
     val alwaysShowSync = LocalAlwaysShowSync.current
     val onAlwaysShowSyncChange = LocalAlwaysShowSyncChange.current
     var appearance by remember(db) { mutableStateOf(loadAppearance(db)) }
+    var torWarmUp by remember(db) { mutableStateOf(loadTorWarmUp(db)) }
+    var torDirect by remember(db) { mutableStateOf(loadTorDirectRelay(db)) }
     val onAppearanceChange = LocalAppearanceChange.current
     val safe = WindowInsets.safeDrawing.asPaddingValues()
     val topChrome = safe.calculateTopPadding() + platformHeaderClearance()
@@ -107,6 +117,23 @@ fun SettingsScreen(
                 AlwaysShowSyncCard(
                     checked = alwaysShowSync,
                     onCheckedChange = onAlwaysShowSyncChange,
+                )
+                TorWarmUpCard(
+                    checked = torWarmUp,
+                    onCheckedChange = { on ->
+                        torWarmUp = on
+                        saveTorWarmUp(db, on)
+                        if (on) startTorWarmUp()
+                    },
+                )
+                TorToggleCard(
+                    slots = torDirectRelaySlots(),
+                    checked = torDirect,
+                    onCheckedChange = { on ->
+                        torDirect = on
+                        saveTorDirectRelay(db, on)
+                        launchTorDirectRelay(on)
+                    },
                 )
                 SecretCard(secret = secret, onShow = onOpenSecret)
                 StorageCard(databaseSize = databaseSize, onClear = { confirmClear = true })
@@ -179,7 +206,11 @@ private fun AlwaysShowSyncCard(
         caption = slots.caption,
         modifier = Modifier.fillMaxWidth(),
         trailing = {
-            BwSwitch(checked = checked, onCheckedChange = onCheckedChange)
+            BwSwitch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                modifier = Modifier.semantics { contentDescription = slots.value },
+            )
         },
     )
 }

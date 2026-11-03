@@ -1,0 +1,14 @@
+# Second "Test Tor" tap, reusing the circuit from test-tor-cold (runs right after it, see config.yaml).
+# The tap clears the previous result synchronously, so "OK" here is this tap's result.
+appId: io.bluewallet.blueberry
+name: test-tor-warm
+---
+- runFlow: ../common/open-settings.yaml
+- tapOn: "Test Tor"
+- extendedWaitUntil:
+    notVisible: "Testing Tor…"
+    timeout: 200000
+- extendedWaitUntil:
+    visible: "OK"
+    timeout: 10000
+- takeScreenshot: 01-test-tor-ok

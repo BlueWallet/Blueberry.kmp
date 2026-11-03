@@ -150,6 +150,26 @@ class CoinSheetModelTest {
         assertEquals("Starts a send with this coin selected", model.sendSubtitle)
         assertTrue(model.sendEnabled)
     }
+
+    @Test
+    fun address_label_is_the_placeholder_not_the_saved_name() {
+        val hinted = utxo("ee", 50_000).copy(addressLabel = "Rent")
+        val named = utxo("ff", 40_000, name = "Mine").copy(addressLabel = "Rent")
+        val rows = listOf(hinted, named)
+        val keys = rows.associate { it.key to it.key }
+        val control = buildCoinControlSnapshot(rows, CoinLinkage(keys, keys), emptySet(), null)
+        val snap = WalletTxsSnapshot(utxos = rows, coinLinkGraph = CoinLinkGraph.Empty)
+        val hint =
+            buildCoinSheetModel(CoinSheetRequest(hinted.key, snap, control, emptyMap(), 0, null, false))
+        val own =
+            buildCoinSheetModel(CoinSheetRequest(named.key, snap, control, emptyMap(), 0, null, false))
+        assertNotNull(hint)
+        assertEquals("", hint.label)
+        assertEquals("Rent", hint.labelPlaceholder)
+        assertNotNull(own)
+        assertEquals("Mine", own.label)
+        assertEquals("Rent", own.labelPlaceholder)
+    }
 }
 
 @Suppress("LongParameterList")

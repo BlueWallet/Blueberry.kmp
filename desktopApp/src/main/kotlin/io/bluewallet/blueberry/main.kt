@@ -6,12 +6,14 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import io.bluewallet.blueberry.boot.blueberrySqlitePath
+import io.bluewallet.blueberry.boot.installTorDirCache
 import java.io.File
 
 fun main() =
     application {
         val dir = File("blueberry.data")
         dir.mkdirs()
+        installTorDirCache(dir.absolutePath)
         val path = blueberrySqlitePath(dir.absolutePath)
         Window(
             onCloseRequest = ::exitApplication,

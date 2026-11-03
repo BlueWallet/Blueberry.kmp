@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import io.bluewallet.blueberry.boot.blueberrySqlitePath
+import io.bluewallet.blueberry.boot.installTorDirCache
 import android.graphics.Color as AndroidColor
 
 class MainActivity : ComponentActivity() {
@@ -18,6 +19,8 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
 
+        // Public, re-downloadable Tor directory data: keep it out of backups.
+        installTorDirCache(noBackupFilesDir.absolutePath)
         val path = blueberrySqlitePath(filesDir.absolutePath)
         setContent {
             App(databasePath = path)

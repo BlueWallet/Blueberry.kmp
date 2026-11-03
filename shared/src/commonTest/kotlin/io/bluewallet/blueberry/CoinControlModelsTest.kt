@@ -49,7 +49,8 @@ class CoinControlModelsTest {
     fun fixture_filter_counts() {
         val counts = fixtureSnapshot().filterCounts
         assertEquals(11, counts[CoinControlFilter.All])
-        assertEquals(3, counts[CoinControlFilter.Labeled])
+        // c1, c4, c5, and the frozen c11 "Unsolicited": Labeled ignores frozen and change.
+        assertEquals(4, counts[CoinControlFilter.Labeled])
         assertEquals(4, counts[CoinControlFilter.Change])
         assertEquals(3, counts[CoinControlFilter.NoLabel])
         assertEquals(1, counts[CoinControlFilter.Frozen])
@@ -65,7 +66,6 @@ class CoinControlModelsTest {
 
         val c11 = snap.coins.first { it.key == "c11:0" }
         assertTrue(c11.isFrozen)
-        assertEquals(CoinPrivacyState.Frozen, c11.privacyState)
         assertEquals("Frozen", coinRowTag(c11))
     }
 

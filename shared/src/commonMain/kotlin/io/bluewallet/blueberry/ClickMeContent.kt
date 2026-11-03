@@ -54,9 +54,10 @@ fun ClickMeContent() {
                         val line = torCheckProgressLine(percent, stage) ?: return@FetchProgressListener
                         scope.launch { torStage = line }
                     }
+                torBusy = true
+                torStage = null
+                torResult = null
                 scope.launch {
-                    torBusy = true
-                    torStage = null
                     torResult =
                         try {
                             withContext(Dispatchers.Default) {
