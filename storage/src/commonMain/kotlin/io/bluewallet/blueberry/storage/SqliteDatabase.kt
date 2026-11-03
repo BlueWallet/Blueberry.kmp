@@ -204,6 +204,51 @@ internal class SqliteDatabase(
             }
         }
 
+    override val broadcastVia =
+        object : BroadcastViaRepository {
+            override fun get(txid: String): String? = storageDb.broadcastViaQueries.get(txid).executeAsOneOrNull()
+
+            override fun upsert(
+                txid: String,
+                via: String,
+            ) {
+                storageDb.broadcastViaQueries.upsert(txid, via)
+            }
+
+            override fun list(): List<BroadcastViaRow> =
+                storageDb.broadcastViaQueries
+                    .list()
+                    .executeAsList()
+                    .map { BroadcastViaRow(it.txid, it.via) }
+        }
+
+    override val replacedTxs =
+        object : ReplacedTxsRepository {
+            override fun get(txid: String): ReplacedTxRow? =
+                storageDb.replacedTxsQueries
+                    .get(txid)
+                    .executeAsOneOrNull()
+                    ?.let { ReplacedTxRow(it.txid, it.replacement_txid, it.outcome) }
+
+            override fun upsert(row: ReplacedTxRow) {
+                storageDb.replacedTxsQueries.upsert(row.txid, row.replacementTxid, row.outcome)
+            }
+
+            override fun delete(txid: String) {
+                storageDb.replacedTxsQueries.delete(txid)
+            }
+
+            override fun list(): List<ReplacedTxRow> =
+                storageDb.replacedTxsQueries
+                    .list()
+                    .executeAsList()
+                    .map { ReplacedTxRow(it.txid, it.replacement_txid, it.outcome) }
+
+            override fun deleteReopened() {
+                storageDb.replacedTxsQueries.deleteReopened()
+            }
+        }
+
     override val peers =
         object : PeersRepository {
             override fun upsert(peer: PeerWrite) {
@@ -895,6 +940,7 @@ internal class SqliteDatabase(
             storageDb.filtersQueries.rewindTransactions(height)
             storageDb.sendsQueries.reopenAbove(height)
             storageDb.privateSendsQueries.reopenAbove(height)
+            storageDb.replacedTxsQueries.deleteReopened()
         }
     }
 

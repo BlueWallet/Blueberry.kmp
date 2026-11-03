@@ -1,5 +1,12 @@
 package io.bluewallet.blueberry
 
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -13,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavBackStackEntry
@@ -130,6 +138,7 @@ internal fun WalletNavHost(
 
     CompositionLocalProvider(
         LocalHomeVisible provides homeVisible,
+        LocalHomeWallet provides runtime.wallet,
         LocalBroadcastSessions provides broadcastSessions,
         LocalOpenBroadcast provides openBroadcast,
     ) {
@@ -204,7 +213,12 @@ internal fun WalletNavHost(
                     onOpenTx = { txid -> navController.navigate(TxDetailsRoute(txid = txid)) { launchSingleTop = true } },
                 )
             }
-            composable<TxDetailsRoute> { entry ->
+            composable<TxDetailsRoute>(
+                enterTransition = { txDetailEnter() },
+                exitTransition = { txDetailExit() },
+                popEnterTransition = { txDetailPopEnter() },
+                popExitTransition = { txDetailPopExit() },
+            ) { entry ->
                 val route = entry.toRoute<TxDetailsRoute>()
                 TxDetailsScreen(
                     runtime = runtime,
@@ -215,7 +229,9 @@ internal fun WalletNavHost(
                     coinNav =
                         CoinSheetNav(
                             onSend = { key -> onSendWithCoins(setOf(key)) },
-                            onOpenTx = { txid -> navController.navigate(TxDetailsRoute(txid = txid)) },
+                            onOpenTx = { txid ->
+                                navController.navigate(TxDetailsRoute(txid = txid)) { launchSingleTop = true }
+                            },
                             onFrozen = { key -> sendDraft = sendDraft.frozen(key) },
                         ),
                 )
@@ -264,3 +280,16 @@ internal fun WalletNavHost(
         }
     }
 }
+
+/** Horizontal push used when one transaction opens another. Matches the iOS NavHost slide. */
+private fun txPushSpec() = tween<IntOffset>(easing = LinearEasing)
+
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.txDetailEnter(): EnterTransition = slideInHorizontally(txPushSpec()) { it }
+
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.txDetailExit(): ExitTransition = slideOutHorizontally(txPushSpec()) { -(it * TX_PUSH_PARALLAX).toInt() }
+
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.txDetailPopEnter(): EnterTransition = slideInHorizontally(txPushSpec()) { -(it * TX_PUSH_PARALLAX).toInt() }
+
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.txDetailPopExit(): ExitTransition = slideOutHorizontally(txPushSpec()) { it }
+
+private const val TX_PUSH_PARALLAX = 0.3f

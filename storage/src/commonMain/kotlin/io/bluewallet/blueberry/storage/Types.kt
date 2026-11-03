@@ -341,6 +341,41 @@ interface SendsRepository {
     fun list(): List<SendRow>
 }
 
+data class BroadcastViaRow(
+    val txid: String,
+    val via: String,
+)
+
+interface BroadcastViaRepository {
+    fun get(txid: String): String?
+
+    fun upsert(
+        txid: String,
+        via: String,
+    )
+
+    fun list(): List<BroadcastViaRow>
+}
+
+data class ReplacedTxRow(
+    val txid: String,
+    val replacementTxid: String,
+    val outcome: String,
+)
+
+interface ReplacedTxsRepository {
+    fun get(txid: String): ReplacedTxRow?
+
+    fun upsert(row: ReplacedTxRow)
+
+    fun delete(txid: String)
+
+    fun list(): List<ReplacedTxRow>
+
+    /** Drops rows whose send was reopened, so a reorg does not keep a dead "replaced" copy. */
+    fun deleteReopened()
+}
+
 data class MatchedBlock(
     val height: Int,
     val blockHashInternalHex: String,
@@ -440,6 +475,8 @@ interface Database {
     val addressLabels: AddressLabelsRepository
     val privateSends: PrivateSendsRepository
     val sends: SendsRepository
+    val broadcastVia: BroadcastViaRepository
+    val replacedTxs: ReplacedTxsRepository
 
     fun transaction(fn: () -> Unit)
 

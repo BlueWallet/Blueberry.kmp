@@ -13,6 +13,10 @@ data class TxFlowNode(
     val role: TxFlowRole,
     /** Coin color for an input dot. Ignored for outputs. */
     val colorArgb: Long? = null,
+    /** When set, the chip shows this instead of an amount. Send Review leaves it unset. */
+    val headline: String? = null,
+    /** Grey ring instead of a filled dot. Change keeps its own ring. */
+    val ring: Boolean = false,
 )
 
 data class TxFlowPoint(

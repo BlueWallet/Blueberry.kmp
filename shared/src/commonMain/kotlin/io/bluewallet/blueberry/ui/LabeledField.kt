@@ -50,7 +50,7 @@ private val KeyboardBarClearance = 96.dp
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Modifier.keepAboveKeyboard(): Modifier {
+internal fun Modifier.keepAboveKeyboard(): Modifier {
     val requester = remember { BringIntoViewRequester() }
     val density = LocalDensity.current
     val imeBottom = WindowInsets.ime.getBottom(density)

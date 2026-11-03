@@ -25,6 +25,18 @@ fun prevoutTxidDisplay(inputHash: ByteArray): String =
 /** Same floor as bip158's block decoder — a valid tx cannot be smaller. */
 private const val MIN_TRANSACTION_BYTES = 60
 
+/** Transaction count from the varint after the 80-byte header. Null when the blob is too short. */
+fun blockTxCount(blockBytes: ByteArray): Int? {
+    if (blockBytes.size < 81) return null
+    return runCatching {
+        val input = ByteArrayInput(blockBytes)
+        val header = ByteArray(80)
+        val read = input.read(header, 0, 80)
+        val count = if (read == 80) BtcSerializer.varint(input).toLong() else -1L
+        if (count < 0L || count > Int.MAX_VALUE.toLong()) null else count.toInt()
+    }.getOrNull()
+}
+
 fun decodeBlockTxs(blockBytes: ByteArray): List<Transaction> {
     if (blockBytes.size < 80) {
         throw IllegalArgumentException("block too short")

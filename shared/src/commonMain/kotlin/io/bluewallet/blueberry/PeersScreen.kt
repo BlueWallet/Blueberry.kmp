@@ -68,6 +68,8 @@ import io.bluewallet.blueberry.ui.rememberReducedMotion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+internal val LocalHomeWallet = staticCompositionLocalOf<io.bluewallet.blueberry.wallet.Wallet?> { null }
+
 internal val LocalBroadcastSessions = staticCompositionLocalOf<List<BroadcastSession>> { emptyList() }
 
 internal val LocalOpenBroadcast = staticCompositionLocalOf<(String) -> Unit> { {} }
@@ -203,6 +205,21 @@ fun PeersScreen(
                 val dockVisible = showDock && !detailedSync
                 val broadcastRows =
                     broadcastListRows(LocalBroadcastSessions.current, walletTxs.txs.map { it.txid }.toSet())
+                val homeWallet = LocalHomeWallet.current
+                val txSections =
+                    remember(walletTxs, headers.height, homeWallet) {
+                        txHomeSections(
+                            TxQuery(
+                                db = db,
+                                wallet = homeWallet,
+                                snap = walletTxs,
+                                tipHeight = db.headers.tip()?.height,
+                                nowEpochS =
+                                    io.bluewallet.blueberry.headers
+                                        .nowMillis() / 1000,
+                            ),
+                        )
+                    }
                 val openBroadcast = LocalOpenBroadcast.current
                 LazyColumn(
                     modifier =
@@ -221,7 +238,7 @@ fun PeersScreen(
                 ) {
                     homeFeed(
                         walletTxs = walletTxs,
-                        broadcasts = broadcastRows,
+                        activity = HomeActivity(txSections, broadcastRows),
                         open =
                             HomeOpen(
                                 receive = onOpenReceive,
@@ -368,16 +385,13 @@ private fun HomePinnedChrome(
         )
         HomeActionRow(onReceive = onOpenReceive, onSend = onOpenSend)
         CoinsPanel(snap = walletTxs, onClick = onOpenCoins)
-        Column {
-            HomeSectionLabel("Transactions")
-            if (walletTxs.blocksTotal > walletTxs.blocksParsed) {
-                Text(
-                    text = formatParseProgress(walletTxs.blocksParsed, walletTxs.blocksTotal, walletTxs.etaMs),
-                    color = BwColors.InkMuted,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.CaptionSize,
-                )
-            }
+        if (walletTxs.blocksTotal > walletTxs.blocksParsed) {
+            Text(
+                text = formatParseProgress(walletTxs.blocksParsed, walletTxs.blocksTotal, walletTxs.etaMs),
+                color = BwColors.InkMuted,
+                fontFamily = BwFontFamily,
+                fontSize = BwType.CaptionSize,
+            )
         }
     }
 }
@@ -389,14 +403,19 @@ private class HomeOpen(
     val tx: (String) -> Unit,
 )
 
+private class HomeActivity(
+    val sections: List<TxListSection>,
+    val broadcasts: List<BroadcastListRow>,
+)
+
 private fun LazyListScope.homeFeed(
     walletTxs: WalletTxsSnapshot,
-    broadcasts: List<BroadcastListRow>,
+    activity: HomeActivity,
     open: HomeOpen,
     onOpenBroadcast: (String) -> Unit,
     dockVisible: Boolean,
 ) {
-    if (walletTxs.txs.isEmpty() && broadcasts.isEmpty()) {
+    if (walletTxs.txs.isEmpty() && activity.broadcasts.isEmpty()) {
         item(key = "home-empty") {
             Column(Modifier.fillParentMaxHeight()) {
                 HomePinnedChrome(
@@ -432,27 +451,22 @@ private fun LazyListScope.homeFeed(
                 onOpenCoins = open.coins,
             )
         }
-        items(broadcasts, key = { "broadcast-${it.id}" }) { row ->
+        items(activity.broadcasts, key = { "broadcast-${it.id}" }) { row ->
             Box(Modifier.padding(horizontal = BwSpace.ScreenX)) {
                 HomeBroadcastRow(row = row, onClick = { onOpenBroadcast(row.id) })
             }
         }
-        items(walletTxs.txs, key = { it.txid }) { tx ->
-            Box(Modifier.padding(horizontal = BwSpace.ScreenX)) {
-                HomeTxBubble(tx = tx, onClick = { open.tx(tx.txid) })
+        if (activity.sections.isNotEmpty()) {
+            activity.sections.forEach { section ->
+                item(key = "tx-day-${section.title}") {
+                    Box(Modifier.padding(horizontal = BwSpace.ScreenX)) { TxDayHeader(section.title) }
+                }
+                item(key = "tx-card-${section.title}") {
+                    Box(Modifier.padding(horizontal = BwSpace.ScreenX)) {
+                        TxDayCard(section.items, open.tx)
+                    }
+                }
             }
         }
     }
-}
-
-@Composable
-private fun HomeSectionLabel(text: String) {
-    Text(
-        text = text,
-        color = BwColors.InkSecondary,
-        fontFamily = BwFontFamily,
-        fontSize = 15.sp,
-        fontWeight = BwType.Label,
-        modifier = Modifier.padding(bottom = 6.dp),
-    )
 }

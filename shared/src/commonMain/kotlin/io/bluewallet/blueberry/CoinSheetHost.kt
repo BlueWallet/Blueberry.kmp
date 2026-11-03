@@ -17,6 +17,7 @@ import io.bluewallet.blueberry.ui.LocalDarkPalette
 import io.bluewallet.blueberry.ui.PlatformModalSheet
 import io.bluewallet.blueberry.ui.SheetClose
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.time.Clock
@@ -115,7 +116,15 @@ private fun CoinSheetHost(
                 }
             },
             onSend = { close { nav.onSend(outpoint) } },
-            onOpenTx = { txid -> close { nav.onOpenTx(txid) } },
+            onOpenTx = { txid ->
+                close {
+                    // A push started inside the sheet dismiss completion is dropped on iOS.
+                    scope.launch {
+                        delay(SHEET_DISMISS_HANDOFF_MS)
+                        nav.onOpenTx(txid)
+                    }
+                }
+            },
         )
     val current = model
     if (current == null) {
@@ -145,3 +154,6 @@ private fun loadCoinSheet(
         ),
     )
 }
+
+/** Lets the sheet's dismiss transition finish before the next screen push starts. */
+private const val SHEET_DISMISS_HANDOFF_MS = 32L

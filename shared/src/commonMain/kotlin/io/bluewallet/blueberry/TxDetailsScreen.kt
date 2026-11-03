@@ -1,40 +1,51 @@
 package io.bluewallet.blueberry
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.dp
+import io.bluewallet.blueberry.headers.nowMillis
+import io.bluewallet.blueberry.parse.blockFeeRateLabel
+import io.bluewallet.blueberry.parse.blockTxCount
 import io.bluewallet.blueberry.storage.Database
-import io.bluewallet.blueberry.storage.StoredTx
-import io.bluewallet.blueberry.ui.AlwaysBounceScroll
-import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.PlainPillButton
-import io.bluewallet.blueberry.ui.ScreenHeader
+import io.bluewallet.blueberry.ui.PlatformScreenHeader
+import io.bluewallet.blueberry.ui.PlatformScrollEdge
 import io.bluewallet.blueberry.ui.TextAction
 import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.alwaysBounceVerticalScroll
-import io.bluewallet.blueberry.wallet.hexToBytes
+import io.bluewallet.blueberry.ui.dismissKeyboardOnTap
+import io.bluewallet.blueberry.ui.platformBottomEdgeClearance
+import io.bluewallet.blueberry.ui.platformHeaderClearance
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -51,7 +62,15 @@ fun TxDetailsScreen(
     coinNav: CoinSheetNav = CoinSheetNav(onSend = {}, onOpenTx = {}),
 ) {
     var coinKey by remember { mutableStateOf<String?>(null) }
-    TxDetailsContent(runtime, db, txid, onBack, onShowPsbt) { coinKey = it }
+    TxDetailsContent(
+        runtime,
+        db,
+        txid,
+        onBack,
+        onShowPsbt,
+        onOpenCoin = { coinKey = it },
+        onOpenTx = { other -> if (other != txid) coinNav.onOpenTx(other) },
+    )
     CoinSheetOverlay(
         runtime = runtime,
         db = db,
@@ -67,7 +86,7 @@ fun TxDetailsScreen(
 }
 
 @Composable
-@Suppress("LongParameterList")
+@Suppress("LongParameterList", "LongMethod")
 private fun TxDetailsContent(
     runtime: PeersRuntime,
     db: Database,
@@ -75,62 +94,150 @@ private fun TxDetailsContent(
     onBack: () -> Unit,
     onShowPsbt: () -> Unit,
     onOpenCoin: (String) -> Unit,
+    onOpenTx: (String) -> Unit,
 ) {
     val snap = rememberWalletTxs(runtime)
     var editing by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
-    var copiedLabel by remember { mutableStateOf<String?>(null) }
+    var copied by remember { mutableStateOf(false) }
+    var explorer by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val row = snap.txs.find { it.txid == txid }
-    AlwaysBounceScroll(Modifier.fillMaxSize().background(BwColors.Paper).safeDrawingPadding()) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
-            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
+    val tip = db.headers.tip()?.height
+    val blockStats = rememberBlockStats(db, txid, row?.height)
+    val screen =
+        remember(snap, tip, txid, blockStats) {
+            val current = snap.txs.find { it.txid == txid } ?: return@remember null
+            txDetailOf(TxQuery(db, runtime.wallet, snap, tip, nowMillis() / 1000), current, blockStats)
+        }
+    val safe = WindowInsets.safeDrawing.asPaddingValues()
+    val topChrome = safe.calculateTopPadding() + platformHeaderClearance()
+    Box(Modifier.fillMaxSize().background(BwColors.Paper).dismissKeyboardOnTap()) {
+        PlatformScrollEdge(
+            modifier = Modifier.fillMaxSize(),
+            top = topChrome,
+            bottom = safe.calculateBottomPadding(),
         ) {
-            ScreenHeader(title = "Transaction", onBack = onBack)
-            if (row == null) {
-                Text(
-                    text = "Transaction not found",
-                    color = BwColors.InkMuted,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.BodySize,
-                )
-            } else {
-                Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    TxDetailsBody(
-                        sources = txDetailSources(db, runtime.wallet, txid),
-                        row = row,
-                        copiedLabel = copiedLabel,
-                        onCopy = { label, value ->
-                            clipboard.setText(AnnotatedString(value))
-                            copiedLabel = label
-                        },
-                        onEditNote = {
-                            draft = row.paymentLabel.orEmpty()
-                            editing = true
-                        },
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .alwaysBounceVerticalScroll()
+                        .padding(top = topChrome + 24.dp)
+                        .padding(horizontal = BwSpace.ScreenX)
+                        .padding(bottom = platformBottomEdgeClearance())
+                        .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom)),
+            ) {
+                if (row == null || screen == null) {
+                    Text(
+                        text = "Transaction not found",
+                        color = BwColors.InkMuted,
+                        fontFamily = BwFontFamily,
+                        fontSize = BwType.BodySize,
+                    )
+                } else {
+                    TxDetailColumn(
+                        screen = screen,
+                        host =
+                            TxDetailHost(
+                                copied = copied,
+                                editing = editing,
+                                draft = draft,
+                                suggestions = txLabelSuggestions(snap, screen.detail.direction),
+                                privateFacts = privateFacts(db, txid),
+                                onBack = onBack,
+                                onCopy = {
+                                    clipboard.setText(AnnotatedString(txid))
+                                    copied = true
+                                },
+                                onEdit = {
+                                    draft = row.paymentLabel.orEmpty()
+                                    editing = true
+                                },
+                                onDraft = { draft = it },
+                                onSave = {
+                                    setTxNote(db, runtime.wallet, runtime.walletTxsStore, txid, draft)
+                                    uploadLabels(scope, db)
+                                    editing = false
+                                },
+                                onCancel = { editing = false },
+                                onFreeze = { key, frozen ->
+                                    val wallet = runtime.wallet
+                                    if (wallet != null && screen.detail.outcome == TxOutcome.None) {
+                                        setUtxoFrozen(db, wallet, runtime.walletTxsStore, key, frozen)
+                                    }
+                                },
+                                onOpenCoin = onOpenCoin,
+                                onOpenTx = onOpenTx,
+                                onExplorer = { explorer = true },
+                                sendActions = {
+                                    if (screen.detail.outcome == TxOutcome.None && row.height == 0) {
+                                        OpenSendActions(
+                                            OpenSendHost(db, runtime, scope, onForgotten = onBack, onShowPsbt = onShowPsbt),
+                                            row,
+                                            snap,
+                                        )
+                                    }
+                                },
+                            ),
                     )
                 }
-                OpenCoinRows(snap.utxos.filter { it.txid == txid }.sortedBy { it.vout }, onOpenCoin)
-                OpenSendActions(OpenSendHost(db, runtime, scope, onForgotten = onBack, onShowPsbt = onShowPsbt), row, snap)
             }
         }
+        PlatformScreenHeader(
+            title = screen?.detail?.header?.title ?: "Transaction",
+            onBack = onBack,
+            showBarTitle = true,
+            trailingText = if (copied) "Copied" else "Copy",
+            onTrailing = {
+                clipboard.setText(AnnotatedString(txid))
+                copied = true
+            },
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = safe.calculateTopPadding(), start = BwSpace.ScreenX, end = BwSpace.ScreenX),
+        )
     }
-    TxNoteEditor(
-        editing = editing,
-        draft = draft,
-        onDraft = { draft = it },
-        onSave = {
-            setTxNote(db, runtime.wallet, runtime.walletTxsStore, txid, draft)
-            uploadLabels(scope, db)
-            editing = false
-        },
-        onCancel = { editing = false },
-    )
+    if (explorer) TxExplorerSheet(txid) { explorer = false }
+}
+
+@Composable
+private fun rememberBlockStats(
+    db: Database,
+    txid: String,
+    height: Int?,
+): TxBlockStats? {
+    var blockStats by remember(txid) { mutableStateOf<TxBlockStats?>(null) }
+    LaunchedEffect(txid, height) {
+        val mined = height ?: 0
+        blockStats = if (mined <= 0) null else blockStatsOf(db, mined)
+    }
+    return blockStats
+}
+
+private suspend fun blockStatsOf(
+    db: Database,
+    height: Int,
+): TxBlockStats =
+    withContext(Dispatchers.Default) {
+        val bytes = db.blocks.get(height)?.block
+        TxBlockStats(
+            txCount = bytes?.let { blockTxCount(it) },
+            feeRateLabel = bytes?.let { blockFeeRateLabel(it, height) },
+        )
+    }
+
+private fun privateFacts(
+    db: Database,
+    txid: String,
+): List<Pair<String, String>> {
+    val send = db.privateSends.get(txid) ?: return emptyList()
+    val rows = mutableListOf("Private destination" to send.destination, privateSendProvider())
+    val order = send.orderId.trim()
+    if (order.isNotEmpty()) rows += "Order ID" to order
+    return rows
 }
 
 private class OpenSendHost(
@@ -245,179 +352,6 @@ private fun ForgetSendDialog(
         },
         confirmButton = { PillButton(text = "Forget", onClick = onForget) },
         dismissButton = { TextAction(text = "Keep", onClick = onKeep) },
-        containerColor = BwColors.Card,
-    )
-}
-
-@Composable
-private fun TxNoteEditor(
-    editing: Boolean,
-    draft: String,
-    onDraft: (String) -> Unit,
-    onSave: () -> Unit,
-    onCancel: () -> Unit,
-) {
-    if (!editing) return
-    TxNoteDialog(
-        draft = draft,
-        onDraft = onDraft,
-        onSave = onSave,
-        onCancel = onCancel,
-    )
-}
-
-@Composable
-private fun txDetailSources(
-    db: Database,
-    wallet: io.bluewallet.blueberry.wallet.Wallet?,
-    txid: String,
-): Pair<StoredTx?, TxDetailSources> {
-    val stored = db.transactions.get(txid)
-    val privateSend = db.privateSends.get(txid)
-    val txBytes =
-        stored?.tx
-            ?: privateSend?.txHex?.let(::hexToBytes)
-            ?: db.sends
-                .get(txid)
-                ?.txHex
-                ?.let(::hexToBytes)
-    val changeScripts =
-        wallet
-            ?.snapshot()
-            ?.addresses
-            ?.filter { it.change }
-            ?.map { it.scriptPubKey }
-            .orEmpty()
-    return stored to
-        TxDetailSources(
-            txBytes = txBytes,
-            changeScripts = changeScripts,
-            parentTx = { id -> db.transactions.get(id)?.tx },
-            privateDestination = privateSend?.destination,
-            privateProvider = privateSend?.let { privateSendProvider() },
-            privateOrderId = privateSend?.orderId,
-        )
-}
-
-@Composable
-private fun TxDetailsBody(
-    sources: Pair<StoredTx?, TxDetailSources>,
-    row: WalletTxRow,
-    copiedLabel: String?,
-    onCopy: (String, String) -> Unit,
-    onEditNote: () -> Unit,
-) {
-    val (stored, detailSources) = sources
-    val fields = txDetailFields(row, stored, row.fee, detailSources)
-    Column(
-        modifier = Modifier.fillMaxSize().alwaysBounceVerticalScroll(),
-        verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-    ) {
-        for (field in fields) {
-            TxDetailFieldRow(
-                row = row,
-                field = field,
-                copiedLabel = copiedLabel,
-                onCopy = onCopy,
-                onEditNote = onEditNote,
-            )
-        }
-    }
-}
-
-@Composable
-private fun TxDetailFieldRow(
-    row: WalletTxRow,
-    field: TxDetailField,
-    copiedLabel: String?,
-    onCopy: (String, String) -> Unit,
-    onEditNote: () -> Unit,
-) {
-    val isNote = field.label == "Note"
-    val isCopyable = field.label == "Transaction ID" || field.label == "Order ID"
-    val incoming = row.netDeltaSats >= 0
-    Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .then(
-                    when {
-                        isNote -> Modifier.clickable(onClick = onEditNote)
-                        isCopyable -> Modifier.clickable { onCopy(field.label, field.value) }
-                        else -> Modifier
-                    },
-                ).padding(vertical = BwSpace.Gap),
-    ) {
-        Text(
-            text = field.label,
-            color = BwColors.InkSecondary,
-            fontFamily = BwFontFamily,
-            fontSize = BwType.LabelSize,
-            fontWeight = BwType.Label,
-        )
-        when {
-            field.label == "Amount" ->
-                BtcAmountText(
-                    sats = row.netDeltaSats,
-                    plus = true,
-                    color = if (incoming) BwColors.Success else BwColors.Danger,
-                )
-            isNote && field.value.isEmpty() ->
-                Text(
-                    text = "Add note",
-                    color = BwColors.InkSecondary,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.BodySize,
-                )
-            else ->
-                Text(
-                    text = field.value,
-                    color = BwColors.Ink,
-                    fontFamily = BwFontFamily,
-                    fontSize = BwType.BodySize,
-                    fontWeight = BwType.Body,
-                )
-        }
-        if (isCopyable && copiedLabel == field.label) {
-            Text(
-                text = "Copied",
-                color = BwColors.Success,
-                fontFamily = BwFontFamily,
-                fontSize = BwType.CaptionSize,
-                fontWeight = BwType.Caption,
-            )
-        }
-    }
-}
-
-@Composable
-private fun TxNoteDialog(
-    draft: String,
-    onDraft: (String) -> Unit,
-    onSave: () -> Unit,
-    onCancel: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = {
-            Text(
-                text = "Note",
-                color = BwColors.Ink,
-                fontFamily = BwFontFamily,
-                fontWeight = BwType.Value,
-            )
-        },
-        text = {
-            OutlinedTextField(
-                value = draft,
-                onValueChange = onDraft,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("Note") },
-            )
-        },
-        confirmButton = { PillButton(text = "Save", onClick = onSave) },
-        dismissButton = { TextAction(text = "Cancel", onClick = onCancel) },
         containerColor = BwColors.Card,
     )
 }

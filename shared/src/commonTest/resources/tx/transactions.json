@@ -1,0 +1,76 @@
+{
+  "note": "Sample data behind the mocks. 'in' mirrors the real screen from the current app (txid, height, index, sizes, block hash); the other two are invented. Times are Europe/Madrid. Witness bytes include the 2-byte marker and flag.",
+  "now": "2026-10-20T19:38:00+02:00",
+  "tipHeight": 972358,
+  "feeRateSatPerVb": 10,
+  "transactions": [
+    {
+      "key": "in",
+      "txid": "3e483d227a744b157c456d73b261656ab26d18462996480a893e527b07e712a6",
+      "direction": "in",
+      "label": "",
+      "inputCount": 1,
+      "walletInputs": [],
+      "baseBytes": 137,
+      "witnessBytes": 109,
+      "block": {
+        "height": 972347,
+        "hash": "00000000000000000001f079aa38e67da9994f2bea042d347fb67c5c0a6ea453",
+        "minedAt": "2026-10-20T17:38:00+02:00",
+        "index": 838,
+        "txCount": 3214
+      },
+      "outputs": [
+        {"vout": 0, "valueSat": 100000, "mine": true, "change": false, "address": "bc1qw8k3m5h2v9xg4n7qz0r6tlp3c8ys5ufd2ja7x2", "addressIndex": 14, "addressUseCount": 1, "label": "", "frozen": false, "spent": false, "groupName": null, "groupSize": 1},
+        {"vout": 1, "valueSat": 438211, "mine": false}
+      ]
+    },
+    {
+      "key": "dust",
+      "txid": "b71c0e94d2a85f3360e1c7b4a9f02d58e6c13a7f94b20d5e81c6a3f7d09b4e25",
+      "direction": "in",
+      "label": "Unsolicited",
+      "inputCount": 1,
+      "walletInputs": [],
+      "baseBytes": 358,
+      "witnessBytes": 109,
+      "block": {
+        "height": 966596,
+        "hash": "000000000000000000027c4ea1b9d03f58e6a2c7104bd95e3f80a6c21d7e94b3",
+        "minedAt": "2026-09-10T21:04:00+02:00",
+        "index": 2911,
+        "txCount": 3388
+      },
+      "outputs": [
+        {"vout": 0, "valueSat": 292, "mine": false},
+        {"vout": 1, "valueSat": 292, "mine": false},
+        {"vout": 2, "valueSat": 104310, "mine": false},
+        {"vout": 3, "valueSat": 292, "mine": true, "change": false, "address": "bc1q9vz2xk7m4ht3e8dpw6nlq0aj5cfy2rsg7u4e3t", "addressIndex": 3, "addressUseCount": 4, "label": "Unsolicited", "frozen": false, "spent": false, "groupName": null, "groupSize": 1},
+        {"vout": 4, "valueSat": 292, "mine": false},
+        {"vout": 5, "valueSat": 292, "mine": false},
+        {"vout": 6, "valueSat": 292, "mine": false},
+        {"vout": 7, "valueSat": 292, "mine": false},
+        {"vout": 8, "valueSat": 292, "mine": false}
+      ]
+    },
+    {
+      "key": "out",
+      "txid": "7d2f91c0a4e8b36152f0c9d7e3a1b8406f5c2e9d71a0b4c38e6f2d9a15c07b84",
+      "direction": "out",
+      "label": "Concert tickets",
+      "inputCount": 1,
+      "walletInputs": [
+        {"outpoint": "324b41ec…:0", "valueSat": 112400, "label": "Salary Sept", "groupName": "Salary group", "groupSize": 3}
+      ],
+      "baseBytes": 113,
+      "witnessBytes": 109,
+      "block": null,
+      "broadcastAt": "2026-10-20T19:35:00+02:00",
+      "broadcastVia": "tor",
+      "outputs": [
+        {"vout": 0, "valueSat": 90000, "mine": false, "address": "bc1q2ddyzvdtk6trj6kvx53m25wvqymhj7jd9ewelh"},
+        {"vout": 1, "valueSat": 21977, "mine": true, "change": true, "address": "bc1qh6n3c9x0wq7y2t5d8kfgm4ra3zjlp0e7vs6u9c", "addressIndex": 22, "addressUseCount": 1, "label": "", "frozen": false, "spent": false, "groupName": "Salary group", "groupSize": 3}
+      ]
+    }
+  ]
+}

@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +27,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.bluewallet.blueberry.parse.styleBtc
+import io.bluewallet.blueberry.ui.AddressGroups
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwType
@@ -49,6 +50,7 @@ private val ChipShape = RoundedCornerShape(14.dp)
 private const val FEE_DASH_ON_DP = 2f
 private const val FEE_DASH_OFF_DP = 4f
 private const val FLOW_AMOUNT_SP = 12.5f
+private const val FLOW_LABEL_SP = 11f
 private const val CHANGE_ARGB = 0xFFAEB4BA
 private const val PAYMENT_ARGB = 0xFF3788E0
 private const val MUTED_ARGB = 0xFF6E767D
@@ -180,21 +182,72 @@ private fun FlowChip(node: TxFlowNode) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         FlowDot(node)
-        Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-            FlowAmount(sats = node.sats, color = if (payment) BwColors.Accent else BwColors.Ink)
-            Text(
-                text = flowChipLabel(node.label),
-                color = labelColor,
-                fontFamily = BwFontFamily,
-                fontSize = 11.sp,
-                lineHeight = 12.sp,
-                fontWeight = if (payment) BwType.Label else BwType.Body,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-            )
+        FlowChipLines(node, labelColor)
+    }
+}
+
+/** The caption stays within the amount line and ellipsizes past it. */
+@Composable
+private fun FlowChipLines(
+    node: TxFlowNode,
+    labelColor: Color,
+) {
+    val payment = node.role == TxFlowRole.Payment
+    Layout(
+        content = {
+            if (node.headline != null) {
+                Text(
+                    text = node.headline,
+                    color = if (payment) BwColors.Accent else BwColors.Ink,
+                    fontFamily = BwFontFamily,
+                    fontSize = FLOW_AMOUNT_SP.sp,
+                    lineHeight = 13.sp,
+                    fontWeight = BwType.Label,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else {
+                FlowAmount(sats = node.sats, color = if (payment) BwColors.Accent else BwColors.Ink)
+            }
+            FlowChipCaption(node.label, labelColor)
+        },
+    ) { measurables, constraints ->
+        val top = measurables[0].measure(constraints)
+        val caption = measurables[1].measure(Constraints(maxWidth = top.width))
+        layout(top.width, top.height + caption.height) {
+            top.place(0, 0)
+            caption.place(0, top.height)
         }
     }
+}
+
+@Composable
+private fun FlowChipCaption(
+    label: String,
+    color: Color,
+) {
+    val address = flowAddressOrNull(label)
+    if (address != null) {
+        AddressGroups(
+            address = address,
+            modifier = Modifier.fillMaxWidth(),
+            fontSize = FLOW_LABEL_SP.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        return
+    }
+    Text(
+        text = flowChipLabel(label),
+        color = color,
+        fontFamily = BwFontFamily,
+        fontSize = FLOW_LABEL_SP.sp,
+        lineHeight = 12.sp,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 /** Full satoshi amount: B plus eight decimal places. The chip grows to fit it. */
@@ -228,7 +281,15 @@ private fun FlowDot(node: TxFlowNode) {
         Box(
             Modifier
                 .size(10.dp)
-                .border(2.dp, Color(CHANGE_ARGB), CircleShape),
+                .border(2.dp, Color(node.colorArgb ?: CHANGE_ARGB), CircleShape),
+        )
+        return
+    }
+    if (node.ring) {
+        Box(
+            Modifier
+                .size(10.dp)
+                .border(1.5.dp, Color(node.colorArgb ?: MUTED_ARGB), CircleShape),
         )
         return
     }

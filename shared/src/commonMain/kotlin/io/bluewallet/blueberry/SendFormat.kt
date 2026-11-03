@@ -33,6 +33,13 @@ fun flowChipLabel(label: String): String {
 
 private fun shortenAddress(value: String): String = if (isFlowAddress(value)) shortAddress(value, head = 4, tail = 4) else value
 
+/** The address inside a chip label, including "To {address}", or null when the label is a name. */
+internal fun flowAddressOrNull(label: String): String? {
+    val trimmed = label.trim()
+    val rest = if (trimmed.startsWith("To ")) trimmed.removePrefix("To ").trim() else trimmed
+    return rest.takeIf { isFlowAddress(it) }
+}
+
 private val FLOW_ADDRESS_PREFIXES = listOf("bc1", "tb1", "bcrt1")
 
 private fun isFlowAddress(value: String): Boolean {
