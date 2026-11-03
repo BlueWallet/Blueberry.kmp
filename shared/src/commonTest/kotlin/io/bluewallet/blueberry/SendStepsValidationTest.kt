@@ -49,6 +49,21 @@ class SendStepsValidationTest {
         assertEquals(" in the selected coins", amountCapSuffix(2))
         assertEquals("Everything you pick next, minus the fee.", amountMaxHint(0))
         assertEquals("This coin, minus the fee.", amountMaxHint(1))
-        assertEquals("More than this coin holds.", amountOverCapMessage(1))
+        assertEquals("More than this coin holds. Add coins on the next step.", amountOverCapMessage(1))
+        assertEquals("More than the selected coins hold. Add coins on the next step.", amountOverCapMessage(2))
+    }
+
+    @Test
+    fun a_short_pick_is_a_note_and_only_the_wallet_is_an_error() {
+        val picked = SendAmountBalance(capSats = 651_077, walletSats = 6_707_670, sendingSats = 0, availability = CoinAvailability.Spendable, selectedCount = 1)
+        assertNull(amountNotice("0.00651077", picked))
+        assertNull(amountNotice("MAX", picked))
+        assertEquals("More than this coin holds. Add coins on the next step." to false, amountNotice("0.00698765", picked))
+        assertEquals("More than your wallet holds." to true, amountNotice("1", picked))
+        val none = SendAmountBalance(capSats = 6_707_670, walletSats = 6_707_670, sendingSats = 0, availability = CoinAvailability.Spendable)
+        assertNull(amountNotice("0.00698765", none))
+        assertEquals("More than your wallet holds." to true, amountNotice("1", none))
+        val empty = SendAmountBalance(capSats = 0, walletSats = 0, sendingSats = 0, availability = CoinAvailability.Spendable)
+        assertEquals("No spendable coins left." to true, amountNotice("0.1", empty))
     }
 }
