@@ -22,7 +22,14 @@ fun computeCoinLinkage(
     txs: List<TxRow>,
     watchScripts: List<ByteArray>,
     changeScripts: List<ByteArray>,
-): CoinLinkage {
+): CoinLinkage = computeCoinHistory(txs, watchScripts, changeScripts).linkage
+
+/** Linkage plus the typed graph whose unspent components match [CoinLinkage.likely]. */
+fun computeCoinHistory(
+    txs: List<TxRow>,
+    watchScripts: List<ByteArray>,
+    changeScripts: List<ByteArray>,
+): CoinHistory {
     val ctx =
         LinkageCtx(
             watch = watchScripts.map(::scriptHex).toSet(),
@@ -32,9 +39,13 @@ fun computeCoinLinkage(
         ctx.applyTx(row)
     }
     ctx.unionAddressReuse()
-    return CoinLinkage(
-        certain = ctx.live.keys.associateWith { ctx.certain.find(it) },
-        likely = ctx.live.keys.associateWith { ctx.likely.find(it) },
+    return CoinHistory(
+        linkage =
+            CoinLinkage(
+                certain = ctx.live.keys.associateWith { ctx.certain.find(it) },
+                likely = ctx.live.keys.associateWith { ctx.likely.find(it) },
+            ),
+        graph = ctx.graph.build(),
     )
 }
 
@@ -123,6 +134,7 @@ private class LinkageCtx(
 ) {
     val certain = UnionFind()
     val likely = UnionFind()
+    val graph = LinkGraphBuilder()
     val live = mutableMapOf<String, WatchUtxo>()
     private val ownedOutpoints = mutableMapOf<String, SpendInput>()
     private val outpointsByScript = mutableMapOf<String, MutableList<String>>()
@@ -131,6 +143,7 @@ private class LinkageCtx(
     fun applyTx(row: TxRow) {
         val tx = Transaction.read(row.tx)
         val txid = tx.txid.toString()
+        graph.noteTx(txid, tx.txOut.size)
         val ownedInputs = if (tx.isCoinbase()) emptyList() else tx.txIn.map(::prevoutKey).filter { it in ownedOutpoints }
         val outputs =
             tx.txOut.mapIndexed { vout, o ->
@@ -144,6 +157,7 @@ private class LinkageCtx(
                     ownedOutpoints[key] = SpendInput(o.amount.toLong(), h)
                     outpointsByScript.getOrPut(h) { mutableListOf() }.add(key)
                     live[key] = WatchUtxo(o.amount.toLong(), script, row.height)
+                    graph.addCoin(CoinGraphCoin(key, txid, o.amount.toLong(), h, h in change, false))
                 }
                 SpendOutput(o.amount.toLong(), h, owned, owned && h in change)
             }
@@ -152,6 +166,7 @@ private class LinkageCtx(
             for (k in ownedInputs) {
                 certain.union(anchor, k)
                 likely.union(anchor, k)
+                graph.linkInput(k, txid)
             }
             val changeVout =
                 guessChangeVout(
@@ -160,10 +175,18 @@ private class LinkageCtx(
                     outputs = outputs,
                     seenScripts = seenScripts,
                 )
-            if (changeVout != null && outputs[changeVout].owned) likely.union(anchor, outpointKey(txid, changeVout))
+            if (changeVout != null && outputs[changeVout].owned) {
+                val changeKey = outpointKey(txid, changeVout)
+                likely.union(anchor, changeKey)
+                graph.linkChange(changeKey, txid, outputs[changeVout].walletChange)
+            }
         }
         if (!tx.isCoinbase()) {
-            for (inn in tx.txIn) live.remove(prevoutKey(inn))
+            for (inn in tx.txIn) {
+                val spent = prevoutKey(inn)
+                live.remove(spent)
+                graph.markSpent(spent)
+            }
         }
         for (o in outputs) seenScripts.add(o.scriptHex)
         for (k in ownedInputs) seenScripts.add(ownedOutpoints.getValue(k).scriptHex)
@@ -177,6 +200,7 @@ private class LinkageCtx(
                 certain.union(anchor, k)
                 likely.union(anchor, k)
             }
+            graph.linkSameAddress(keys)
         }
     }
 }

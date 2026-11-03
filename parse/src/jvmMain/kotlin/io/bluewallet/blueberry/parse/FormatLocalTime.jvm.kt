@@ -4,7 +4,7 @@ import java.util.Calendar
 
 private fun pad2(n: Int): String = n.toString().padStart(2, '0')
 
-internal actual fun formatLocalYmdHm(unixSeconds: Long): String {
+actual fun formatLocalYmdHm(unixSeconds: Long): String {
     val cal = Calendar.getInstance()
     cal.timeInMillis = unixSeconds * 1000L
     val year = cal.get(Calendar.YEAR)

@@ -12,7 +12,7 @@ private const val WIDTH = 16
 
 private fun pad(label: String): String = label.padEnd(WIDTH)
 
-internal expect fun formatLocalYmdHm(unixSeconds: Long): String
+expect fun formatLocalYmdHm(unixSeconds: Long): String
 
 /**
  * Human-readable block time for the tx list (fixed-width, left-aligned).

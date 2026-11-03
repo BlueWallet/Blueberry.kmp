@@ -11,7 +11,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,12 +43,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,7 +57,6 @@ import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
-import io.bluewallet.blueberry.ui.OverlayBackEffects
 import io.bluewallet.blueberry.ui.PlatformBottomEdgeBlur
 import io.bluewallet.blueberry.ui.PlatformScreenHeader
 import io.bluewallet.blueberry.ui.PlatformScrollEdge
@@ -90,6 +85,7 @@ fun CoinsScreen(
     onSendWithCoins: (Set<String>) -> Unit = {},
     onFrozenKey: (String) -> Unit = {},
     feeRateSatPerVb: Double? = null,
+    onOpenTx: (String) -> Unit = {},
 ) {
     var snap by remember { mutableStateOf(runtime.walletTxsStore.get()) }
     val heldAtOpen = remember { runtime.reservedOutpointsNow() }
@@ -98,9 +94,6 @@ fun CoinsScreen(
     var selectedKeys by remember { mutableStateOf(initialSelectedKeys) }
     var filter by remember { mutableStateOf(CoinControlFilter.All) }
     var editingKey by remember { mutableStateOf<String?>(null) }
-    var draft by remember { mutableStateOf("") }
-    var sheetRow by remember { mutableStateOf<CoinsRowModel?>(null) }
-    val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val holdsGen = remember { intArrayOf(0) }
     val refresh = {
@@ -149,15 +142,6 @@ fun CoinsScreen(
     }
     val actionCoins = control.coins.filter { it.key in selectedKeys && it.canSelect }
     val notice = remember(actionCoins) { privacyNoticeForSelection(actionCoins) }
-    val rowsByKey = remember(snap.utxos) { coinsRows(snap.utxos).associateBy { it.key } }
-    LaunchedEffect(editingKey) {
-        val row = editingKey?.let { rowsByKey[it] }
-        if (row != null) {
-            sheetRow = row
-            draft = row.name.orEmpty()
-        }
-    }
-    val sheetOpen = editingKey != null
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     val safe = WindowInsets.safeDrawing.asPaddingValues()
@@ -176,214 +160,157 @@ fun CoinsScreen(
         animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
     )
 
-    OverlayBackEffects(
-        enabled = sheetOpen,
-        onDismiss = { editingKey = null },
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(BwColors.Paper),
     ) {
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .background(BwColors.Paper),
+        PlatformScrollEdge(
+            modifier = Modifier.fillMaxSize().background(BwColors.Paper).hazeSource(hazeState),
+            top = topChrome,
+            bottom = null,
         ) {
-            PlatformScrollEdge(
-                modifier = Modifier.fillMaxSize().background(BwColors.Paper).hazeSource(hazeState),
-                top = topChrome,
-                bottom = null,
-                showEdges = !sheetOpen,
-            ) {
-                LazyColumn(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .windowInsetsPadding(
-                                WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
-                            ),
-                    state = listState,
-                    contentPadding =
-                        PaddingValues(
-                            top = topChrome + TitleBelowHeaderGap,
-                            start = BwSpace.ScreenX,
-                            end = BwSpace.ScreenX,
-                            bottom = listBottomPad,
+            LazyColumn(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
                         ),
-                    verticalArrangement = Arrangement.spacedBy(CoinGroupGap),
-                ) {
-                    item(key = "coin-control-header") {
-                        Column(
-                            modifier = Modifier.padding(bottom = CoinOverviewGap - CoinGroupGap),
-                            verticalArrangement = Arrangement.spacedBy(CoinOverviewGap),
-                        ) {
-                            CoinControlSummary(control)
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text(
-                                    text = coinControlSummaryLine(control),
-                                    color = BwColors.InkSecondary,
-                                    fontFamily = BwFontFamily,
-                                    fontSize = 15.sp,
-                                )
-                                CoinWeightBar(
-                                    coins = control.coins.sortedByDescending { it.valueSats },
-                                    selectedKeys = selectedKeys,
-                                    modifier = Modifier.fillMaxWidth().height(16.dp),
-                                )
-                                CoinFilterChips(
-                                    counts = control.filterCounts,
-                                    selected = filter,
-                                    onSelect = { filter = it },
-                                )
-                            }
+                state = listState,
+                contentPadding =
+                    PaddingValues(
+                        top = topChrome + TitleBelowHeaderGap,
+                        start = BwSpace.ScreenX,
+                        end = BwSpace.ScreenX,
+                        bottom = listBottomPad,
+                    ),
+                verticalArrangement = Arrangement.spacedBy(CoinGroupGap),
+            ) {
+                item(key = "coin-control-header") {
+                    Column(
+                        modifier = Modifier.padding(bottom = CoinOverviewGap - CoinGroupGap),
+                        verticalArrangement = Arrangement.spacedBy(CoinOverviewGap),
+                    ) {
+                        CoinControlSummary(control)
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text(
+                                text = coinControlSummaryLine(control),
+                                color = BwColors.InkSecondary,
+                                fontFamily = BwFontFamily,
+                                fontSize = 15.sp,
+                            )
+                            CoinWeightBar(
+                                coins = control.coins.sortedByDescending { it.valueSats },
+                                selectedKeys = selectedKeys,
+                                modifier = Modifier.fillMaxWidth().height(16.dp),
+                            )
+                            CoinFilterChips(
+                                counts = control.filterCounts,
+                                selected = filter,
+                                onSelect = { filter = it },
+                            )
                         }
                     }
-                    items(filtered, key = { it.groupId }) { group ->
-                        CoinGroupSection(
-                            group = group,
-                            selectedKeys = selectedKeys,
-                            onToggle = { coin ->
-                                if (!coin.canSelect) return@CoinGroupSection
-                                selectedKeys =
-                                    if (coin.key in selectedKeys) {
-                                        selectedKeys - coin.key
-                                    } else {
-                                        selectedKeys + coin.key
-                                    }
-                            },
-                            onOpenSheet = { coin ->
-                                editingKey = coin.key
-                                // Explicit name only: an address-label default must not be saved as the coin's name.
-                                draft = rowsByKey[coin.key]?.name.orEmpty()
-                            },
-                        )
-                    }
-                    alwaysBounceTail(listState)
                 }
-            }
-            if (!sheetOpen) {
-                PlatformBottomEdgeBlur(
-                    hazeState = hazeState,
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .height(blurHeight),
-                )
-            }
-            if (!sheetOpen) {
-                PlatformScreenHeader(
-                    title = "Coin control",
-                    onBack = onBack,
-                    showBarTitle = true,
-                    trailingText = if (hasSelection) "Clear" else null,
-                    onTrailing =
-                        if (hasSelection) {
-                            { selectedKeys = emptySet() }
-                        } else {
-                            null
+                items(filtered, key = { it.groupId }) { group ->
+                    CoinGroupSection(
+                        group = group,
+                        selectedKeys = selectedKeys,
+                        onToggle = { coin ->
+                            if (!coin.canSelect) return@CoinGroupSection
+                            selectedKeys =
+                                if (coin.key in selectedKeys) {
+                                    selectedKeys - coin.key
+                                } else {
+                                    selectedKeys + coin.key
+                                }
                         },
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(
-                                top = safe.calculateTopPadding(),
-                                start = BwSpace.ScreenX,
-                                end = BwSpace.ScreenX,
-                            ),
-                )
-            }
-            AnimatedVisibility(
-                visible = hasSelection && !sheetOpen,
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                enter =
-                    slideInVertically(
-                        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
-                        initialOffsetY = { it },
-                    ) + fadeIn(animationSpec = tween(180)),
-                exit =
-                    slideOutVertically(
-                        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-                        targetOffsetY = { it },
-                    ) + fadeOut(animationSpec = tween(140)),
-            ) {
-                CoinControlBottomBar(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .onSizeChanged { size ->
-                                bottomBarHeight = with(density) { size.height.toDp() }
-                            },
-                    notice = notice,
-                    selectedCoins = actionCoins,
-                    ready = sendingReady,
-                    onPrimary = {
-                        val now = runtime.reservedOutpointsNow()
-                        val keys = actionCoins.map { it.key }.toSet()
-                        if (sendingReady && now.complete && keys.none { it in now.keys }) {
-                            onSendWithCoins(keys)
-                        } else {
-                            refresh()
-                        }
-                    },
-                )
-            }
-            AnimatedVisibility(
-                visible = sheetOpen,
-                enter = fadeIn(animationSpec = tween(220)),
-                exit = fadeOut(animationSpec = tween(180)),
-            ) {
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.32f))
-                            .clickable { editingKey = null },
-                )
-            }
-            AnimatedVisibility(
-                visible = sheetOpen,
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                enter =
-                    slideInVertically(
-                        animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
-                        initialOffsetY = { it },
-                    ) + fadeIn(animationSpec = tween(200)),
-                exit =
-                    slideOutVertically(
-                        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
-                        targetOffsetY = { it },
-                    ) + fadeOut(animationSpec = tween(160)),
-            ) {
-                val row = sheetRow ?: return@AnimatedVisibility
-                CoinsUtxoSheet(
-                    row = row,
-                    draft = draft,
-                    onDraft = { draft = it },
-                    onCopy = { clipboard.setText(AnnotatedString(it)) },
-                    onDone = { save ->
-                        if (save) {
-                            val wallet = runtime.wallet ?: return@CoinsUtxoSheet
-                            setUtxoName(db, wallet, runtime.walletTxsStore, row.key, draft)
-                            snap = runtime.walletTxsStore.get()
-                            uploadLabels(scope, db)
-                        }
-                        editingKey = null
-                    },
-                    onToggleFrozen = { frozen ->
-                        val wallet = runtime.wallet ?: return@CoinsUtxoSheet
-                        if (draft.trim() != row.name.orEmpty()) {
-                            setUtxoName(db, wallet, runtime.walletTxsStore, row.key, draft)
-                            uploadLabels(scope, db)
-                        }
-                        setUtxoFrozen(db, wallet, runtime.walletTxsStore, row.key, frozen)
-                        snap = runtime.walletTxsStore.get()
-                        if (frozen) {
-                            selectedKeys = selectedKeys - row.key
-                            onFrozenKey(row.key)
-                        }
-                        editingKey = null
-                    },
-                )
+                        onOpenSheet = { coin -> editingKey = coin.key },
+                    )
+                }
+                alwaysBounceTail(listState)
             }
         }
+        PlatformBottomEdgeBlur(
+            hazeState = hazeState,
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(blurHeight),
+        )
+        PlatformScreenHeader(
+            title = "Coin control",
+            onBack = onBack,
+            showBarTitle = true,
+            trailingText = if (hasSelection) "Clear" else null,
+            onTrailing =
+                if (hasSelection) {
+                    { selectedKeys = emptySet() }
+                } else {
+                    null
+                },
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(
+                        top = safe.calculateTopPadding(),
+                        start = BwSpace.ScreenX,
+                        end = BwSpace.ScreenX,
+                    ),
+        )
+        AnimatedVisibility(
+            visible = hasSelection,
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+            enter =
+                slideInVertically(
+                    animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                    initialOffsetY = { it },
+                ) + fadeIn(animationSpec = tween(180)),
+            exit =
+                slideOutVertically(
+                    animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+                    targetOffsetY = { it },
+                ) + fadeOut(animationSpec = tween(140)),
+        ) {
+            CoinControlBottomBar(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .onSizeChanged { size ->
+                            bottomBarHeight = with(density) { size.height.toDp() }
+                        },
+                notice = notice,
+                selectedCoins = actionCoins,
+                ready = sendingReady,
+                onPrimary = {
+                    val now = runtime.reservedOutpointsNow()
+                    val keys = actionCoins.map { it.key }.toSet()
+                    if (sendingReady && now.complete && keys.none { it in now.keys }) {
+                        onSendWithCoins(keys)
+                    } else {
+                        refresh()
+                    }
+                },
+            )
+        }
+        CoinSheetOverlay(
+            runtime = runtime,
+            db = db,
+            outpoint = editingKey,
+            onDismiss = { editingKey = null },
+            nav =
+                CoinSheetNav(
+                    onSend = { key -> onSendWithCoins(setOf(key)) },
+                    onOpenTx = onOpenTx,
+                    onFrozen = { key ->
+                        selectedKeys = selectedKeys - key
+                        onFrozenKey(key)
+                    },
+                ),
+        )
     }
 }
 

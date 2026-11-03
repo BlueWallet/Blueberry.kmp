@@ -3,9 +3,12 @@ package io.bluewallet.blueberry
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.MessageBus
 import io.bluewallet.blueberry.headers.nowMillis
+import io.bluewallet.blueberry.parse.CoinHistory
+import io.bluewallet.blueberry.parse.CoinLinkGraph
 import io.bluewallet.blueberry.parse.CoinLinkage
 import io.bluewallet.blueberry.parse.TxFee
 import io.bluewallet.blueberry.parse.TxRow
+import io.bluewallet.blueberry.parse.computeCoinHistory
 import io.bluewallet.blueberry.parse.computeCoinLinkage
 import io.bluewallet.blueberry.parse.firstAddressLabel
 import io.bluewallet.blueberry.parse.firstUtxoLabelByTxid
@@ -87,6 +90,8 @@ data class WalletTxsSnapshot(
     val coinCertainGroupIds: Map<String, String> = emptyMap(),
     /** History the linkage was computed from; see [linkageFingerprint]. */
     val linkageFingerprint: Long = 0L,
+    /** Typed links behind [coinGroupIds]. Rebuilt with linkage, never on sheet open. */
+    val coinLinkGraph: CoinLinkGraph = CoinLinkGraph.Empty,
 )
 
 interface WalletTxsStore {
@@ -326,10 +331,12 @@ private class WalletCoins(
     val utxos: List<WalletUtxoRow>,
     val fees: Map<String, TxFee>,
     val linkage: CoinLinkage,
+    val graph: CoinLinkGraph,
     val fingerprint: Long,
 ) {
     companion object {
-        val None = WalletCoins(emptyList(), emptyMap(), CoinLinkage(emptyMap(), emptyMap()), 0L)
+        val None =
+            WalletCoins(emptyList(), emptyMap(), CoinLinkage(emptyMap(), emptyMap()), CoinLinkGraph.Empty, 0L)
     }
 }
 
@@ -357,12 +364,12 @@ private fun walletCoins(
     val changeScripts = watched.filter { it.change }.map { it.scriptPubKey }
     val map = scan.utxos
     val fingerprint = linkageFingerprint(stored, scripts.size)
-    val linkage =
+    val cached =
         cachedLinkage
             ?.takeIf { it.fingerprint == fingerprint }
-            ?.linkage
-            ?.takeIf { it.likely.keys == map.keys && it.certain.keys == map.keys }
-            ?: computeCoinLinkage(txRows, scripts, changeScripts)
+            ?.takeIf { it.linkage.likely.keys == map.keys && it.linkage.certain.keys == map.keys }
+    val history = cached?.let { CoinHistory(it.linkage, it.graph) } ?: computeCoinHistory(txRows, scripts, changeScripts)
+    val linkage = history.linkage
     val maxValue = map.values.maxOfOrNull { it.value } ?: 0L
     val utxos =
         map.entries
@@ -399,7 +406,7 @@ private fun walletCoins(
                     .thenBy { it.txid }
                     .thenBy { it.vout },
             )
-    return WalletCoins(utxos, scan.fees, linkage, fingerprint)
+    return WalletCoins(utxos, scan.fees, linkage, history.graph, fingerprint)
 }
 
 private fun confirmedTxRow(
@@ -428,10 +435,16 @@ private fun confirmedTxRow(
 class LinkageCache(
     val linkage: CoinLinkage,
     val fingerprint: Long,
+    val graph: CoinLinkGraph = CoinLinkGraph.Empty,
 )
 
 /** Linkage already in this snapshot; label and note edits leave it unchanged. */
-internal fun WalletTxsSnapshot.linkageCache(): LinkageCache = LinkageCache(CoinLinkage(certain = coinCertainGroupIds, likely = coinGroupIds), linkageFingerprint)
+internal fun WalletTxsSnapshot.linkageCache(): LinkageCache =
+    LinkageCache(
+        CoinLinkage(certain = coinCertainGroupIds, likely = coinGroupIds),
+        linkageFingerprint,
+        coinLinkGraph,
+    )
 
 private const val FNV64_OFFSET = -0x340d631b7bdddcdbL
 private const val FNV64_PRIME = 0x100000001b3L
@@ -518,6 +531,7 @@ fun snapshotFromDb(
         coinGroupIds = linkage.likely,
         coinCertainGroupIds = linkage.certain,
         linkageFingerprint = coins.fingerprint,
+        coinLinkGraph = coins.graph,
     )
 }
 
@@ -576,7 +590,7 @@ private class WalletTxsStoreImpl : WalletTxsStore {
                 }
             val next = WalletTxsState(snapshot = nextSnap, parsingActive = active, samples = emptyList())
             if (state.compareAndSet(cur, next)) {
-                if (nextSnap !== cur.snapshot) emitChange()
+                emitChange()
                 return
             }
         }

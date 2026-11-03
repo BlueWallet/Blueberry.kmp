@@ -12,7 +12,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,12 +41,40 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
+@Suppress("LongParameterList")
 fun TxDetailsScreen(
     runtime: PeersRuntime,
     db: Database,
     txid: String,
     onBack: () -> Unit,
     onShowPsbt: () -> Unit = {},
+    coinNav: CoinSheetNav = CoinSheetNav(onSend = {}, onOpenTx = {}),
+) {
+    var coinKey by remember { mutableStateOf<String?>(null) }
+    TxDetailsContent(runtime, db, txid, onBack, onShowPsbt) { coinKey = it }
+    CoinSheetOverlay(
+        runtime = runtime,
+        db = db,
+        outpoint = coinKey,
+        onDismiss = { coinKey = null },
+        nav =
+            CoinSheetNav(
+                onSend = coinNav.onSend,
+                onOpenTx = { other -> if (other != txid) coinNav.onOpenTx(other) },
+                onFrozen = coinNav.onFrozen,
+            ),
+    )
+}
+
+@Composable
+@Suppress("LongParameterList")
+private fun TxDetailsContent(
+    runtime: PeersRuntime,
+    db: Database,
+    txid: String,
+    onBack: () -> Unit,
+    onShowPsbt: () -> Unit,
+    onOpenCoin: (String) -> Unit,
 ) {
     val snap = rememberWalletTxs(runtime)
     var editing by remember { mutableStateOf(false) }
@@ -88,6 +115,7 @@ fun TxDetailsScreen(
                         },
                     )
                 }
+                OpenCoinRows(snap.utxos.filter { it.txid == txid }.sortedBy { it.vout }, onOpenCoin)
                 OpenSendActions(OpenSendHost(db, runtime, scope, onForgotten = onBack, onShowPsbt = onShowPsbt), row, snap)
             }
         }
@@ -219,17 +247,6 @@ private fun ForgetSendDialog(
         dismissButton = { TextAction(text = "Keep", onClick = onKeep) },
         containerColor = BwColors.Card,
     )
-}
-
-@Composable
-private fun rememberWalletTxs(runtime: PeersRuntime): WalletTxsSnapshot {
-    var snap by remember { mutableStateOf(runtime.walletTxsStore.get()) }
-    val scope = rememberCoroutineScope()
-    DisposableEffect(runtime.walletTxsStore) {
-        val off = runtime.walletTxsStore.subscribe { scope.launch { snap = runtime.walletTxsStore.get() } }
-        onDispose { off() }
-    }
-    return snap
 }
 
 @Composable

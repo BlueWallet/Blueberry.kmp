@@ -254,3 +254,14 @@ fun BwTheme(
         }
     }
 }
+
+/** Palette and Material theme without touching system bars or painting the window. For sheets and other hosted content. */
+@Composable
+internal fun BwPaletteScope(
+    dark: Boolean,
+    content: @Composable () -> Unit,
+) {
+    CompositionLocalProvider(LocalDarkPalette provides dark) {
+        MaterialTheme(colorScheme = bwColorScheme(dark), typography = bwTypography(), content = content)
+    }
+}
