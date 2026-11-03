@@ -92,7 +92,7 @@ fun CoinsUtxoSheet(
                 },
             )
         }
-        CoinsUtxoSheetLabel(draft = draft, onDraft = onDraft)
+        CoinsUtxoSheetLabel(draft = draft, onDraft = onDraft, defaultLabel = row.addressLabel)
         PillButton(text = "Save", onClick = { onDone(true) }, modifier = Modifier.fillMaxWidth())
         if (onToggleFrozen != null) {
             PillButton(
@@ -137,6 +137,7 @@ private fun CoinsUtxoSheetHeader(
 private fun CoinsUtxoSheetLabel(
     draft: String,
     onDraft: (String) -> Unit,
+    defaultLabel: String?,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
@@ -151,7 +152,7 @@ private fun CoinsUtxoSheetLabel(
             onValueChange = onDraft,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            placeholder = { Text("My first coin") },
+            placeholder = { Text(defaultLabel?.trim()?.takeIf { it.isNotEmpty() } ?: "My first coin") },
         )
     }
 }

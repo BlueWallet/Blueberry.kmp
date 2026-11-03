@@ -72,7 +72,7 @@ fun txSummary(
     val inputs =
         coins
             .sortedByDescending { it.valueSats }
-            .map { TxSummaryInput(it.key, it.valueSats, utxoRowTitle(it.name, it.address)?.text, utxoCircleArgb(it.key)) }
+            .map { TxSummaryInput(it.key, it.valueSats, utxoRowTitle(it.label, it.address)?.text, utxoCircleArgb(it.key)) }
     val outputs =
         listOfNotNull(
             TxSummaryOutput(TxOutputKind.Recipient, paid, recipientLabel),

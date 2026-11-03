@@ -250,7 +250,8 @@ fun CoinsScreen(
                             },
                             onOpenSheet = { coin ->
                                 editingKey = coin.key
-                                draft = coin.label.orEmpty()
+                                // Explicit name only: an address-label default must not be saved as the coin's name.
+                                draft = rowsByKey[coin.key]?.name.orEmpty()
                             },
                         )
                     }

@@ -64,7 +64,12 @@ data class WalletUtxoRow(
     val name: String?,
     val isChange: Boolean,
     val isFrozen: Boolean = false,
-)
+    /** Label of the address this coin pays to; the default when [name] is blank. Never persisted as a name. */
+    val addressLabel: String? = null,
+) {
+    /** What to show for this coin: the explicit [name], else the [addressLabel]. */
+    val label: String? get() = name.nonBlank() ?: addressLabel.nonBlank()
+}
 
 data class WalletTxsSnapshot(
     val at: Long? = null,
@@ -117,6 +122,8 @@ private data class WalletTxsState(
     val parsingActive: Boolean = false,
     val samples: List<ParseSample> = emptyList(),
 )
+
+private fun String?.nonBlank(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
 
 private fun parseOutpointKey(key: String): Pair<String, Int> {
     val i = key.lastIndexOf(':')
@@ -332,6 +339,7 @@ private class CoinRowCtx(
     val timeLabels: MutableMap<Int, HeightTimeLabel>,
     val nameByOutpoint: Map<String, String>,
     val frozenOutpoints: Set<String>,
+    val labelByAddress: Map<String, String>,
 )
 
 private fun walletCoins(
@@ -384,6 +392,7 @@ private fun walletCoins(
                     name = ctx.nameByOutpoint[key],
                     isChange = changeScripts.any { it.contentEquals(u.scriptPubKey) },
                     isFrozen = key in ctx.frozenOutpoints,
+                    addressLabel = watch?.address?.let { ctx.labelByAddress[it] },
                 )
             }.sortedWith(
                 compareByDescending<WalletUtxoRow> { it.height }
@@ -465,14 +474,15 @@ fun snapshotFromDb(
             .toSet()
     val nameByOutpoint = db.utxoNames.list().associate { it.outpoint to it.name }
     val frozenOutpoints = db.utxoFrozen.list().toSet()
+    val labelByAddress = db.addressLabels.list().associate { it.address to it.label }
     val labels =
         TxRowLabels(
             noteByTxid = db.txPaymentLabels.list().associate { it.txid to it.label },
             utxoByTxid = firstUtxoLabelByTxid(nameByOutpoint),
-            byAddress = db.addressLabels.list().associate { it.address to it.label },
+            byAddress = labelByAddress,
         )
 
-    val coinCtx = CoinRowCtx(db, nowMs, timeLabels, nameByOutpoint, frozenOutpoints)
+    val coinCtx = CoinRowCtx(db, nowMs, timeLabels, nameByOutpoint, frozenOutpoints, labelByAddress)
     val coins = wallet?.let { walletCoins(it, stored, coinCtx, cachedLinkage) } ?: WalletCoins.None
     val utxos = coins.utxos
     val fees = coins.fees
@@ -512,7 +522,7 @@ fun snapshotFromDb(
 }
 
 /**
- * Re-read freeze flags, UTXO names, and payment notes onto [snap]. Run inside
+ * Re-read freeze flags, UTXO names, address labels of coins, and payment notes onto [snap]. Run inside
  * [WalletTxsStore.update] so a rebuild that started before an edit cannot install stale values.
  */
 internal fun withStoredUtxoMeta(
@@ -523,8 +533,16 @@ internal fun withStoredUtxoMeta(
     val frozen = db.utxoFrozen.list().toSet()
     val utxoLabelByTxid = firstUtxoLabelByTxid(nameByOutpoint)
     val noteByTxid = db.txPaymentLabels.list().associate { it.txid to it.label }
+    val labelByAddress = db.addressLabels.list().associate { it.address to it.label }
     return snap.copy(
-        utxos = snap.utxos.map { it.copy(name = nameByOutpoint[it.key], isFrozen = it.key in frozen) },
+        utxos =
+            snap.utxos.map {
+                it.copy(
+                    name = nameByOutpoint[it.key],
+                    isFrozen = it.key in frozen,
+                    addressLabel = it.address?.let { a -> labelByAddress[a] },
+                )
+            },
         txs = snap.txs.map { it.copy(utxoLabel = utxoLabelByTxid[it.txid], paymentLabel = noteByTxid[it.txid]) },
     )
 }
