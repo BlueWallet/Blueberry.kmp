@@ -168,7 +168,7 @@ fun originSheet(
     )
 }
 
-/** Tip minus the coin's height; unconfirmed is `0`, unknown tip is `—`. */
+/** Confirmations include the coin's own block. Unconfirmed is `0`, an unknown tip is `—`. */
 private fun confirmationsLabel(
     height: Int,
     tipHeight: Int?,
@@ -176,7 +176,7 @@ private fun confirmationsLabel(
     when {
         height == 0 -> "0"
         tipHeight == null -> "—"
-        else -> formatGroupedInt((tipHeight - height).coerceAtLeast(0))
+        else -> formatGroupedInt((tipHeight - height + 1).coerceAtLeast(0))
     }
 
 data class OriginSheet(

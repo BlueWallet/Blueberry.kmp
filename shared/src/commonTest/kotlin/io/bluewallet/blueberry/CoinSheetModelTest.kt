@@ -2,7 +2,6 @@ package io.bluewallet.blueberry
 
 import io.bluewallet.blueberry.parse.CoinLinkGraph
 import io.bluewallet.blueberry.parse.CoinLinkage
-import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -15,8 +14,9 @@ class CoinSheetModelTest {
         assertEquals("36 days old", formatCoinAgeLong(0, 36 * 86_400L))
         assertEquals("2 hours old", formatCoinAgeLong(0, 2 * 3_600L))
         assertEquals("14 months old", formatCoinAgeLong(0, 420 * 86_400L))
-        assertEquals("Jan 1", formatSheetWhen(0, 1_699_920_000))
-        assertEquals("Today 00:00", formatSheetWhen(1_699_920_000, 1_699_920_000))
+        assertEquals("Pending", formatSheetWhen(null, 0))
+        assertEquals("Jan 1", formatSheetWhenLocal("1970-01-01 00:00", "2023-11-14 00:00"))
+        assertEquals("Today 17:38", formatSheetWhenLocal("2023-11-14 17:38", "2023-11-14 09:00"))
         val chips = derivationChips("m/84'/0'/0'/1/75")
         assertNotNull(chips)
         assertEquals("84'", chips[0].value)
@@ -34,71 +34,23 @@ class CoinSheetModelTest {
     }
 
     @Test
-    fun map_pins_the_open_coin_and_repeats() {
-        val open = MapCoin("a", 100, 1, false, "a", null, "A")
-        val other = MapCoin("b", 25, 2, false, "b", null, "B")
-        val map = layoutCoinMap(listOf(open, other), "a", null, emptyList())
-        assertEquals(map, layoutCoinMap(listOf(open, other), "a", null, emptyList()))
-        val dot = map.dots.first { it.open }
-        assertTrue(abs(dot.x - COIN_MAP_WIDTH * COIN_MAP_OPEN_X) < 0.01f)
-        assertTrue(abs(dot.y - COIN_MAP_HEIGHT * 0.5f) < 0.01f)
-        assertTrue(abs(dot.diameter - 44f) < 0.01f)
-        assertTrue(map.description.contains("This coin is solo. 1 solo coin is separate."))
-    }
-
-    @Test
-    fun map_groups_and_their_names_do_not_collide() {
-        val coins =
-            listOf(
-                MapCoin("a1", 10_000, 1, false, "A", "Linked group A", "a1"),
-                MapCoin("a2", 9_000, 1, false, "A", "Linked group A", "a2"),
-                MapCoin("a3", 1_000, 1, false, "A", "Linked group A", "a3"),
-                MapCoin("b1", 20_000, 2, false, "B", "Linked group B", "b1"),
-                MapCoin("b2", 18_000, 2, false, "B", "Linked group B", "b2"),
-            ) + (1..5).map { MapCoin("s$it", it * 30_000L, 3, false, "s$it", null, "s$it") }
-        val map = layoutCoinMap(coins, "a1", "a3", listOf("a2", "a3"))
-        assertEquals(0, map.overflow)
-        assertTrue(abs(map.dots.maxOf { it.diameter } - 44f) < 0.01f, "map shrank although it fits at full size")
-        val open = map.dots.first { it.open }
-        assertTrue(abs(open.x - COIN_MAP_WIDTH / 2f) < 0.01f)
-        assertEquals(2, map.outlines.size)
-        val (first, second) = map.outlines
-        assertFalse(first.left < second.right && second.left < first.right && first.top < second.bottom && second.top < first.bottom)
-        for (tag in map.tags) {
-            val halfWidth = tag.text.length * 3.2f
-            for (outline in map.outlines) {
-                val own = abs(tag.x - (outline.left + outline.right) / 2f) < 0.01f && abs(tag.y - outline.bottom - 14f) < 0.01f
-                val hits = tag.x + halfWidth > outline.left && tag.x - halfWidth < outline.right && tag.y + 8f > outline.top && tag.y - 8f < outline.bottom
-                assertFalse(!own && hits, "${tag.text} overlaps another group")
-            }
-        }
-    }
-
-    @Test
-    fun map_keeps_a_crowded_wallet_inside_and_apart() {
-        val coins =
-            listOf(
-                MapCoin("a1", 10_000, 1, false, "A", "Linked group A", "a1"),
-                MapCoin("a2", 6_000, 1, false, "A", "Linked group A", "a2"),
-                MapCoin("a3", 1_000, 1, false, "A", "Linked group A", "a3"),
-                MapCoin("b1", 20_000, 2, false, "B", "Linked group B", "b1"),
-                MapCoin("b2", 15_000, 2, false, "B", "Linked group B", "b2"),
-            ) + (1..4).map { MapCoin("s$it", it * 30_000L, 3, false, "s$it", null, "s$it") }
-        val map = layoutCoinMap(coins, "a1", "a3", listOf("a3", "a2"))
-        for (outline in map.outlines) {
-            assertTrue(outline.left >= 0f && outline.top >= 0f, "outline leaves the map")
-            assertTrue(outline.right <= COIN_MAP_WIDTH && outline.bottom <= COIN_MAP_HEIGHT, "outline leaves the map")
-        }
-        for (dot in map.dots) {
-            assertTrue(dot.x - dot.diameter / 2f >= 0f && dot.x + dot.diameter / 2f <= COIN_MAP_WIDTH, "${dot.key} leaves the map")
-        }
-        map.outlines.forEachIndexed { i, a ->
-            map.outlines.drop(i + 1).forEach { b ->
-                assertFalse(a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom, "groups overlap")
-            }
-        }
-        assertEquals(map, layoutCoinMap(coins, "a1", "a3", listOf("a3", "a2")))
-        assertEquals(map, layoutCoinMap(coins, "a1", null, listOf("a3", "a2")).withSelection("a3"))
+    fun strip_leads_with_the_open_group_and_its_share() {
+        val salary = utxo("cc", 200_000, name = "Salary Sept")
+        val withIt = utxo("dd", 50_000)
+        val alone = utxo("ee", 50_000)
+        val root = salary.key
+        val keys = mapOf(salary.key to root, withIt.key to root, alone.key to alone.key)
+        val control = buildCoinControlSnapshot(listOf(salary, withIt, alone), CoinLinkage(keys, keys), emptySet(), null)
+        val group = sheetStrip(control, salary.key)
+        assertNotNull(group)
+        assertEquals(listOf(salary.key, withIt.key, alone.key), group.bubbles.map { it.key })
+        assertEquals(salary.key, group.openKey)
+        assertEquals("Salary Sept group · 2 coins · 83% of balance", group.caption)
+        val solo = sheetStrip(control, alone.key)
+        assertNotNull(solo)
+        assertEquals(alone.key, solo.bubbles.first().key)
+        assertEquals(listOf(salary.key, withIt.key), solo.bubbles.drop(1).map { it.key })
+        assertEquals("This coin · 17% of balance", solo.caption)
     }
 
     @Test
@@ -127,6 +79,7 @@ class CoinSheetModelTest {
         assertEquals("1 others separate", model.linkedAside)
         assertFalse(model.sendEnabled)
         assertEquals("Unfreeze it first", model.sendSubtitle)
+        assertEquals("101", model.origin?.confirmations)
         val cost = model.spendRows.first { it.title.startsWith("Costs about") }
         assertEquals("Costs about 680 sats to spend", cost.title)
         assertEquals("233% of its value at the current fee rate.", cost.subtitle)
@@ -149,6 +102,13 @@ class CoinSheetModelTest {
         assertEquals("Send this coin", model.sendTitle)
         assertEquals("Starts a send with this coin selected", model.sendSubtitle)
         assertTrue(model.sendEnabled)
+        val sending =
+            buildCoinSheetModel(
+                CoinSheetRequest(big.key, snap, control.markedSending(setOf(big.key)), emptyMap(), 0, null, true),
+            )
+        assertNotNull(sending)
+        assertFalse(sending.sendEnabled)
+        assertEquals("Already in a send", sending.sendSubtitle)
     }
 
     @Test

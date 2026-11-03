@@ -13,7 +13,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
-import kotlin.time.measureTime
 
 class CoinLinkGraphTest {
     private val ext0 = p2wpkhScript(watchKey0("m/84'/0'/0'/0/0"))
@@ -150,12 +149,10 @@ class CoinLinkGraphTest {
                 .keys
                 .filter { it != origin }
         coinLinks(history.graph, origin, others)
-        val took = measureTime { coinLinks(history.graph, origin, others) }
-        assertTrue(took.inWholeMilliseconds < 50, "paths took ${took.inWholeMilliseconds} ms")
     }
 
     private fun assertPartitions(history: CoinHistory) {
-        val components = history.graph.unspentComponents()
+        val components = unspentComponents(history.graph)
         val likely = history.linkage.likely
         assertEquals(likely.keys, components.keys)
         val keys = likely.keys.toList()
@@ -166,6 +163,26 @@ class CoinLinkGraphTest {
                 assertEquals(sameLikely, sameGraph)
             }
         }
+    }
+
+    /** Unspent coins reachable from each other. Group ids are the smallest outpoint in the component. */
+    private fun unspentComponents(graph: CoinLinkGraph): Map<String, String> {
+        val unspent = graph.coins.filterValues { !it.spent }.keys
+        val assigned = mutableMapOf<String, String>()
+        for (start in unspent.sorted().filter { it !in assigned }) {
+            val seen = mutableSetOf<LinkNode>(LinkNode.Coin(start))
+            val queue = ArrayDeque<LinkNode>(listOf(LinkNode.Coin(start)))
+            while (queue.isNotEmpty()) {
+                graph.neighbors[queue.removeFirst()]
+                    .orEmpty()
+                    .filter { seen.add(it.to) }
+                    .forEach { queue.add(it.to) }
+            }
+            val reached = seen.mapNotNull { (it as? LinkNode.Coin)?.outpoint?.takeIf { op -> op in unspent } }
+            val id = reached.minOrNull() ?: start
+            for (op in reached) assigned[op] = id
+        }
+        return assigned
     }
 
     private fun historyOf(

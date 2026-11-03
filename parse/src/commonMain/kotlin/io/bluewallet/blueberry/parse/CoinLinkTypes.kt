@@ -35,7 +35,6 @@ sealed interface LinkNode {
 data class CoinGraphCoin(
     val outpoint: String,
     val txid: String,
-    val vout: Int,
     val valueSat: Long,
     val scriptHex: String,
     val isChange: Boolean,

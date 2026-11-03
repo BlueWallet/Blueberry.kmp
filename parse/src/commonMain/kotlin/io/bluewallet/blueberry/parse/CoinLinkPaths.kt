@@ -6,23 +6,6 @@ private data class Hop(
     val warning: Boolean,
 )
 
-/** Unspent coins reachable from each other. Group ids are the smallest outpoint in the component. */
-fun CoinLinkGraph.unspentComponents(): Map<String, String> {
-    val unspent = coins.filterValues { !it.spent }.keys
-    val assigned = mutableMapOf<String, String>()
-    for (start in unspent.sorted().filter { it !in assigned }) {
-        val seen = mutableSetOf<LinkNode>(LinkNode.Coin(start))
-        val queue = ArrayDeque<LinkNode>(listOf(LinkNode.Coin(start)))
-        while (queue.isNotEmpty()) {
-            neighbors[queue.removeFirst()].orEmpty().filter { seen.add(it.to) }.forEach { queue.add(it.to) }
-        }
-        val reached = seen.mapNotNull { (it as? LinkNode.Coin)?.outpoint?.takeIf { op -> op in unspent } }
-        val id = reached.minOrNull() ?: start
-        for (op in reached) assigned[op] = id
-    }
-    return assigned
-}
-
 /**
  * Shortest paths from [origin] to [others], tx neighbours before coins, then id ascending.
  * [others] should already be the unspent coins in [origin]'s likely group.

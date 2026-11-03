@@ -112,7 +112,7 @@ actual fun PlatformScreenHeader(
 /** "…" button that opens a native pull-down menu. UIKit overlay for the same reason as [IosOverlayTextAction]. */
 @OptIn(ExperimentalForeignApi::class, ExperimentalComposeUiApi::class)
 @Composable
-internal fun IosOverlayMenuButton(
+private fun IosOverlayMenuButton(
     menu: List<HeaderMenuItem>,
     modifier: Modifier = Modifier,
 ) {

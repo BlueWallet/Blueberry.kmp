@@ -157,7 +157,7 @@ private class LinkageCtx(
                     ownedOutpoints[key] = SpendInput(o.amount.toLong(), h)
                     outpointsByScript.getOrPut(h) { mutableListOf() }.add(key)
                     live[key] = WatchUtxo(o.amount.toLong(), script, row.height)
-                    graph.addCoin(CoinGraphCoin(key, txid, vout, o.amount.toLong(), h, h in change, false))
+                    graph.addCoin(CoinGraphCoin(key, txid, o.amount.toLong(), h, h in change, false))
                 }
                 SpendOutput(o.amount.toLong(), h, owned, owned && h in change)
             }

@@ -1,5 +1,6 @@
 package io.bluewallet.blueberry
 
+import io.bluewallet.blueberry.parse.formatLocalYmdHm
 import kotlin.math.roundToLong
 
 data class PathChipModel(
@@ -29,21 +30,28 @@ fun formatCoinAgeLong(
     }
 }
 
-/** `Sep 14`, or `Today 17:38` when the UTC day matches [nowEpochS]. Unconfirmed is Pending. */
+/** `Sep 14`, or `Today 17:38` on the same local day. Unconfirmed is Pending. */
 fun formatSheetWhen(
     confirmedAtEpochS: Long?,
     nowEpochS: Long,
 ): String {
     if (confirmedAtEpochS == null) return "Pending"
-    val then = civilDay(confirmedAtEpochS)
-    val now = civilDay(nowEpochS)
-    return if (then.year == now.year && then.month == now.month && then.day == now.day) {
-        val tod = confirmedAtEpochS.mod(86_400L)
-        val hour = (tod / 3_600).toString().padStart(2, '0')
-        val minute = ((tod % 3_600) / 60).toString().padStart(2, '0')
-        "Today $hour:$minute"
+    return formatSheetWhenLocal(formatLocalYmdHm(confirmedAtEpochS), formatLocalYmdHm(nowEpochS))
+}
+
+/** [then] and [now] are local `YYYY-MM-DD HH:mm`, as returned by [formatLocalYmdHm]. */
+internal fun formatSheetWhenLocal(
+    then: String,
+    now: String,
+): String {
+    val day = then.substringBefore(' ')
+    val clock = then.substringAfter(' ')
+    return if (day == now.substringBefore(' ')) {
+        "Today $clock"
     } else {
-        "${MONTH[then.month - 1]} ${then.day}"
+        val month = day.substring(5, 7).toInt()
+        val date = day.substring(8, 10).toInt()
+        "${MONTH[month - 1]} $date"
     }
 }
 
@@ -94,26 +102,6 @@ fun derivationChips(path: String?): List<PathChipModel>? {
         PathChipModel(parts[3], chain, true),
         PathChipModel(parts[4], "Index", true),
     )
-}
-
-private data class CivilDay(
-    val year: Int,
-    val month: Int,
-    val day: Int,
-)
-
-private fun civilDay(unixSeconds: Long): CivilDay {
-    var z = unixSeconds.floorDiv(86_400L) + 719_468
-    val era = if (z >= 0) z / 146_097 else (z - 146_096) / 146_097
-    val doe = (z - era * 146_097).toInt()
-    val yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
-    val y = yoe + era.toInt() * 400
-    val doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
-    val mp = (5 * doy + 2) / 153
-    val day = doy - (153 * mp + 2) / 5 + 1
-    val month = mp + if (mp < 10) 3 else -9
-    val year = y + if (month <= 2) 1 else 0
-    return CivilDay(year, month, day)
 }
 
 private fun groupDigits(value: Long): String {

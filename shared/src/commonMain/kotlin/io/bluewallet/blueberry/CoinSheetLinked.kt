@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,13 +38,11 @@ import io.bluewallet.blueberry.parse.LinkNode
 import io.bluewallet.blueberry.parse.LinkStep
 import io.bluewallet.blueberry.parse.formatLinkAmount
 import io.bluewallet.blueberry.parse.words
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 private const val MAX_LINK_ROWS = 5
 private const val MAX_PATH_NODES = 7
 
-/** Linked coins card: title, map, legend, link rows, and the path to the selected coin. */
+/** Linked coins card: title, bubble strip, link rows, and the path to the selected coin. */
 @Composable
 internal fun LinkedCoinsCard(
     model: CoinSheetModel,
@@ -59,45 +56,16 @@ internal fun LinkedCoinsCard(
                 SheetText(model.linkedAside, 13.sp)
             }
             if (model.syncing) SheetText("Still syncing. Some links may be missing.", 12.sp)
-            if (model.mapCoins.isNotEmpty()) {
-                val base by produceState<CoinMapLayout?>(null, model.mapCoins, model.outpoint, model.linkOrder) {
-                    value = withContext(Dispatchers.Default) { layoutCoinMap(model.mapCoins, model.outpoint, null, model.linkOrder) }
-                }
-                val ready = base
-                if (ready == null) {
-                    CoinMapPlaceholder()
-                } else {
-                    CoinMapView(remember(ready, selected) { ready.withSelection(selected) })
-                }
-                MapLegend()
-            }
+            model.strip?.let { CoinSheetBubbleStrip(it, selected) }
             if (model.links.isEmpty()) {
                 NoLinks(model.addressUseCount)
             } else {
                 LinkRows(model.links, selected, onSelect)
                 model.links.find { it.other == selected }?.let { link ->
                     Box(Modifier.fillMaxWidth().height(1.dp).background(SheetPalette.tile))
-                    LinkPath(link, model.mapCoins.map { it.key }.toSet())
+                    LinkPath(link, model.unspentKeys)
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun MapLegend() {
-    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).border(2.dp, SheetPalette.text, CircleShape))
-            SheetText("This coin", 12.sp)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.width(14.dp).height(1.5.dp).background(SheetPalette.secondary))
-            SheetText("Share history", 12.sp)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).background(SheetPalette.grey, CircleShape))
-            SheetText("Separate", 12.sp)
         }
     }
 }

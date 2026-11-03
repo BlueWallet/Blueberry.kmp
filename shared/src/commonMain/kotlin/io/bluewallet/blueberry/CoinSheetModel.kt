@@ -43,8 +43,8 @@ data class CoinSheetModel(
     val linkedAside: String,
     val links: List<CoinLink>,
     val addressUseCount: Int,
-    val mapCoins: List<MapCoin>,
-    val linkOrder: List<String>,
+    val strip: SheetStrip?,
+    val unspentKeys: Set<String>,
     val spendRows: List<SpendRowModel>,
     val sendEnabled: Boolean,
     val sendTitle: String,
@@ -92,8 +92,11 @@ private fun liveSheet(
         linkedAside = if (others.isEmpty()) "${request.control.coins.size - 1} others separate" else formatPlusBtc(others.sumOf { it.valueSats }),
         links = links,
         addressUseCount = useCount,
-        mapCoins = mapCoinsFor(request.control),
-        linkOrder = links.map { it.other },
+        strip = sheetStrip(request.control, coin.key),
+        unspentKeys =
+            request.control.coins
+                .map { it.key }
+                .toSet(),
         spendRows =
             spendRowsFor(
                 coin = coin,
@@ -105,9 +108,9 @@ private fun liveSheet(
                 changeAddress = coin.isChange,
                 parentLabel = parent?.paymentLabel,
             ),
-        sendEnabled = !coin.isFrozen,
+        sendEnabled = coin.canSelect,
         sendTitle = "Send this coin",
-        sendSubtitle = if (coin.isFrozen) "Unfreeze it first" else "Starts a send with this coin selected",
+        sendSubtitle = sendSubtitle(coin),
         address = addressSheet(row, useCount),
         origin = originSheet(row, parent, request, inputVbytes(scriptTypeOfScriptPubKey(coin.scriptPubKey))),
     )
@@ -140,8 +143,8 @@ private fun spentSheet(request: CoinSheetRequest): CoinSheetModel? {
         linkedAside = "",
         links = emptyList(),
         addressUseCount = addressUses(request, request.outpoint),
-        mapCoins = emptyList(),
-        linkOrder = emptyList(),
+        strip = null,
+        unspentKeys = emptySet(),
         spendRows = emptyList(),
         sendEnabled = false,
         sendTitle = "Send this coin",
@@ -222,12 +225,44 @@ private fun linkedCoins(
     )
 }
 
-private fun mapCoinsFor(control: CoinControlSnapshot): List<MapCoin> =
-    control.coins.map { coin ->
-        val group = control.groups.find { it.linked && it.groupId == coin.groupId }
-        val title = coin.label?.trim()?.takeIf { it.isNotEmpty() } ?: if (coin.isChange) "Change" else "Coin"
-        MapCoin(coin.key, coin.valueSats, coin.colorArgb, coin.isFrozen, coin.groupId, group?.title, title)
+private fun sendSubtitle(coin: CoinControlCoin): String =
+    when {
+        coin.isFrozen -> "Unfreeze it first"
+        coin.sending -> "Already in a send"
+        else -> "Starts a send with this coin selected"
     }
+
+/** Home-widget bubble order, with [openKey]'s group moved to the front. */
+internal fun sheetStrip(
+    control: CoinControlSnapshot,
+    openKey: String,
+): SheetStrip? {
+    val open = control.bubbles.find { it.key == openKey } ?: return null
+    val groupId = open.linkedGroupId
+    val mine = if (groupId == null) listOf(open) else control.bubbles.filter { it.linkedGroupId == groupId }
+    val mineKeys = mine.map { it.key }.toSet()
+    val bubbles = mine + control.bubbles.filter { it.key !in mineKeys }
+    val group = groupId?.let { id -> control.groups.find { it.linked && it.groupId == id } }
+    val share = shareOfBalance(mine.sumOf { it.valueSats }, control.totalSats)
+    val caption =
+        if (group != null && mine.size >= 2) {
+            "${group.title} · ${mine.size} coins · $share% of balance"
+        } else {
+            "This coin · $share% of balance"
+        }
+    return SheetStrip(bubbles, openKey, caption)
+}
+
+private fun shareOfBalance(
+    part: Long,
+    total: Long,
+): Int = if (total <= 0L) 0 else ((part * 100 + total / 2) / total).toInt()
+
+data class SheetStrip(
+    val bubbles: List<CoinControlBubble>,
+    val openKey: String,
+    val caption: String,
+)
 
 private fun addressUses(
     request: CoinSheetRequest,
