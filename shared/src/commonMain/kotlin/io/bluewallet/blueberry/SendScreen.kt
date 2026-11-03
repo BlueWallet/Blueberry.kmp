@@ -152,9 +152,10 @@ private fun SendStepScreen(
                 amount = flow.amount,
                 balance =
                     SendAmountBalance(
-                        flow.amountCapSats,
-                        flow.sendingSats,
-                        flow.coinAvailability,
+                        capSats = flow.amountCapSats,
+                        walletSats = flow.walletTotalSats,
+                        sendingSats = flow.sendingSats,
+                        availability = flow.coinAvailability,
                         selectedCount = if (flow.selectedKeys.isEmpty()) 0 else flow.selectedRows.size,
                     ),
                 actions =

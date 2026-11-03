@@ -129,11 +129,68 @@ class SendFlowTest {
             flow.amount = "0.0005"
             assertEquals(SendAmount.Exact(50_000), flow.amountSats)
             flow.amount = "0.00050001"
+            assertEquals(SendAmount.Exact(50_001), flow.amountSats)
+            flow.amount = "1.00050001"
             assertNull(flow.amountSats)
             flow.amount = "MAX"
             assertEquals(SendAmount.Max, flow.amountSats)
             flow.selectedKeys = emptySet()
             assertEquals(flow.walletTotalSats, flow.amountCapSats)
+        }
+
+    @Test
+    fun a_short_pick_does_not_trap_the_amount_step() =
+        runFlow { _, _, flow ->
+            val big = coin("11", 6_056_593)
+            val small = coin("22", 651_077)
+            flow.address = ADDRESS
+            flow.label = "Rent"
+            flow.amount = "0.00698765"
+            flow.snap = WalletTxsSnapshot(utxos = listOf(big, small), utxosReady = true)
+            flow.refreshHeldOutpoints()
+            flow.continueFromAddress()
+            flow.continueFromAmount()
+            assertEquals(SendStep.Coins, flow.step)
+            flow.toggleCoin(small.key)
+            flow.continueFromCoins()
+            assertEquals(SendStep.Coins, flow.step)
+            flow.goBack()
+            assertEquals(SendStep.Amount, flow.step)
+            flow.continueFromAmount()
+            assertEquals(SendStep.Coins, flow.step)
+            assertEquals(setOf(small.key), flow.selectedKeys)
+            flow.continueFromCoins()
+            assertEquals(SendStep.Coins, flow.step)
+            flow.toggleCoin(big.key)
+            flow.continueFromCoins()
+            assertEquals(SendStep.Review, flow.step)
+        }
+
+    @Test
+    fun coins_step_shows_the_shortfall_when_the_picked_coin_is_short() =
+        runFlow { _, _, flow ->
+            val big = coin("11", 6_056_593)
+            val small = coin("22", 651_077)
+            flow.address = ADDRESS
+            flow.label = "Rent"
+            flow.amount = "0.00698765"
+            flow.feeRate = null
+            flow.snap = WalletTxsSnapshot(utxos = listOf(big, small), utxosReady = true)
+            flow.refreshHeldOutpoints()
+            flow.selectedKeys = setOf(small.key)
+            val coverage = flow.coverage()
+            assertEquals(SendCoverage(651_077, 698_765, false), coverage)
+            assertEquals(47_688, coverage.neededSats - coverage.selectedSats)
+            assertEquals(0.932, coverage.selectedSats.toDouble() / coverage.neededSats, 0.001)
+            assertEquals("Need 0.00047688 BTC more", sendCoinsButtonLabel(1, coverage))
+            flow.feeRate = 1.0
+            val withFee = flow.coverage()
+            assertEquals(651_077, withFee.selectedSats)
+            assertFalse(withFee.covered)
+            assertTrue(withFee.neededSats > 698_765)
+            flow.feeRate = null
+            flow.amount = "0.1"
+            assertEquals(SendCoverage(651_077, 10_000_000, false), flow.coverage())
         }
 
     @Test

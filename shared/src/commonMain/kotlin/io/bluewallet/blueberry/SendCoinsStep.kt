@@ -133,25 +133,23 @@ private fun CoverageCard(
     rate: Double?,
 ) {
     SendCard {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                BtcAmountText(sats = coverage.selectedSats, fontSize = BwType.BodySize)
-                Text("of", color = BwColors.InkQuiet, fontFamily = BwFontFamily, fontSize = BwType.LabelSize)
-                BtcAmountText(sats = coverage.neededSats, color = BwColors.InkQuiet, fontSize = BwType.BodySize)
-            }
-            if (selected.isNotEmpty()) {
-                val (status, color) =
-                    if (coverage.covered) {
-                        "Covered" to BwColors.Success
-                    } else {
-                        "Need ${formatBtc(coverage.neededSats - coverage.selectedSats)} more" to BwColors.Warning
-                    }
-                Text(status, color = color, fontFamily = BwFontFamily, fontSize = BwType.LabelSize, fontWeight = BwType.Label)
-            }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BtcAmountText(sats = coverage.selectedSats, fontSize = BwType.BodySize)
+            Text("of", color = BwColors.InkQuiet, fontFamily = BwFontFamily, fontSize = BwType.LabelSize)
+            BtcAmountText(sats = coverage.neededSats, color = BwColors.InkQuiet, fontSize = BwType.BodySize)
+        }
+        if (selected.isNotEmpty()) {
+            val (status, color) =
+                if (coverage.covered) {
+                    "Covered" to BwColors.Success
+                } else {
+                    "Need ${formatBtc(coverage.neededSats - coverage.selectedSats)} more" to BwColors.Warning
+                }
+            Text(status, color = color, fontFamily = BwFontFamily, fontSize = BwType.LabelSize, fontWeight = BwType.Label)
         }
         CoverageBar(selected = selected, neededSats = coverage.neededSats)
         HelperText(
