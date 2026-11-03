@@ -1,0 +1,26 @@
+# Brings the app to Settings with "Test Tor" on screen, from any of: fresh install (onboarding),
+# home, or Settings already open. Safe to call at the start of every flow.
+appId: io.bluewallet.blueberry
+---
+- launchApp:
+    appId: io.bluewallet.blueberry
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Import wallet|Settings|Test Tor"
+    timeout: 120000
+- runFlow:
+    when:
+      visible: "Import wallet"
+    file: import-watch-only.yaml
+- runFlow:
+    when:
+      notVisible: "Test Tor"
+    commands:
+      - tapOn: "Settings"
+      - extendedWaitUntil:
+          visible: "Theme"
+          timeout: 30000
+      - scrollUntilVisible:
+          element: "Test Tor"
+          direction: DOWN
+          timeout: 30000

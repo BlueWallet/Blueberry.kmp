@@ -1,0 +1,132 @@
+# DEBUG ONLY (debug/ios-back-flicker): push/pop every safe screen, tap-back and edge-swipe back.
+# Watch-only address only. Never opens Create wallet, Secret, or Receive (QR).
+appId: io.bluewallet.blueberry
+name: back-transitions
+---
+- launchApp:
+    appId: io.bluewallet.blueberry
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Import wallet|Settings"
+    timeout: 120000
+- runFlow:
+    when:
+      visible: "Import wallet"
+    file: ../common/import-watch-only.yaml
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 60000
+- waitForAnimationToEnd
+# ---- MARK R1: Home -> Receive -> header Back (user-confirmed flicker on device)
+- tapOn: "Receive"
+- extendedWaitUntil: {visible: "Back to home", timeout: 30000}
+- waitForAnimationToEnd
+- takeScreenshot: R1a-receive
+- tapOn: "Back"
+- waitForAnimationToEnd
+- takeScreenshot: R1b-home
+# ---- MARK R2: Home -> Receive -> "Back to home" sheet button
+- tapOn: "Receive"
+- extendedWaitUntil: {visible: "Back to home", timeout: 30000}
+- waitForAnimationToEnd
+- tapOn: "Back to home"
+- waitForAnimationToEnd
+- takeScreenshot: R2-home
+# ---- MARK R3: Home -> Receive -> edge swipe
+- tapOn: "Receive"
+- extendedWaitUntil: {visible: "Back to home", timeout: 30000}
+- waitForAnimationToEnd
+- swipe: {start: "1%, 40%", end: "85%, 40%", duration: 400}
+- waitForAnimationToEnd
+- takeScreenshot: R3-home
+# ---- MARK R4: Home -> Receive -> focus label field (keyboard up) -> header Back
+- tapOn: "Receive"
+- extendedWaitUntil: {visible: "Back to home", timeout: 30000}
+- waitForAnimationToEnd
+- tapOn: "Savings"
+- waitForAnimationToEnd
+- takeScreenshot: R4a-keyboard
+- tapOn: "Back"
+- waitForAnimationToEnd
+- takeScreenshot: R4b-home
+# ---- MARK R5: repeat R1 twice
+- repeat:
+    times: 2
+    commands:
+      - tapOn: "Receive"
+      - extendedWaitUntil: {visible: "Back to home", timeout: 30000}
+      - waitForAnimationToEnd
+      - tapOn: "Back"
+      - waitForAnimationToEnd
+# ---- MARK A: Home -> Settings -> tap Back
+- tapOn: "Settings"
+- extendedWaitUntil: {visible: "Theme", timeout: 30000}
+- waitForAnimationToEnd
+- takeScreenshot: A1-settings
+- tapOn: "Back"
+- waitForAnimationToEnd
+- takeScreenshot: A2-home
+# ---- MARK B: Home -> Settings -> edge swipe back
+- tapOn: "Settings"
+- extendedWaitUntil: {visible: "Theme", timeout: 30000}
+- waitForAnimationToEnd
+- swipe: {start: "1%, 50%", end: "85%, 50%", duration: 400}
+- waitForAnimationToEnd
+- takeScreenshot: B2-home
+# ---- MARK C: Settings -> About -> tap Back (to Settings)
+- tapOn: "Settings"
+- extendedWaitUntil: {visible: "Theme", timeout: 30000}
+- scrollUntilVisible: {element: "About", direction: DOWN, timeout: 30000}
+- waitForAnimationToEnd
+- takeScreenshot: C1-settings-scrolled
+- tapOn: "About"
+- extendedWaitUntil: {visible: "Changelog", timeout: 30000}
+- waitForAnimationToEnd
+- takeScreenshot: C2-about
+- tapOn: "Back"
+- waitForAnimationToEnd
+- takeScreenshot: C3-settings-after-pop
+# ---- MARK D: About -> Changelog -> Back (Compose-only headers both sides)
+- scrollUntilVisible: {element: "About", direction: DOWN, timeout: 30000}
+- tapOn: "About"
+- extendedWaitUntil: {visible: "Changelog", timeout: 30000}
+- waitForAnimationToEnd
+- tapOn: "Changelog"
+- waitForAnimationToEnd
+- takeScreenshot: D1-changelog
+- tapOn: "Back"
+- waitForAnimationToEnd
+- takeScreenshot: D2-about
+# ---- MARK E: About -> edge swipe back to Settings, then Back to Home
+- swipe: {start: "1%, 50%", end: "85%, 50%", duration: 400}
+- waitForAnimationToEnd
+- takeScreenshot: E1-settings
+- tapOn: "Back"
+- waitForAnimationToEnd
+- takeScreenshot: E2-home
+# ---- MARK F: Home -> Send -> Back
+- tapOn: "Send"
+- waitForAnimationToEnd
+- takeScreenshot: F1-send
+- tapOn: "Back"
+- waitForAnimationToEnd
+- takeScreenshot: F2-home
+# ---- MARK G: Home -> Coins -> Back
+- tapOn:
+    text: "Receive bitcoin to see your coins here|Already share onchain history|Probably linked through change"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: G1-coins
+- tapOn: {text: "Back", optional: true}
+- waitForAnimationToEnd
+- takeScreenshot: G2-home
+# ---- MARK H: Home -> Settings -> Back, twice more for repeatability
+- repeat:
+    times: 2
+    commands:
+      - tapOn: "Settings"
+      - extendedWaitUntil: {visible: "Theme", timeout: 30000}
+      - waitForAnimationToEnd
+      - tapOn: "Back"
+      - waitForAnimationToEnd
+- takeScreenshot: H-home
