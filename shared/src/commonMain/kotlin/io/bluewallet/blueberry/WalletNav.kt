@@ -16,7 +16,6 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavBackStackEntry
-import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -25,6 +24,7 @@ import io.bluewallet.blueberry.boot.formatDatabaseGigabytes
 import io.bluewallet.blueberry.boot.saveHomeDetailedSync
 import io.bluewallet.blueberry.boot.sqliteDatabaseBytes
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.ui.PlatformNavHost
 import io.bluewallet.blueberry.wallet.WalletSecretInspection
 import io.bluewallet.blueberry.wallet.inspectWalletSecret
 import kotlinx.coroutines.Dispatchers
@@ -125,8 +125,8 @@ internal fun WalletNavHost(
     ) {
         // Only swallow back on home so NavHost can pop pushed screens.
         BackHandler(enabled = homeVisible) { /* idle: do not finish the activity / app */ }
-        // Do not set enterTransition/exitTransition: iOS keeps the native-like push defaults.
-        NavHost(
+        // iOS transitions live in PlatformNavHost (works around the CMP-10750 pop flicker).
+        PlatformNavHost(
             navController = navController,
             startDestination = HomeRoute,
             modifier = Modifier.fillMaxSize(),
