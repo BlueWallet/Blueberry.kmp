@@ -66,7 +66,6 @@ class CoinControlModelsTest {
 
         val c11 = snap.coins.first { it.key == "c11:0" }
         assertTrue(c11.isFrozen)
-        assertEquals(CoinPrivacyState.Frozen, c11.privacyState)
         assertEquals("Frozen", coinRowTag(c11))
     }
 

@@ -8,13 +8,6 @@ import io.bluewallet.blueberry.wallet.scriptTypeOfScriptPubKey
 import kotlin.math.ceil
 import kotlin.math.roundToLong
 
-enum class CoinPrivacyState {
-    Frozen,
-    Change,
-    Labeled,
-    Unlabeled,
-}
-
 enum class CoinControlFilter {
     All,
     Labeled,
@@ -33,7 +26,6 @@ data class CoinControlCoin(
     val groupId: String,
     /** Group from provable links only. */
     val certainGroupId: String,
-    val privacyState: CoinPrivacyState,
     val colorArgb: Long,
     val spendCostSat: Long?,
     val nearDust: Boolean,
@@ -144,19 +136,6 @@ fun spendCostSat(
     return ceil(vbytes * feeRateSatPerVb).toLong()
 }
 
-/** One state by precedence (frozen, change, label). Filters use [CoinControlFilter.matches], not this. */
-fun coinPrivacyState(
-    isFrozen: Boolean,
-    isChange: Boolean,
-    label: String?,
-): CoinPrivacyState =
-    when {
-        isFrozen -> CoinPrivacyState.Frozen
-        isChange -> CoinPrivacyState.Change
-        !label.isNullOrBlank() -> CoinPrivacyState.Labeled
-        else -> CoinPrivacyState.Unlabeled
-    }
-
 /** Spec age: `1d`, `35d`, then `14mo` from 365 days; unconfirmed → Pending. */
 fun formatCoinAgeDays(ageDays: Long?): String =
     when {
@@ -199,7 +178,6 @@ fun buildCoinControlSnapshot(
                 isFrozen = isFrozen,
                 groupId = linkage.likely[u.key] ?: u.key,
                 certainGroupId = linkage.certain[u.key] ?: u.key,
-                privacyState = coinPrivacyState(isFrozen, u.isChange, u.label),
                 colorArgb = utxoCircleArgb(u.key),
                 spendCostSat = cost,
                 nearDust = nearDust,
@@ -327,8 +305,7 @@ fun filterCoinControlGroups(
 ): List<CoinControlGroup> {
     if (filter == CoinControlFilter.All) return snapshot.groups
     return snapshot.groups.mapNotNull { g ->
-        val coins =
-            g.coins.filter(filter::matches)
+        val coins = g.coins.filter(filter::matches)
         if (coins.isEmpty()) {
             null
         } else {
