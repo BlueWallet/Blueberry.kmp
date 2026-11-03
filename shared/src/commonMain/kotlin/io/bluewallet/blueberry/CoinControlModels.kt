@@ -45,7 +45,24 @@ data class CoinControlCoin(
     val sending: Boolean = false,
 ) {
     val canSelect: Boolean get() = !isFrozen && !sending
+
+    /** Shows a label: its own name, its address label, or a "change from: …" name. */
+    val hasLabel: Boolean get() = !label.isNullOrBlank()
 }
+
+/**
+ * Whether [coin] belongs under [filter]; the chip counts and the filtered list both use it.
+ * Labeled, Change and Frozen are independent: a labelled change coin is under both.
+ * No label is the coins still worth labelling: not change, not frozen, and showing no label.
+ */
+fun CoinControlFilter.matches(coin: CoinControlCoin): Boolean =
+    when (this) {
+        CoinControlFilter.All -> true
+        CoinControlFilter.Labeled -> coin.hasLabel
+        CoinControlFilter.Change -> coin.isChange
+        CoinControlFilter.NoLabel -> !coin.isFrozen && !coin.isChange && !coin.hasLabel
+        CoinControlFilter.Frozen -> coin.isFrozen
+    }
 
 data class CoinControlGroup(
     val groupId: String,
@@ -127,6 +144,7 @@ fun spendCostSat(
     return ceil(vbytes * feeRateSatPerVb).toLong()
 }
 
+/** One state by precedence (frozen, change, label). Filters use [CoinControlFilter.matches], not this. */
 fun coinPrivacyState(
     isFrozen: Boolean,
     isChange: Boolean,
@@ -239,17 +257,7 @@ fun buildCoinControlSnapshot(
 
     val bubbles = orderedBubbles(namedLinked, independentCoins)
 
-    val filterCounts =
-        mapOf(
-            CoinControlFilter.All to coins.size,
-            CoinControlFilter.Labeled to coins.count { it.privacyState == CoinPrivacyState.Labeled },
-            CoinControlFilter.Change to coins.count { it.isChange },
-            CoinControlFilter.NoLabel to
-                coins.count {
-                    !it.isFrozen && !it.isChange && it.label.isNullOrBlank()
-                },
-            CoinControlFilter.Frozen to coins.count { it.isFrozen },
-        )
+    val filterCounts = CoinControlFilter.entries.associateWith { f -> coins.count(f::matches) }
 
     return CoinControlSnapshot(
         coins = coins,
@@ -266,7 +274,7 @@ fun buildCoinControlSnapshot(
 
 internal fun linkedGroupLetterNames(groupsNewestFirstByTotal: List<CoinControlGroup>): List<String> =
     groupsNewestFirstByTotal.mapIndexed { index, g ->
-        val labeled = g.coins.filter { !it.label.isNullOrBlank() }.maxByOrNull { it.valueSats }
+        val labeled = g.coins.filter { it.hasLabel }.maxByOrNull { it.valueSats }
         if (labeled != null) {
             "${labeled.label!!.trim()} group"
         } else {
@@ -320,16 +328,7 @@ fun filterCoinControlGroups(
     if (filter == CoinControlFilter.All) return snapshot.groups
     return snapshot.groups.mapNotNull { g ->
         val coins =
-            g.coins.filter { c ->
-                when (filter) {
-                    CoinControlFilter.All -> true
-                    CoinControlFilter.Labeled -> c.privacyState == CoinPrivacyState.Labeled
-                    CoinControlFilter.Change -> c.isChange
-                    CoinControlFilter.NoLabel ->
-                        !c.isFrozen && !c.isChange && c.label.isNullOrBlank()
-                    CoinControlFilter.Frozen -> c.isFrozen
-                }
-            }
+            g.coins.filter(filter::matches)
         if (coins.isEmpty()) {
             null
         } else {
