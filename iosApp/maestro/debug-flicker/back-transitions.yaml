@@ -17,6 +17,47 @@ name: back-transitions
     visible: "Settings"
     timeout: 60000
 - waitForAnimationToEnd
+# ---- MARK R1: Home -> Receive -> header Back (user-confirmed flicker on device)
+- tapOn: "Receive"
+- extendedWaitUntil: {visible: "Back to home", timeout: 30000}
+- waitForAnimationToEnd
+- takeScreenshot: R1a-receive
+- tapOn: "Back"
+- waitForAnimationToEnd
+- takeScreenshot: R1b-home
+# ---- MARK R2: Home -> Receive -> "Back to home" sheet button
+- tapOn: "Receive"
+- extendedWaitUntil: {visible: "Back to home", timeout: 30000}
+- waitForAnimationToEnd
+- tapOn: "Back to home"
+- waitForAnimationToEnd
+- takeScreenshot: R2-home
+# ---- MARK R3: Home -> Receive -> edge swipe
+- tapOn: "Receive"
+- extendedWaitUntil: {visible: "Back to home", timeout: 30000}
+- waitForAnimationToEnd
+- swipe: {start: "1%, 40%", end: "85%, 40%", duration: 400}
+- waitForAnimationToEnd
+- takeScreenshot: R3-home
+# ---- MARK R4: Home -> Receive -> focus label field (keyboard up) -> header Back
+- tapOn: "Receive"
+- extendedWaitUntil: {visible: "Back to home", timeout: 30000}
+- waitForAnimationToEnd
+- tapOn: "Savings"
+- waitForAnimationToEnd
+- takeScreenshot: R4a-keyboard
+- tapOn: "Back"
+- waitForAnimationToEnd
+- takeScreenshot: R4b-home
+# ---- MARK R5: repeat R1 twice
+- repeat:
+    times: 2
+    commands:
+      - tapOn: "Receive"
+      - extendedWaitUntil: {visible: "Back to home", timeout: 30000}
+      - waitForAnimationToEnd
+      - tapOn: "Back"
+      - waitForAnimationToEnd
 # ---- MARK A: Home -> Settings -> tap Back
 - tapOn: "Settings"
 - extendedWaitUntil: {visible: "Theme", timeout: 30000}
