@@ -3,7 +3,7 @@ name: Debug iOS back flicker
 
 on:
   push:
-    branches: [debug/ios-back-flicker]
+    branches: [debug/ios-back-flicker, debug/ios-back-flicker-fix]
   workflow_dispatch:
 
 permissions:
@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ios: ["26", "18"]
+        ios: ["26"]
     runs-on: macos-latest
     timeout-minutes: 75
     steps:

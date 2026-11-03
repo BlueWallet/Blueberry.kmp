@@ -1,4 +1,4 @@
 executionOrder:
   continueOnFailure: true
   flowsOrder:
-    - back-transitions
+    - receive-pops

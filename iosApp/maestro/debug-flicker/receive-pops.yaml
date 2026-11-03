@@ -1,0 +1,62 @@
+# DEBUG ONLY: many Receive -> Home pops (tap Back and left-edge swipe) for one-frame flicker stats.
+# Watch-only public address only (1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa). Never opens Create wallet or Secret.
+appId: io.bluewallet.blueberry
+name: receive-pops
+---
+- launchApp:
+    appId: io.bluewallet.blueberry
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Import wallet|Settings"
+    timeout: 120000
+- runFlow:
+    when:
+      visible: "Import wallet"
+    file: ../common/import-watch-only.yaml
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 60000
+- waitForAnimationToEnd: {timeout: 3000}
+# ---- MARK T: 12x Home -> Receive -> header Back
+- repeat:
+    times: 12
+    commands:
+      - tapOn: "Receive"
+      - extendedWaitUntil: {visible: "Back to home", timeout: 30000}
+      - waitForAnimationToEnd: {timeout: 3000}
+      - tapOn: "Back"
+      - extendedWaitUntil: {visible: "Settings", timeout: 30000}
+      - waitForAnimationToEnd: {timeout: 3000}
+- takeScreenshot: T-home
+# ---- MARK S: 6x Home -> Receive -> left-edge swipe back
+- repeat:
+    times: 6
+    commands:
+      - tapOn: "Receive"
+      - extendedWaitUntil: {visible: "Back to home", timeout: 30000}
+      - waitForAnimationToEnd: {timeout: 3000}
+      - swipe: {start: "1%, 40%", end: "85%, 40%", duration: 400}
+      - extendedWaitUntil: {visible: "Settings", timeout: 30000}
+      - waitForAnimationToEnd: {timeout: 3000}
+- takeScreenshot: S-home
+# ---- MARK Q: right-edge swipe on Receive (native iOS: must NOT pop)
+- tapOn: "Receive"
+- extendedWaitUntil: {visible: "Back to home", timeout: 30000}
+- waitForAnimationToEnd: {timeout: 3000}
+- swipe: {start: "99%, 40%", end: "15%, 40%", duration: 400}
+- waitForAnimationToEnd: {timeout: 3000}
+- takeScreenshot: Q-after-right-swipe
+- tapOn: {text: "Back to home", optional: true}
+- extendedWaitUntil: {visible: "Settings", timeout: 30000}
+- waitForAnimationToEnd: {timeout: 3000}
+# ---- MARK P: 4x Home -> Settings -> Back (UIKit header screen)
+- repeat:
+    times: 4
+    commands:
+      - tapOn: "Settings"
+      - extendedWaitUntil: {visible: "Theme", timeout: 30000}
+      - waitForAnimationToEnd: {timeout: 3000}
+      - tapOn: "Back"
+      - extendedWaitUntil: {visible: "Receive", timeout: 30000}
+      - waitForAnimationToEnd: {timeout: 3000}
+- takeScreenshot: P-home
