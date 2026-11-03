@@ -14,6 +14,7 @@ data class CoinsRowModel(
     val ageLabel: String,
     val address: String?,
     val path: String?,
+    val addressLabel: String? = null,
 )
 
 data class UtxoRowTitle(
@@ -47,6 +48,7 @@ fun coinsRows(utxos: List<WalletUtxoRow>): List<CoinsRowModel> {
             ageLabel = u.ageLabel,
             address = u.address,
             path = u.path,
+            addressLabel = u.addressLabel,
         )
     }
 }
