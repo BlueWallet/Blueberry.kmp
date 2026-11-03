@@ -1,11 +1,16 @@
 package io.bluewallet.blueberry
 
+import fr.acinq.bitcoin.MnemonicCode
 import fr.acinq.bitcoin.OutPoint
 import fr.acinq.bitcoin.Satoshi
 import fr.acinq.bitcoin.Transaction
 import fr.acinq.bitcoin.TxHash
 import fr.acinq.bitcoin.TxIn
 import fr.acinq.bitcoin.TxOut
+import io.bluewallet.blueberry.labels.AddressLabel
+import io.bluewallet.blueberry.labels.WalletLabels
+import io.bluewallet.blueberry.labels.decryptWalletLabels
+import io.bluewallet.blueberry.labels.labelingAccountKey
 import io.bluewallet.blueberry.parse.CoinLinkage
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.storage.createSqliteDatabase
@@ -13,6 +18,8 @@ import io.bluewallet.blueberry.wallet.AddressScriptType
 import io.bluewallet.blueberry.wallet.createWallet
 import io.bluewallet.blueberry.wallet.deriveWatchWallet
 import io.bluewallet.blueberry.wallet.saveWalletSecret
+import kotlinx.coroutines.runBlocking
+import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -78,14 +85,7 @@ class UtxoDefaultLabelTest {
         saveWalletSecret(db, wif)
         val wallet = createWallet(db)
         val recv = deriveWatchWallet(wif).addresses.first { it.scriptType == AddressScriptType.P2PKH }
-        val fund =
-            Transaction(
-                2L,
-                listOf(TxIn(OutPoint(TxHash(ByteArray(32).also { it[0] = 42 }), 0L), 0xffffffffL)),
-                listOf(TxOut(Satoshi(9_664L), recv.scriptPubKey)),
-                0L,
-            )
-        db.transactions.upsert(StoredTx(fund.txid.toString(), 800_000, 0, "aa".repeat(32), Transaction.write(fund), 9_664L))
+        db.transactions.upsert(fundingTx(recv.scriptPubKey))
         val store = createWalletTxsStore()
 
         setAddressLabel(db, wallet, store, recv.address, "savings")
@@ -125,6 +125,44 @@ class UtxoDefaultLabelTest {
         assertNull(row.name)
         assertEquals("savings", row.addressLabel)
     }
+
+    @Test
+    fun bip329_export_carries_only_the_address_label_not_a_derived_coin_label() =
+        runBlocking {
+            val db = createSqliteDatabase(":memory:")
+            val mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+            saveWalletSecret(db, mnemonic)
+            val wallet = createWallet(db)
+            val recv = deriveWatchWallet(mnemonic).addresses.first { !it.change }
+            db.transactions.upsert(fundingTx(recv.scriptPubKey))
+            val store = createWalletTxsStore()
+            setAddressLabel(db, wallet, store, recv.address, "savings")
+            val coin = store.get().utxos.single()
+            assertEquals("savings", coin.label)
+            // Opening the coin sheet and saving untouched submits the explicit name only, which is empty.
+            setUtxoName(db, wallet, store, coin.key, coinsRows(store.get().utxos).single().name.orEmpty())
+
+            var body: String? = null
+            publishWalletLabels(db) { _, b ->
+                body = b
+                "1"
+            }
+
+            val exported = decryptWalletLabels(labelingAccountKey(MnemonicCode.toSeed(mnemonic, "")), Base64.decode(body!!))
+            assertEquals(WalletLabels(emptyList(), emptyList(), listOf(AddressLabel(recv.address, "savings"))), exported)
+            db.close()
+        }
 }
 
 private fun WalletTxsStore.onlyCoinLabel(): String? = get().utxos.single().label
+
+private fun fundingTx(script: ByteArray): StoredTx {
+    val tx =
+        Transaction(
+            2L,
+            listOf(TxIn(OutPoint(TxHash(ByteArray(32).also { it[0] = 42 }), 0L), 0xffffffffL)),
+            listOf(TxOut(Satoshi(9_664L), script)),
+            0L,
+        )
+    return StoredTx(tx.txid.toString(), 800_000, 0, "aa".repeat(32), Transaction.write(tx), 9_664L)
+}
