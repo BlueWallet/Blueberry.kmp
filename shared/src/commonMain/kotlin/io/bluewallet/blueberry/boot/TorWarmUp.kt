@@ -68,11 +68,26 @@ private val directRelayScope = CoroutineScope(SupervisorJob() + Dispatchers.Defa
 /**
  * [applyTorDirectRelay] from a non-suspending caller such as a switch. The call starts in the
  * caller's thread, so quick on/off/on taps reach echalote's (fair) lock in tap order.
+ *
+ * With [warmUpAfter] (the user has "warm up Tor" on) the new route is warmed up once applied:
+ * changing the route drops the warmed connection, and fails a warm-up still running on the old
+ * route, so without this the first request after the switch pays for the whole bootstrap.
  */
 fun launchTorDirectRelay(
     enabled: Boolean,
+    warmUpAfter: Boolean = false,
+    warmUp: suspend (String) -> Unit = { Echalote.warmUp(it) },
     apply: suspend (Boolean) -> Unit = { Echalote.setDirectRelay(it) },
-): Job = directRelayScope.launch(start = CoroutineStart.UNDISPATCHED) { applyTorDirectRelay(enabled, apply) }
+): Job =
+    directRelayScope.launch(start = CoroutineStart.UNDISPATCHED) {
+        applyTorDirectRelay(enabled, apply)
+        if (warmUpAfter) {
+            // Let a warm-up on the old route finish failing first: while it is active,
+            // startTorWarmUp would hand back that dying job instead of starting a new one.
+            warmUpJob?.join()
+            startTorWarmUp(warmUp = warmUp).join()
+        }
+    }
 
 private val warmUpScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 

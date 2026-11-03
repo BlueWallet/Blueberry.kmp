@@ -132,7 +132,7 @@ fun SettingsScreen(
                     onCheckedChange = { on ->
                         torDirect = on
                         saveTorDirectRelay(db, on)
-                        launchTorDirectRelay(on)
+                        launchTorDirectRelay(on, warmUpAfter = torWarmUp)
                     },
                 )
                 SecretCard(secret = secret, onShow = onOpenSecret)
