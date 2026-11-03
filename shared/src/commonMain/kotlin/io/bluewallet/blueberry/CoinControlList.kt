@@ -177,7 +177,7 @@ internal fun CoinGroupSection(
                     .background(BwColors.Card),
         ) {
             group.coins.forEachIndexed { index, coin ->
-                key(coin.key, coin.isFrozen, coin.sending, coin.label, coin.privacyState) {
+                key(coin.key, coin.isFrozen, coin.sending, coin.label) {
                     if (index > 0) {
                         Box(
                             Modifier

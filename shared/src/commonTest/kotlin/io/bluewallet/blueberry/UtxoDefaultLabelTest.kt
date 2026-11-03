@@ -23,6 +23,7 @@ import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class UtxoDefaultLabelTest {
     private val txid = "ab".repeat(32)
@@ -109,7 +110,7 @@ class UtxoDefaultLabelTest {
         val control = buildCoinControlSnapshot(listOf(coin(addressLabel = "savings")), CoinLinkage(emptyMap(), emptyMap()), emptySet())
         val c = control.coins.single()
         assertEquals("savings", c.label)
-        assertEquals(CoinPrivacyState.Labeled, c.privacyState)
+        assertTrue(CoinControlFilter.Labeled.matches(c))
         assertEquals("savings", coinRowSubtitle(c))
     }
 
