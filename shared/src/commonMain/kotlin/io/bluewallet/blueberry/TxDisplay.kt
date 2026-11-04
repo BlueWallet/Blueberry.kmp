@@ -15,7 +15,6 @@ internal fun txDetail(input: TxDisplayInput): TxDetail {
     val whenTime = input.block?.mined ?: input.broadcastAt
     val dated = whenTime?.let { txWhenLabel(it, input.now) }.orEmpty()
     val external = input.outputs.filter { !it.mine }
-    val heroSub = if (input.direction == TxDirection.Moved) "Moved between your coins" else ""
     val to = if (received || input.direction == TxDirection.Moved) null else external.firstOrNull()
     val weight = txWeight(input)
     val vsize = txVsize(input)
@@ -31,7 +30,6 @@ internal fun txDetail(input: TxDisplayInput): TxDetail {
         hero =
             TxHero(
                 amount = txAmountParts(displaySats, received),
-                sub = heroSub,
                 toLabel = to?.let { input.label.ifBlank { "Recipient" } },
                 toAddress = to?.address,
                 toMore = (external.size - 1).coerceAtLeast(0),

@@ -36,6 +36,8 @@ data class TxDisplayOutput(
     val vout: Int,
     val valueSat: Long,
     val mine: Boolean,
+    /** Present in the wallet's coin list. A pending output can be ours before it is. */
+    val inWallet: Boolean = false,
     val change: Boolean = false,
     val address: String? = null,
     val addressIndex: Int? = null,
@@ -94,7 +96,6 @@ data class TxHeader(
 
 data class TxHero(
     val amount: TxAmountParts,
-    val sub: String,
     val toLabel: String? = null,
     val toAddress: String? = null,
     val toMore: Int = 0,
@@ -109,7 +110,6 @@ data class TxStatus(
     val left: String,
     val right: String?,
     val note: String,
-    val speedUp: Boolean,
     val failed: Boolean = false,
     val replacementTxid: String? = null,
 )
@@ -127,6 +127,8 @@ data class TxFlowChipModel(
     val title: String,
     val sub: String? = null,
     val colorArgb: Long? = null,
+    /** Outpoint of the coin row this chip opens. Unset for chips that have no row. */
+    val coinKey: String? = null,
 )
 
 data class TxFlowView(

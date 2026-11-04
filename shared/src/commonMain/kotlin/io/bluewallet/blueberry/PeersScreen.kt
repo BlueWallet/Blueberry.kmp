@@ -30,7 +30,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -451,19 +450,20 @@ private fun LazyListScope.homeFeed(
                 onOpenCoins = open.coins,
             )
         }
-        items(activity.broadcasts, key = { "broadcast-${it.id}" }) { row ->
-            Box(Modifier.padding(horizontal = BwSpace.ScreenX)) {
-                HomeBroadcastRow(row = row, onClick = { onOpenBroadcast(row.id) })
-            }
-        }
-        if (activity.sections.isNotEmpty()) {
-            activity.sections.forEach { section ->
+        val sections = sectionsWithLiveBroadcasts(activity.sections, activity.broadcasts.size)
+        if (sections.isNotEmpty()) {
+            sections.forEach { section ->
                 item(key = "tx-day-${section.title}") {
                     Box(Modifier.padding(horizontal = BwSpace.ScreenX)) { TxDayHeader(section.title) }
                 }
                 item(key = "tx-card-${section.title}") {
                     Box(Modifier.padding(horizontal = BwSpace.ScreenX)) {
-                        TxDayCard(section.items, open.tx)
+                        TxDayCard(
+                            section.items,
+                            open.tx,
+                            broadcasts = if (section.title == "Today") activity.broadcasts else emptyList(),
+                            onOpenBroadcast = onOpenBroadcast,
+                        )
                     }
                 }
             }

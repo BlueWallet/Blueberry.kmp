@@ -25,7 +25,6 @@ private fun txFailedStatus(input: TxDisplayInput): TxStatus? {
         left = title,
         right = null,
         note = "",
-        speedUp = false,
         failed = true,
         replacementTxid = input.replacementTxid,
     )
@@ -46,7 +45,7 @@ private fun txPendingStatus(input: TxDisplayInput): TxStatus {
         }
     val note =
         if (own) {
-            "Until it's in a block it can still be replaced or dropped. Pay a higher fee to move it up the queue."
+            "Until it's in a block it can still be replaced or dropped."
         } else {
             "The sender can still replace it. Don't count it as received until it confirms."
         }
@@ -59,7 +58,6 @@ private fun txPendingStatus(input: TxDisplayInput): TxStatus {
         left = "Next block",
         right = null,
         note = note,
-        speedUp = own,
     )
 }
 
@@ -80,7 +78,6 @@ private fun txSyncingStatus(block: TxDisplayBlock): TxStatus =
         left = "Your block · ${txGroupDigits(block.height.toLong())}",
         right = "Syncing…",
         note = "",
-        speedUp = false,
     )
 
 private fun txConfirmedStatus(
@@ -111,7 +108,6 @@ private fun txConfirmedStatus(
         left = "Your block · ${txGroupDigits(block.height.toLong())}",
         right = right,
         note = confirmationNote(conf),
-        speedUp = false,
     )
 }
 

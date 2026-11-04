@@ -17,6 +17,8 @@ data class TxFlowNode(
     val headline: String? = null,
     /** Grey ring instead of a filled dot. Change keeps its own ring. */
     val ring: Boolean = false,
+    /** Outpoint of the coin row a tap opens. Send Review leaves it unset. */
+    val coinKey: String? = null,
 )
 
 data class TxFlowPoint(

@@ -1,8 +1,11 @@
 package io.bluewallet.blueberry
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -19,10 +23,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -51,6 +59,15 @@ internal fun TxLabelCard(
     host: TxDetailHost,
 ) {
     val failed = detail.outcome != TxOutcome.None
+    val typed =
+        if (host.editing) {
+            host.draft.trim()
+        } else if (detail.label.hasLabel) {
+            detail.label.title
+        } else {
+            ""
+        }
+    val turn by animateFloatAsState(if (host.editing) 90f else 0f, label = "label-chevron")
     Column(
         modifier =
             Modifier
@@ -58,32 +75,39 @@ internal fun TxLabelCard(
                 .clip(RoundedCornerShape(22.dp))
                 .background(txListCard())
                 .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (!host.editing) {
-            Pressable(onClick = { if (!failed) host.onEdit() }, enabled = !failed, role = Role.Button, modifier = Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(
-                        Modifier.size(36.dp).clip(CircleShape).background(txInsetFill()),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        LabelTag()
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            detail.label.title,
-                            color = if (detail.label.hasLabel) BwColors.Ink else TxBlue,
-                            fontFamily = BwFontFamily,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = (-0.45).sp,
-                        )
-                        Text(detail.label.subtitle, color = BwColors.InkSecondary, fontFamily = BwFontFamily, fontSize = 13.sp)
-                    }
-                    Chevron()
+        Pressable(onClick = { if (!failed) host.onEdit() }, enabled = !failed, role = Role.Button, modifier = Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    Modifier.size(36.dp).clip(CircleShape).background(txInsetFill()),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    LabelTag()
                 }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        typed.ifEmpty { "Add a label" },
+                        color = if (typed.isEmpty()) TxBlue else BwColors.Ink,
+                        fontFamily = BwFontFamily,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = (-0.45).sp,
+                    )
+                    Text(
+                        if (typed.isEmpty()) detail.label.subtitle else "On this transaction and its coin",
+                        color = BwColors.InkSecondary,
+                        fontFamily = BwFontFamily,
+                        fontSize = 13.sp,
+                    )
+                }
+                Chevron(Modifier.rotate(turn))
             }
-        } else {
+        }
+        AnimatedVisibility(
+            visible = host.editing,
+            enter = txAccordionEnter,
+            exit = txAccordionExit,
+        ) {
             TxLabelEditor(detail, host)
         }
     }
@@ -120,41 +144,15 @@ private fun TxLabelEditor(
 ) {
     val requester = remember { FocusRequester() }
     LaunchedEffect(Unit) { requester.requestFocus() }
-    Text(
-        "Label",
-        color = BwColors.Ink,
-        fontFamily = BwFontFamily,
-        fontSize = 16.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.45).sp,
-    )
-    TxLabelField(detail, host, requester)
-    TxLabelSuggestions(host)
-    Text(
-        "Stays on this phone. Also applied to the coin this transaction created.",
-        color = BwColors.InkSecondary,
-        fontFamily = BwFontFamily,
-        fontSize = 12.sp,
-    )
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Pressable(onClick = host.onCancel, role = Role.Button) {
-            Text(
-                "Cancel",
-                color = BwColors.Ink,
-                fontFamily = BwFontFamily,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(vertical = 12.dp),
-            )
-        }
-        Pressable(onClick = host.onSave, role = Role.Button) {
-            Text(
-                "Save",
-                color = TxBlue,
-                fontFamily = BwFontFamily,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(vertical = 12.dp),
-            )
-        }
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        TxLabelField(detail, host, requester)
+        TxLabelSuggestions(host)
+        Text(
+            "Stays on this phone. Also applied to the coin this transaction created.",
+            color = BwColors.InkSecondary,
+            fontFamily = BwFontFamily,
+            fontSize = 12.sp,
+        )
     }
 }
 
@@ -199,7 +197,10 @@ private fun TxLabelField(
 @Composable
 private fun TxLabelSuggestions(host: TxDetailHost) {
     if (host.suggestions.isEmpty()) return
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         host.suggestions.forEach { suggestion ->
             Pressable(onClick = { host.onDraft(suggestion) }, role = Role.Button) {
                 Text(
@@ -207,6 +208,10 @@ private fun TxLabelSuggestions(host: TxDetailHost) {
                     color = BwColors.Ink,
                     fontFamily = BwFontFamily,
                     fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = (-0.45).sp,
+                    maxLines = 1,
+                    softWrap = false,
                     modifier =
                         Modifier
                             .clip(RoundedCornerShape(17.dp))
@@ -223,6 +228,7 @@ internal fun TxFlowCard(
     detail: TxDetail,
     host: TxDetailHost,
 ) {
+    var openKey by remember { mutableStateOf<String?>(null) }
     val flow = detail.flow
     val nodes = detailFlowNodes(flow)
     Column(
@@ -249,12 +255,28 @@ internal fun TxFlowCard(
             Text(flow.fromColumn, color = BwColors.InkSecondary, fontFamily = BwFontFamily, fontSize = 12.sp)
             Text(flow.toColumn, color = BwColors.InkSecondary, fontFamily = BwFontFamily, fontSize = 12.sp)
         }
-        TxFlowGraph(nodes.first, nodes.second, detailFlowDescription(flow))
+        TxFlowGraph(
+            nodes.first,
+            nodes.second,
+            detailFlowDescription(flow),
+            openCoin = openKey,
+            onCoin = { key -> openKey = if (openKey == key) null else key },
+        )
         val note = flow.note
         if (note != null) Text(note, color = BwColors.InkSecondary, fontFamily = BwFontFamily, fontSize = 12.sp)
-        detail.coins.take(3).forEach { coin -> TxCoinBlock(coin, detail.outcome == TxOutcome.None, host) }
-        val extra = detail.coins.size - 3
-        if (extra > 0) Text("+$extra more coins", color = BwColors.InkSecondary, fontFamily = BwFontFamily, fontSize = 13.sp)
+        if (detail.coins.isNotEmpty()) {
+            Column(Modifier.fillMaxWidth()) {
+                detail.coins.forEach { coin ->
+                    AnimatedVisibility(
+                        visible = coin.outpoint == openKey,
+                        enter = txAccordionEnter,
+                        exit = txAccordionExit,
+                    ) {
+                        TxCoinBlock(coin, detail.outcome == TxOutcome.None, host)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -323,7 +345,7 @@ private fun TxCoinActions(
                     modifier =
                         Modifier
                             .clip(RoundedCornerShape(20.dp))
-                            .background(if (link) txStatusBlueBg() else txListCard())
+                            .background(if (link) txStatusBlueBg() else txCoinActionFill())
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                 )
             }

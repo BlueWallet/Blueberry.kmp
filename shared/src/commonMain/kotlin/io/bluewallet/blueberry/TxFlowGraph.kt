@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.SpanStyle
@@ -43,6 +44,7 @@ import io.bluewallet.blueberry.ui.AddressGroups
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.Pressable
 import io.bluewallet.blueberry.ui.numberFontFamily
 import kotlin.math.roundToInt
 
@@ -55,25 +57,35 @@ private const val CHANGE_ARGB = 0xFFAEB4BA
 private const val PAYMENT_ARGB = 0xFF3788E0
 private const val MUTED_ARGB = 0xFF6E767D
 
-/** Draws the coins and outputs. [description] is the only thing a screen reader hears for the whole graph. */
+/**
+ * Draws the coins and outputs. [description] is the only thing a screen reader hears when no chip
+ * opens a coin row. [onCoin] receives the outpoint of a tapped coin chip.
+ */
 @Composable
 internal fun TxFlowGraph(
     inputs: List<TxFlowNode>,
     outputs: List<TxFlowNode>,
     description: String,
+    openCoin: String? = null,
+    onCoin: ((String) -> Unit)? = null,
 ) {
-    SubcomposeLayout(
-        modifier =
+    val reader =
+        if (onCoin == null) {
+            Modifier.clearAndSetSemantics { contentDescription = description }
+        } else {
             Modifier
-                .fillMaxWidth()
-                .clearAndSetSemantics { contentDescription = description },
+        }
+    SubcomposeLayout(
+        modifier = Modifier.fillMaxWidth().then(reader),
     ) { constraints ->
         val canvas = if (constraints.hasBoundedWidth) constraints.maxWidth.toDp().value else TX_FLOW_WIDTH_DP
         val preview = txFlowModel(inputs, outputs, widthDp = canvas)
         val nodes = preview.inputs.map { it.node } + preview.outputs.map { it.node }
         val placeables =
             nodes.mapIndexed { index, node ->
-                subcompose(index) { FlowChip(node) }.first().measure(Constraints())
+                subcompose(index) {
+                    FlowChip(node, open = node.coinKey != null && node.coinKey == openCoin, onCoin = onCoin)
+                }.first().measure(Constraints())
             }
         val measured = placeables.map { it.width.toDp().value }
         val widths = measured.iterator()
@@ -165,24 +177,41 @@ private fun DrawScope.drawCurve(curve: TxFlowCurve) {
 private fun DrawScope.feeDash(): PathEffect = PathEffect.dashPathEffect(floatArrayOf(FEE_DASH_ON_DP.dp.toPx(), FEE_DASH_OFF_DP.dp.toPx()))
 
 @Composable
-private fun FlowChip(node: TxFlowNode) {
+private fun FlowChip(
+    node: TxFlowNode,
+    open: Boolean,
+    onCoin: ((String) -> Unit)?,
+) {
     val payment = node.role == TxFlowRole.Payment
-    val border = if (payment) BwColors.Accent.copy(alpha = 0.55f) else BwColors.Ink.copy(alpha = 0.06f)
+    val border =
+        when {
+            open -> BwColors.Accent
+            payment -> BwColors.Accent.copy(alpha = 0.55f)
+            else -> BwColors.Ink.copy(alpha = 0.06f)
+        }
     val fill = if (payment) BwColors.AccentSoft else BwColors.InputFill
     val labelColor = if (payment) BwColors.Accent else BwColors.InkQuiet
-    Row(
-        modifier =
-            Modifier
-                .height(TX_FLOW_CHIP_HEIGHT_DP.dp)
-                .clip(ChipShape)
-                .background(fill)
-                .border(1.dp, border, ChipShape)
-                .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        FlowDot(node)
-        FlowChipLines(node, labelColor)
+    val chip: @Composable () -> Unit = {
+        Row(
+            modifier =
+                Modifier
+                    .height(TX_FLOW_CHIP_HEIGHT_DP.dp)
+                    .clip(ChipShape)
+                    .background(fill)
+                    .border(1.dp, border, ChipShape)
+                    .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            FlowDot(node)
+            FlowChipLines(node, labelColor)
+        }
+    }
+    val key = node.coinKey
+    if (key != null && onCoin != null) {
+        Pressable(onClick = { onCoin(key) }, role = Role.Button) { chip() }
+    } else {
+        chip()
     }
 }
 

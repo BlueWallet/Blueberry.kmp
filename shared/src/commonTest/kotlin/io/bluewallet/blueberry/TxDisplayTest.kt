@@ -17,7 +17,6 @@ class TxDisplayTest {
         assertEquals("", detail.hero.amount.sign)
         assertEquals("0.001", detail.hero.amount.significant)
         assertEquals("00000", detail.hero.amount.trailingZeros)
-        assertEquals("", detail.hero.sub)
         assertEquals("Confirmed", detail.status.title)
         assertEquals("12 confirmations", detail.status.sub)
         assertEquals("Settled", detail.status.badge)
@@ -27,7 +26,6 @@ class TxDisplayTest {
             "11 blocks have been built on top of yours. Six is the usual bar for final.",
             detail.status.note,
         )
-        assertFalse(detail.status.speedUp)
         assertEquals(List(12) { if (it == 0) TxStripCell.Block else TxStripCell.Confirmed }, detail.status.cells)
         assertEquals("Add a label", detail.label.title)
         assertEquals("1 in · 2 out", detail.flow.count)
@@ -45,6 +43,8 @@ class TxDisplayTest {
         )
         assertEquals(listOf("you", "notYours"), detail.flow.outputs.map { it.kind })
         assertEquals(listOf(100_000L, 438_211L), detail.flow.outputs.map { it.amount })
+        assertEquals(detail.coins.single().outpoint, detail.flow.outputs[0].coinKey)
+        assertNull(detail.flow.outputs[1].coinKey)
         assertEquals(
             "The sender paid the fee. Transactions don't record what the sender's coin held, so Blueberry can't show it.",
             detail.flow.note,
@@ -176,19 +176,16 @@ class TxDisplayTest {
         assertEquals("0.00090423", detail.hero.amount.significant)
         assertEquals("", detail.hero.amount.trailingZeros)
         assertEquals("0.00090423", screen.list.amount.significant)
-        assertEquals("", detail.hero.sub)
         assertEquals("Concert tickets", detail.hero.toLabel)
         assertEquals("Waiting for a block", detail.status.title)
         assertEquals("Broadcast 3 min ago · 3 sat/vB", detail.status.sub)
         assertEquals("Pending", detail.status.badge)
-        assertTrue(detail.status.speedUp)
         assertNull(detail.status.right)
         assertEquals("1 in · 2 out", detail.flow.count)
         assertEquals(listOf("to", "change", "fee"), detail.flow.outputs.map { it.kind })
         assertEquals(listOf(90_000L, 21_977L, 423L), detail.flow.outputs.map { it.amount })
-        assertEquals("Your change", detail.coins.single().title)
-        assertEquals("Back in Salary group", detail.coins.single().sub)
-        assertEquals("Change address #22 · first use", detail.coins.single().addressNote)
+        assertNull(detail.flow.outputs[1].coinKey)
+        assertTrue(detail.coins.isEmpty())
         assertEquals(
             listOf("No new links", "₿0.00021977 came back as change", "Broadcast over Tor"),
             detail.reveals.map { it.title },
@@ -215,8 +212,14 @@ class TxDisplayTest {
         assertEquals(TxListSubtitle.DateOnly("19:38"), six.list.subtitle)
 
         val moved = txScreen(moved())
+        assertEquals(
+            "Your change",
+            moved.detail.coins
+                .single()
+                .title,
+        )
         assertEquals("Self", moved.detail.header.title)
-        assertEquals("Moved between your coins", moved.detail.hero.sub)
+        assertEquals("Moved between your coins", moved.detail.flow.note)
         assertEquals(423L, moved.detail.amountSats)
         assertEquals("Network fee", moved.list.amountSub)
         assertEquals(TxGlyph.Moved, moved.list.glyph)
@@ -260,6 +263,10 @@ class TxDisplayTest {
         val sections = txListSections(listOf(older, today, pending), now)
         assertEquals(listOf("Today", "September 2025"), sections.map { it.title })
         assertEquals(listOf("p", "t"), sections.first().items.map { it.txid })
+        val olderOnly = txListSections(listOf(older), now)
+        assertEquals(listOf("Today", "September 2025"), sectionsWithLiveBroadcasts(olderOnly, 1).map { it.title })
+        assertEquals(olderOnly, sectionsWithLiveBroadcasts(olderOnly, 0))
+        assertEquals(sections, sectionsWithLiveBroadcasts(sections, 2))
     }
 
     @Test
@@ -305,6 +312,7 @@ private fun received(): TxDisplayInput =
                     vout = 0,
                     valueSat = 100_000L,
                     mine = true,
+                    inWallet = true,
                     address = "bc1qw8k3m5h2v9xg4n7qz0r6tlp3c8ys5ufd2ja7x2",
                     addressIndex = 14,
                 ),
@@ -331,6 +339,7 @@ private fun dust(frozen: Boolean): TxDisplayInput =
                     vout = 3,
                     valueSat = 292L,
                     mine = true,
+                    inWallet = true,
                     addressIndex = 3,
                     addressUseCount = 4,
                     label = "Unsolicited",
@@ -407,6 +416,7 @@ private fun moved(): TxDisplayInput =
                     vout = 0,
                     valueSat = 111_977L,
                     mine = true,
+                    inWallet = true,
                     change = true,
                     groupName = "Salary group",
                     groupSize = 3,

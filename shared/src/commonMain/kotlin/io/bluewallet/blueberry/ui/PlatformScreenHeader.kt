@@ -1,6 +1,8 @@
 package io.bluewallet.blueberry.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -20,8 +22,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Composable
 @Suppress("LongParameterList")
@@ -44,6 +48,8 @@ expect fun PlatformScreenHeader(
     showBack: Boolean = true,
     /** Trailing close icon. Takes the trailing slot instead of [trailingText]. */
     onClose: (() -> Unit)? = null,
+    /** Second line under [title] in the navigation bar. Empty hides it. */
+    subtitle: String? = null,
 )
 
 /** Body copy at the platform default size: iOS 17pt, Material bodyLarge elsewhere. */
@@ -102,6 +108,7 @@ internal fun MaterialScreenHeader(
     menu: List<HeaderMenuItem> = emptyList(),
     showBack: Boolean = true,
     onClose: (() -> Unit)? = null,
+    subtitle: String? = null,
 ) {
     TopAppBar(
         modifier = modifier,
@@ -118,10 +125,25 @@ internal fun MaterialScreenHeader(
             if (showBack) HeaderBackButton(onClick = onBack, enabled = enabled)
         },
         title = {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (!subtitle.isNullOrEmpty()) {
+                    Text(
+                        text = subtitle,
+                        color = BwColors.InkSecondary,
+                        fontFamily = BwFontFamily,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         },
         actions = {
             if (onClose != null) {

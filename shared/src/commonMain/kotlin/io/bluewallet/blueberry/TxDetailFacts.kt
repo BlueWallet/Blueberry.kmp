@@ -2,7 +2,15 @@
 
 package io.bluewallet.blueberry
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,12 +18,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,8 +55,18 @@ import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.Chevron
 import io.bluewallet.blueberry.ui.LocalDarkPalette
 import io.bluewallet.blueberry.ui.PlatformModalSheet
+import io.bluewallet.blueberry.ui.PlatformSheetHeader
 import io.bluewallet.blueberry.ui.Pressable
+import io.bluewallet.blueberry.ui.ProminentButtonHeight
 import io.bluewallet.blueberry.ui.SheetClose
+import io.bluewallet.blueberry.ui.TintedPillButton
+
+/** Height and fade. The row itself scales while pressed. */
+internal val txAccordionEnter: EnterTransition =
+    expandVertically(animationSpec = tween(220)) + fadeIn(animationSpec = tween(160))
+
+internal val txAccordionExit: ExitTransition =
+    shrinkVertically(animationSpec = tween(180)) + fadeOut(animationSpec = tween(120))
 
 @Composable
 internal fun TxFactsCard(
@@ -75,30 +94,38 @@ private fun FactAccordion(
     var open by remember(title) { mutableStateOf(false) }
     val turn by animateFloatAsState(if (open) 90f else 0f)
     Column {
-        Row(
+        Pressable(
+            onClick = { open = !open },
+            role = Role.Button,
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 66.dp)
-                    .toggleable(value = open, role = Role.Button) { open = it }
-                    .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                    .semantics { stateDescription = if (open) "Expanded" else "Collapsed" },
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    color = BwColors.Ink,
-                    fontFamily = BwFontFamily,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = (-0.45).sp,
-                )
-                Text(collapsed, color = BwColors.InkSecondary, fontFamily = BwFontFamily, fontSize = 12.sp)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        title,
+                        color = BwColors.Ink,
+                        fontFamily = BwFontFamily,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = (-0.45).sp,
+                    )
+                    Text(collapsed, color = BwColors.InkSecondary, fontFamily = BwFontFamily, fontSize = 12.sp)
+                }
+                Chevron(Modifier.rotate(turn))
             }
-            Chevron(Modifier.rotate(turn))
         }
-        if (open) {
+        AnimatedVisibility(
+            visible = open,
+            enter = txAccordionEnter,
+            exit = txAccordionExit,
+        ) {
             Column(
                 Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -328,7 +355,7 @@ internal fun TxExplorerSheet(
 ) {
     PlatformModalSheet(
         onDismiss = onDismiss,
-        background = txRaisedCard(),
+        background = SheetPalette.sheet,
         dark = LocalDarkPalette.current,
     ) { close ->
         ExplorerBody(txid, close)
@@ -342,54 +369,79 @@ private fun ExplorerBody(
 ) {
     val clipboard = LocalClipboardManager.current
     val uri = LocalUriHandler.current
-    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Explorers see what you look up", color = BwColors.Ink, fontFamily = BwFontFamily, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Text(
-            "Whoever runs the explorer learns that someone at your IP address is interested in this transaction. That can tie you to it.",
-            color = BwColors.InkSecondary,
-            fontFamily = BwFontFamily,
-            fontSize = 15.sp,
-        )
+    Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
+        PlatformSheetHeader(title = "Block explorer", onClose = { close {} }, action = null)
         Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(txInsetFill())
-                .padding(14.dp),
-        ) {
-            Text("Everything on this screen came from the block itself", color = BwColors.Ink, fontFamily = BwFontFamily, fontWeight = FontWeight.Bold)
-            Text("You usually don't need an explorer to check it.", color = BwColors.InkSecondary, fontFamily = BwFontFamily, fontSize = 13.sp)
-        }
-        Pressable(
-            onClick = {
-                close {
-                    clipboard.setText(AnnotatedString(txid))
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            role = Role.Button,
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                "Copy transaction ID instead",
-                color = Color.White,
+                "Explorers see what you look up",
+                color = SheetPalette.text,
                 fontFamily = BwFontFamily,
-                fontWeight = FontWeight.Bold,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xFF0E2F4B))
-                        .padding(vertical = 16.dp),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = (-0.45).sp,
+            )
+            Text(
+                "Whoever runs the explorer learns that someone at your IP address is interested in this transaction. That can tie you to it.",
+                color = SheetPalette.secondary,
+                fontFamily = BwFontFamily,
+                fontSize = 15.sp,
+                lineHeight = 20.sp,
+            )
+            ExplorerNote()
+            TintedPillButton(
+                text = "Copy transaction ID instead",
+                onClick = { close { clipboard.setText(AnnotatedString(txid)) } },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            ExplorerOpenButton(onClick = { close { uri.openUri("https://mempool.space/tx/$txid") } })
+        }
+    }
+}
+
+@Composable
+private fun ExplorerNote() {
+    SheetCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "Everything on this screen came from the block itself",
+                color = SheetPalette.text,
+                fontFamily = BwFontFamily,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = (-0.45).sp,
+            )
+            Text(
+                "You usually don't need an explorer to check it.",
+                color = SheetPalette.secondary,
+                fontFamily = BwFontFamily,
+                fontSize = 13.sp,
             )
         }
-        Pressable(
-            onClick = {
-                close { uri.openUri("https://mempool.space/tx/$txid") }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            role = Role.Button,
+    }
+}
+
+@Composable
+private fun ExplorerOpenButton(onClick: () -> Unit) {
+    Pressable(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(ProminentButtonHeight),
+        role = Role.Button,
+    ) {
+        Box(
+            Modifier.fillMaxSize().background(SheetPalette.amberFill, RoundedCornerShape(50)),
+            contentAlignment = Alignment.Center,
         ) {
-            Text("Open normally", color = TxAmber, fontFamily = BwFontFamily, fontWeight = FontWeight.Bold)
+            Text(
+                "Open normally",
+                color = SheetPalette.amber,
+                fontFamily = BwFontFamily,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = (-0.45).sp,
+            )
         }
     }
 }

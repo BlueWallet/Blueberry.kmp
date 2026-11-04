@@ -30,7 +30,6 @@ import io.bluewallet.blueberry.ui.ToPill
 
 @Suppress("LongParameterList")
 internal class TxDetailHost(
-    val copied: Boolean,
     val editing: Boolean,
     val draft: String,
     val suggestions: List<String>,
@@ -39,8 +38,6 @@ internal class TxDetailHost(
     val onCopy: () -> Unit,
     val onEdit: () -> Unit,
     val onDraft: (String) -> Unit,
-    val onSave: () -> Unit,
-    val onCancel: () -> Unit,
     val onFreeze: (String, Boolean) -> Unit,
     val onOpenCoin: (String) -> Unit,
     val onOpenTx: (String) -> Unit,
@@ -55,29 +52,26 @@ internal fun TxDetailColumn(
 ) {
     val detail = screen.detail
     Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
-        TxHeroBlock(detail)
+        TxHeroBlock(detail, liveLabel = if (host.editing) host.draft.trim() else null)
         TxStatusCard(detail, host.onOpenTx)
-        host.sendActions()
         TxLabelCard(detail, host)
         TxFlowCard(detail, host)
         TxRevealCard(detail, host)
         TxFactsCard(detail.details, host.privateFacts, host.onCopy)
         TxExplorerRow(host.onExplorer)
+        host.sendActions()
     }
 }
 
 @Composable
-private fun TxHeroBlock(detail: TxDetail) {
+private fun TxHeroBlock(
+    detail: TxDetail,
+    liveLabel: String?,
+) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        val date = detail.header.subtitle
-        if (date.isNotEmpty()) {
-            Text(date, color = BwColors.InkQuiet, fontFamily = BwFontFamily, fontSize = 15.sp)
-        }
         TxAmountLine(detail.hero.amount, txAmountTone(detail.direction, detail.outcome != TxOutcome.None), 44.sp, detail.outcome != TxOutcome.None)
-        if (detail.hero.sub.isNotEmpty()) {
-            Text(detail.hero.sub, color = BwColors.InkSecondary, fontFamily = BwFontFamily, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-        }
-        val label = detail.hero.toLabel
+        val stored = detail.hero.toLabel
+        val label = if (liveLabel != null && stored != null) liveLabel.ifEmpty { "Recipient" } else stored
         if (label != null) {
             val more = if (detail.hero.toMore > 0) " and ${detail.hero.toMore} more" else ""
             ToPill(label = label + more, address = "")
@@ -188,11 +182,6 @@ private fun TxStatusCard(
         if (replacement != null) {
             Pressable(onClick = { onOpenTx(replacement) }, role = Role.Button) {
                 Text("Open replacement", color = TxAmber, fontFamily = BwFontFamily, fontWeight = FontWeight.Bold)
-            }
-        }
-        if (status.speedUp) {
-            Pressable(onClick = {}, role = Role.Button) {
-                Text("Speed up", color = TxFrozen, fontFamily = BwFontFamily, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp))
             }
         }
     }

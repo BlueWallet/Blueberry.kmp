@@ -31,8 +31,7 @@
       ],
       "left": "Your block · 972,347",
       "right": "Latest · 972,358",
-      "note": "11 blocks have been built on top of yours. Six is the usual bar for final.",
-      "speedUp": false
+      "note": "11 blocks have been built on top of yours. Six is the usual bar for final."
     },
     "label": {
       "title": "Add a label"
@@ -138,8 +137,7 @@
       ],
       "left": "Your block · 966,596",
       "right": "+5,751 more on top",
-      "note": "Buried under 5,762 newer blocks.",
-      "speedUp": false
+      "note": "Buried under 5,762 newer blocks."
     },
     "label": {
       "title": "Unsolicited"
@@ -250,8 +248,7 @@
       ],
       "left": "Next block",
       "right": null,
-      "note": "Until it's in a block it can still be replaced or dropped. Pay a higher fee to move it up the queue.",
-      "speedUp": true
+      "note": "Until it's in a block it can still be replaced or dropped."
     },
     "label": {
       "title": "Concert tickets"
@@ -284,18 +281,7 @@
       ],
       "note": null
     },
-    "coins": [
-      {
-        "title": "Your change",
-        "sub": "Back in Salary group",
-        "amount": 21977,
-        "addressNote": "Change address #22 · first use",
-        "actions": [
-          "Freeze",
-          "Open coin"
-        ]
-      }
-    ],
+    "coins": [],
     "reveals": [
       {
         "tone": "green",

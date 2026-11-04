@@ -21,6 +21,7 @@ actual fun PlatformScreenHeader(
     menu: List<HeaderMenuItem>,
     showBack: Boolean,
     onClose: (() -> Unit)?,
+    subtitle: String?,
 ) {
     MaterialScreenHeader(
         title = title,
@@ -32,6 +33,7 @@ actual fun PlatformScreenHeader(
         menu = menu,
         showBack = showBack,
         onClose = onClose,
+        subtitle = subtitle,
     )
 }
 

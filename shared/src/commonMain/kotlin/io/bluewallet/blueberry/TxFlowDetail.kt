@@ -13,28 +13,30 @@ private fun flowNode(
     outputTotal: Long,
 ): TxFlowNode {
     val amount = chip.amount
-    return when (chip.kind) {
-        "sender" ->
-            TxFlowNode(
-                sats = outputTotal,
-                label = chip.sub ?: chip.title,
-                role = TxFlowRole.Input,
-                colorArgb = 0xFF8E959C,
-                headline = chip.title,
-                ring = true,
-            )
-        "you", "to" -> TxFlowNode(amount ?: 0L, chip.title, TxFlowRole.Payment, chip.colorArgb)
-        "change" -> TxFlowNode(amount ?: 0L, chip.title, TxFlowRole.Change, chip.colorArgb)
-        "fee" -> TxFlowNode(amount ?: 0L, chip.title, TxFlowRole.Fee)
-        else ->
-            TxFlowNode(
-                sats = amount ?: 0L,
-                label = chip.title,
-                role = TxFlowRole.Input,
-                colorArgb = chip.colorArgb ?: 0xFF8E959C,
-                ring = chip.kind == "notYours",
-            )
-    }
+    val node =
+        when (chip.kind) {
+            "sender" ->
+                TxFlowNode(
+                    sats = outputTotal,
+                    label = chip.sub ?: chip.title,
+                    role = TxFlowRole.Input,
+                    colorArgb = 0xFF8E959C,
+                    headline = chip.title,
+                    ring = true,
+                )
+            "you", "to" -> TxFlowNode(amount ?: 0L, chip.title, TxFlowRole.Payment, chip.colorArgb)
+            "change" -> TxFlowNode(amount ?: 0L, chip.title, TxFlowRole.Change, chip.colorArgb)
+            "fee" -> TxFlowNode(amount ?: 0L, chip.title, TxFlowRole.Fee)
+            else ->
+                TxFlowNode(
+                    sats = amount ?: 0L,
+                    label = chip.title,
+                    role = TxFlowRole.Input,
+                    colorArgb = chip.colorArgb ?: 0xFF8E959C,
+                    ring = chip.kind == "notYours",
+                )
+        }
+    return node.copy(coinKey = chip.coinKey)
 }
 
 /** One sentence a screen reader hears instead of the individual chips. */

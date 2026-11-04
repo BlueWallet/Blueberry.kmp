@@ -41,6 +41,8 @@ internal fun TxDayHeader(title: String) {
 internal fun TxDayCard(
     items: List<TxListItem>,
     onOpen: (String) -> Unit,
+    broadcasts: List<BroadcastListRow> = emptyList(),
+    onOpenBroadcast: (String) -> Unit = {},
 ) {
     Column(
         modifier =
@@ -49,16 +51,69 @@ internal fun TxDayCard(
                 .clip(RoundedCornerShape(22.dp))
                 .background(txListCard()),
     ) {
+        broadcasts.forEachIndexed { index, row ->
+            if (index > 0) TxRowDivider()
+            TxBroadcastRow(row, onOpenBroadcast)
+        }
         items.forEachIndexed { index, item ->
-            if (index > 0) {
-                androidx.compose.foundation.layout.Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 1.dp)
-                        .background(txRowDivider()),
+            if (index > 0 || broadcasts.isNotEmpty()) TxRowDivider()
+            TxDayRow(item, onOpen)
+        }
+    }
+}
+
+@Composable
+private fun TxRowDivider() {
+    androidx.compose.foundation.layout.Box(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 1.dp)
+            .background(txRowDivider()),
+    )
+}
+
+@Composable
+private fun TxBroadcastRow(
+    row: BroadcastListRow,
+    onOpen: (String) -> Unit,
+) {
+    val failed = row.status == "Not sent"
+    Pressable(
+        onClick = { onOpen(row.id) },
+        modifier = Modifier.fillMaxWidth(),
+        role = Role.Button,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp).padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            TxDirectionIcon(if (failed) TxGlyph.Failed else TxGlyph.Sent, pending = !failed, size = 28.dp, badge = TxBadge.None)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = row.title,
+                    color = if (failed) TxFailedTitle else BwColors.Ink,
+                    fontFamily = BwFontFamily,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = (-0.45).sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = row.status,
+                    color = if (failed) BwColors.Danger else TxAmber,
+                    fontFamily = BwFontFamily,
+                    fontSize = 13.sp,
+                    maxLines = 1,
                 )
             }
-            TxDayRow(item, onOpen)
+            TxAmountLine(
+                parts = txAmountParts(row.paidSats, received = false),
+                tone = txAmountTone(TxDirection.Out, struck = failed),
+                fontSize = 16.sp,
+                struck = failed,
+            )
         }
     }
 }

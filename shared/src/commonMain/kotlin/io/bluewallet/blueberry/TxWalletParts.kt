@@ -32,6 +32,7 @@ internal fun displayOutputs(
             vout = vout,
             valueSat = output.amount.toLong(),
             mine = mine,
+            inWallet = held != null,
             change = watch?.change == true || held?.isChange == true || graphCoin?.isChange == true,
             address = address,
             addressIndex = watch?.index ?: pathIndex(held?.path),

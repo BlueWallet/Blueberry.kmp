@@ -11,7 +11,7 @@ internal fun txFlowView(input: TxDisplayInput): TxFlowView {
         toColumn = if (received) "To" else "Goes to",
         inputs = built.inputs,
         outputs = built.outputs,
-        note = built.note,
+        note = if (input.direction == TxDirection.Moved) "Moved between your coins" else built.note,
     )
 }
 
@@ -29,7 +29,13 @@ private fun receivedFlow(input: TxDisplayInput): BuiltFlow {
     val rest = external.filter { it.valueSat !in mineValues }
     val nodes = mutableListOf<TxFlowChipModel>()
     mine.forEach { output ->
-        nodes += TxFlowChipModel(kind = "you", amount = output.valueSat, title = "You")
+        nodes +=
+            TxFlowChipModel(
+                kind = "you",
+                amount = output.valueSat,
+                title = "You",
+                coinKey = coinKey(input, output),
+            )
     }
     val leftovers =
         if (twins.size >= 2) {
@@ -101,9 +107,21 @@ private fun sentFlow(input: TxDisplayInput): BuiltFlow {
             )
     }
     input.outputs.filter { it.mine }.forEach { output ->
-        outputs += TxFlowChipModel(kind = "change", amount = output.valueSat, title = "Your change")
+        outputs +=
+            TxFlowChipModel(
+                kind = "change",
+                amount = output.valueSat,
+                title = "Your change",
+                coinKey = coinKey(input, output),
+            )
     }
     val fee = txAmounts(input).feeSats ?: 0L
     outputs += TxFlowChipModel(kind = "fee", amount = fee, title = "Network fee")
     return BuiltFlow(inputs, outputs, null)
 }
+
+/** Same key as the coin row, and only once that row exists. */
+private fun coinKey(
+    input: TxDisplayInput,
+    output: TxDisplayOutput,
+): String? = if (output.inWallet || output.spent) "${input.txid}:${output.vout}" else null

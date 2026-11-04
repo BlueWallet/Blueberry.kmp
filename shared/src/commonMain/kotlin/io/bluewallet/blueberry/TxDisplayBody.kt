@@ -5,7 +5,7 @@ package io.bluewallet.blueberry
 internal fun txCoinCards(
     input: TxDisplayInput,
     txid: String,
-): List<TxCoinCard> = input.outputs.filter { it.mine }.map { txCoinCard(input, it, txid) }
+): List<TxCoinCard> = input.outputs.filter { it.mine && (it.inWallet || it.spent) }.map { txCoinCard(input, it, txid) }
 
 private fun txCoinCard(
     input: TxDisplayInput,

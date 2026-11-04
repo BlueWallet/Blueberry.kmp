@@ -87,6 +87,15 @@ fun txListSections(
     return grouped.map { (title, rows) -> TxListSection(title, rows) }
 }
 
+/** A live broadcast is happening now, so it belongs in Today even when that day has no stored payment yet. */
+fun sectionsWithLiveBroadcasts(
+    sections: List<TxListSection>,
+    liveCount: Int,
+): List<TxListSection> {
+    if (liveCount == 0 || sections.any { it.title == "Today" }) return sections
+    return listOf(TxListSection("Today", emptyList())) + sections
+}
+
 /** `YYYY-MM-DD HH:mm` from [formatLocalYmdHm], or null when it is not that shape. */
 fun txCivilFromYmdHm(label: String): TxCivilTime? {
     val trimmed = label.trim()

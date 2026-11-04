@@ -17,11 +17,13 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +38,7 @@ import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.HeaderMenuItem
 import io.bluewallet.blueberry.ui.PillButton
 import io.bluewallet.blueberry.ui.PlainPillButton
 import io.bluewallet.blueberry.ui.PlatformScreenHeader
@@ -48,6 +51,7 @@ import io.bluewallet.blueberry.ui.platformBottomEdgeClearance
 import io.bluewallet.blueberry.ui.platformHeaderClearance
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -101,11 +105,23 @@ private fun TxDetailsContent(
     var draft by remember { mutableStateOf("") }
     var copied by remember { mutableStateOf(false) }
     var explorer by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(COPIED_MS)
+            copied = false
+        }
+    }
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val row = snap.txs.find { it.txid == txid }
     val tip = db.headers.tip()?.height
     val blockStats = rememberBlockStats(db, txid, row?.height)
+
+    val saveNote = { note: String ->
+        setTxNote(db, runtime.wallet, runtime.walletTxsStore, txid, note)
+        uploadLabels(scope, db)
+    }
+    AutosaveLabel(editing, draft, txid, row?.let { it.paymentLabel.orEmpty() }, saveNote)
     val screen =
         remember(snap, tip, txid, blockStats) {
             val current = snap.txs.find { it.txid == txid } ?: return@remember null
@@ -141,7 +157,6 @@ private fun TxDetailsContent(
                         screen = screen,
                         host =
                             TxDetailHost(
-                                copied = copied,
                                 editing = editing,
                                 draft = draft,
                                 suggestions = txLabelSuggestions(snap, screen.detail.direction),
@@ -152,16 +167,12 @@ private fun TxDetailsContent(
                                     copied = true
                                 },
                                 onEdit = {
-                                    draft = row.paymentLabel.orEmpty()
-                                    editing = true
+                                    toggleLabelEdit(editing, draft, row.paymentLabel.orEmpty(), saveNote) { open, next ->
+                                        draft = next
+                                        editing = open
+                                    }
                                 },
                                 onDraft = { draft = it },
-                                onSave = {
-                                    setTxNote(db, runtime.wallet, runtime.walletTxsStore, txid, draft)
-                                    uploadLabels(scope, db)
-                                    editing = false
-                                },
-                                onCancel = { editing = false },
                                 onFreeze = { key, frozen ->
                                     val wallet = runtime.wallet
                                     if (wallet != null && screen.detail.outcome == TxOutcome.None) {
@@ -187,13 +198,21 @@ private fun TxDetailsContent(
         }
         PlatformScreenHeader(
             title = screen?.detail?.header?.title ?: "Transaction",
+            subtitle =
+                screen
+                    ?.detail
+                    ?.header
+                    ?.subtitle
+                    ?.ifEmpty { null },
             onBack = onBack,
             showBarTitle = true,
-            trailingText = if (copied) "Copied" else "Copy",
-            onTrailing = {
-                clipboard.setText(AnnotatedString(txid))
-                copied = true
-            },
+            menu =
+                listOf(
+                    HeaderMenuItem(if (copied) "Copied" else "Copy") {
+                        clipboard.setText(AnnotatedString(txid))
+                        copied = true
+                    },
+                ),
             modifier =
                 Modifier
                     .align(Alignment.TopCenter)
@@ -315,6 +334,51 @@ private fun OpenSendActions(
             onClick = { confirming = true },
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+private const val LABEL_SAVE_PAUSE_MS = 400L
+
+private const val COPIED_MS = 1_600L
+
+/** Writes a label after typing pauses, and again if the screen goes away mid-pause. */
+@Composable
+private fun AutosaveLabel(
+    editing: Boolean,
+    draft: String,
+    txid: String,
+    saved: String?,
+    save: (String) -> Unit,
+) {
+    val latestDraft by rememberUpdatedState(draft)
+    val latestEditing by rememberUpdatedState(editing)
+    val latestSaved by rememberUpdatedState(saved)
+    LaunchedEffect(draft, editing) {
+        if (editing && saved != null && draft.trim() != saved.trim()) {
+            delay(LABEL_SAVE_PAUSE_MS)
+            save(draft)
+        }
+    }
+    DisposableEffect(txid) {
+        onDispose {
+            val current = latestSaved
+            if (latestEditing && current != null && latestDraft.trim() != current.trim()) save(latestDraft)
+        }
+    }
+}
+
+private fun toggleLabelEdit(
+    editing: Boolean,
+    draft: String,
+    saved: String,
+    save: (String) -> Unit,
+    update: (Boolean, String) -> Unit,
+) {
+    if (editing) {
+        if (draft.trim() != saved.trim()) save(draft)
+        update(false, draft)
+    } else {
+        update(true, saved)
     }
 }
 

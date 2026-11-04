@@ -2,6 +2,12 @@
 
 package io.bluewallet.blueberry
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -14,15 +20,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -43,6 +52,7 @@ import blueberry.shared.generated.resources.tx_self
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.LocalDarkPalette
 import io.bluewallet.blueberry.ui.numberFontFamily
+import io.bluewallet.blueberry.ui.rememberReducedMotion
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -234,6 +244,10 @@ private fun StripCell(
             StripTone(Color(0xFF2E3338), Color(0xFF3A3F44)),
             StripTone(Color(0xFFD5D9E0), Color(0xFFC5CAD3)),
         )
+    if (cell == TxStripCell.Pending && !mini) {
+        PendingBlockCell(radius, dark, pendingFill, modifier)
+        return
+    }
     Canvas(
         modifier.clip(
             androidx.compose.foundation.shape
@@ -263,6 +277,95 @@ private fun StripCell(
     }
 }
 
+/** The next block: a light swims across it, then the fill flashes, then it rests. */
+@Composable
+private fun PendingBlockCell(
+    radius: Dp,
+    dark: Boolean,
+    fill: Color,
+    modifier: Modifier,
+) {
+    val reduced = rememberReducedMotion()
+    val transition = rememberInfiniteTransition(label = "pending-block")
+    val sweep by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    keyframes {
+                        durationMillis = 1700
+                        0f at 0 using LinearEasing
+                        0.55f at 780 using FastOutSlowInEasing
+                        0.75f at 1100 using LinearEasing
+                        1f at 1700 using LinearEasing
+                    },
+            ),
+        label = "pending-sweep",
+    )
+    Canvas(
+        modifier.clip(
+            androidx.compose.foundation.shape
+                .RoundedCornerShape(radius),
+        ),
+    ) {
+        drawPendingBlock(radius, fill, if (reduced) null else sweep, dark)
+    }
+}
+
+private fun DrawScope.drawPendingBlock(
+    radius: Dp,
+    fill: Color,
+    sweep: Float?,
+    dark: Boolean,
+) {
+    val corner = CornerRadius(radius.toPx())
+    val dash = PathEffect.dashPathEffect(floatArrayOf(4f, 3f))
+    drawRoundRect(fill, cornerRadius = corner)
+    if (sweep != null) drawPendingSwim(sweep, corner, dark)
+    drawRoundRect(
+        TxBlue,
+        cornerRadius = corner,
+        style = Stroke(width = 1.5.dp.toPx(), pathEffect = dash),
+    )
+}
+
+private fun DrawScope.drawPendingSwim(
+    progress: Float,
+    corner: CornerRadius,
+    dark: Boolean,
+) {
+    val sweepEnd = 0.55f
+    if (progress <= sweepEnd) {
+        val travel = progress / sweepEnd
+        val band = size.width * 0.9f
+        val start = travel * (size.width + band) - band
+        drawRoundRect(
+            brush =
+                Brush.horizontalGradient(
+                    0f to Color.Transparent,
+                    0.42f to TxBlue.copy(alpha = if (dark) 0.35f else 0.22f),
+                    0.5f to Color.White.copy(alpha = if (dark) 0.85f else 0.72f),
+                    0.58f to TxBlue.copy(alpha = if (dark) 0.5f else 0.3f),
+                    1f to Color.Transparent,
+                    startX = start,
+                    endX = start + band,
+                ),
+            cornerRadius = corner,
+        )
+    }
+    val flash =
+        when {
+            progress < 0.55f -> 0f
+            progress < 0.62f -> (progress - 0.55f) / 0.07f
+            progress < 0.75f -> 1f - (progress - 0.62f) / 0.13f
+            else -> 0f
+        }
+    if (flash > 0.01f) {
+        drawRoundRect(TxBlue.copy(alpha = flash * if (dark) 0.55f else 0.38f), cornerRadius = corner)
+    }
+}
+
 @Composable
 internal fun txRaisedCard(): Color = if (io.bluewallet.blueberry.ui.LocalDarkPalette.current) Color(0xFF121416) else BwColors.Card
 
@@ -272,6 +375,10 @@ internal fun txInsetFill(): Color = if (io.bluewallet.blueberry.ui.LocalDarkPale
 
 @Composable
 internal fun txListCard(): Color = if (io.bluewallet.blueberry.ui.LocalDarkPalette.current) Color(0xFF1B1E21) else BwColors.Card
+
+/** Freeze and Open coin sit on a white card, so light mode needs a gray that reads as a button. */
+@Composable
+internal fun txCoinActionFill(): Color = if (io.bluewallet.blueberry.ui.LocalDarkPalette.current) Color(0xFF1B1E21) else Color(0xFFD5D9E0)
 
 @Composable
 internal fun txRowDivider(): Color = if (io.bluewallet.blueberry.ui.LocalDarkPalette.current) Color(0xFF3A4148) else Color(0xFFE4E7EB)
