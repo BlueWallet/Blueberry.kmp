@@ -209,10 +209,11 @@ private fun linkedCoins(
         request.snap.utxos
             .mapNotNull { row -> row.path?.let { row.key to it } }
             .toMap()
+    // Same title as the coin list: the saved name, else the address label (never saved).
     val names =
         request.labels +
             request.snap.utxos.mapNotNull { row ->
-                row.name
+                row.label
                     ?.trim()
                     ?.takeIf { it.isNotEmpty() }
                     ?.let { row.key to it }
