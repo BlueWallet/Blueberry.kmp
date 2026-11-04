@@ -5,10 +5,6 @@ on:
     branches: [master]
   workflow_dispatch:
 
-concurrency:
-  group: testflight-ios
-  cancel-in-progress: false
-
 permissions:
   contents: read
 
@@ -17,6 +13,12 @@ jobs:
     name: ios-testflight
     runs-on: macos-latest
     timeout-minutes: 180
+    # Only the upload is serialized, so a slow notes wait does not hold up the next upload.
+    concurrency:
+      group: testflight-ios
+      cancel-in-progress: false
+    outputs:
+      build_number: ${{ steps.versions.outputs.build_number }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -49,9 +51,12 @@ jobs:
           key: ${{ runner.os }}-konan-${{ hashFiles('**/gradle/libs.versions.toml', '**/gradle-wrapper.properties') }}
 
       - name: Compute versions
+        id: versions
         run: |
+          BUILD_NUMBER="$(date -u +%Y%m%d%H%M)"
           echo "MARKETING_VERSION=$(date -u +%Y.%m.%d)" >> "$GITHUB_ENV"
-          echo "CURRENT_PROJECT_VERSION=$(date -u +%Y%m%d%H%M)" >> "$GITHUB_ENV"
+          echo "CURRENT_PROJECT_VERSION=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
 
       - name: Import App Store Connect API key
         env:
@@ -148,21 +153,40 @@ jobs:
           test -n "$UUID"
           echo "Uploaded $UUID"
 
-      # The upload has already succeeded here, so a failure only warns and does
-      # not fail the job. Apple can take 5 to 30+ minutes to list the build.
+  # Runs on Linux after a successful upload, so waiting for Apple to list the
+  # build (5 to 30+ minutes) costs no macOS time and does not block the next
+  # upload. A failure only warns: the build is already on TestFlight.
+  testflight-notes:
+    name: testflight-notes
+    needs: ios
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 50
+
       - name: Set TestFlight What to Test
         env:
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
           ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           BUNDLE_ID: io.bluewallet.blueberry
+          BUILD_NUMBER: ${{ needs.ios.outputs.build_number }}
           BEFORE_SHA: ${{ github.event.before }}
         run: |
-          export ASC_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
-          export BUILD_NUMBER="$CURRENT_PROJECT_VERSION"
+          export ASC_KEY_PATH="${RUNNER_TEMP}/AuthKey.p8"
+          (umask 077 && printf '%s\n' "$APP_STORE_CONNECT_API_KEY" > "$ASC_KEY_PATH")
+          chmod 600 "$ASC_KEY_PATH"
+          unset APP_STORE_CONNECT_API_KEY
           export NOTES_FILE="${RUNNER_TEMP}/what-to-test.txt"
           .github/scripts/testflight_notes.sh "$BEFORE_SHA" "$GITHUB_SHA" > "$NOTES_FILE" \
             || echo "Build commit ${GITHUB_SHA::7}" > "$NOTES_FILE"
+          # Commit subjects must not be parsed as workflow commands.
+          STOP_TOKEN="$(openssl rand -hex 16)"
+          echo "::stop-commands::${STOP_TOKEN}"
           cat "$NOTES_FILE"
+          echo "::${STOP_TOKEN}::"
           if ! python3 .github/scripts/testflight_what_to_test.py; then
             echo "::warning::Could not set TestFlight What to Test for build ${BUILD_NUMBER}; the upload itself succeeded."
           fi

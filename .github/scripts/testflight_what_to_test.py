@@ -8,6 +8,11 @@ The build is matched by its build number (CFBundleVersion) alone: CI makes it
 a UTC timestamp, so it is unique per app. The marketing version is not used
 because Apple strips leading zeros from it (2026.11.04 is stored as 2026.11.4).
 
+Transient errors (5xx, 429, network) are retried a few times with backoff;
+other 4xx fail fast. The notes write is an upsert retried as a unit: each try
+re-reads the build's localizations, so a retry after an uncertain POST (or a
+409 because en-US appeared meanwhile) updates instead of duplicating.
+
 Env: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH, BUNDLE_ID, BUILD_NUMBER,
      NOTES_FILE, TIMEOUT_SECONDS (default 2700), POLL_SECONDS (default 30).
 """
@@ -67,10 +72,50 @@ def make_jwt(key_id, issuer_id, key_path, now=None):
                "aud": "appstoreconnect-v1"}
     signing_input = (b64url(json.dumps(header, separators=(",", ":")).encode())
                      + "." + b64url(json.dumps(payload, separators=(",", ":")).encode()))
-    der = subprocess.run(["openssl", "dgst", "-sha256", "-sign", key_path],
-                         input=signing_input.encode(), capture_output=True,
-                         check=True).stdout
+    proc = subprocess.run(["openssl", "dgst", "-sha256", "-sign", key_path],
+                          input=signing_input.encode(), capture_output=True)
+    if proc.returncode != 0:
+        err = proc.stderr.decode(errors="replace").strip()[:1000]
+        raise RuntimeError(f"openssl could not sign the token with {key_path} "
+                           f"(exit {proc.returncode}): {err}")
+    der = proc.stdout
     return signing_input + "." + b64url(der_to_raw(der))
+
+
+def is_transient(e):
+    if isinstance(e, ApiError):
+        return e.status >= 500 or e.status == 429
+    return isinstance(e, (urllib.error.URLError, TimeoutError, ConnectionError))
+
+
+def with_retries(what, fn, retryable=is_transient, attempts=5):
+    """Calls fn, retrying retryable errors with 2, 4, 8, 16s backoff."""
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn()
+        except Exception as e:  # noqa: BLE001 - filtered by retryable
+            if attempt == attempts or not retryable(e):
+                raise
+            delay = 2 ** attempt
+            print(f"{what} failed (try {attempt}/{attempts}), retrying in {delay}s: {e}")
+            time.sleep(delay)
+
+
+def upsert_notes(client, build_id, notes):
+    locs = client.request("GET", f"/v1/builds/{build_id}/betaBuildLocalizations",
+                          {"limit": "50"})["data"]
+    en = next((l for l in locs if l["attributes"].get("locale") == "en-US"), None)
+    if en:
+        client.request("PATCH", f"/v1/betaBuildLocalizations/{en['id']}", body={"data": {
+            "type": "betaBuildLocalizations", "id": en["id"],
+            "attributes": {"whatsNew": notes}}})
+        print("Updated en-US What to Test")
+    else:
+        client.request("POST", "/v1/betaBuildLocalizations", body={"data": {
+            "type": "betaBuildLocalizations",
+            "attributes": {"locale": "en-US", "whatsNew": notes},
+            "relationships": {"build": {"data": {"type": "builds", "id": build_id}}}}})
+        print("Created en-US What to Test")
 
 
 class Client:
@@ -107,7 +152,8 @@ def main():
     poll = int(env.get("POLL_SECONDS", "30"))
 
     # filter[bundleId] is not an exact match, so pick the exact one.
-    apps = client.request("GET", "/v1/apps", {"filter[bundleId]": bundle_id})["data"]
+    apps = with_retries("App lookup", lambda: client.request(
+        "GET", "/v1/apps", {"filter[bundleId]": bundle_id})["data"])
     app_id = next((a["id"] for a in apps if a["attributes"].get("bundleId") == bundle_id), None)
     if not app_id:
         raise RuntimeError(f"no app with bundle id {bundle_id}")
@@ -120,8 +166,8 @@ def main():
     while True:
         try:
             builds = client.request("GET", "/v1/builds", params)["data"]
-        except (ApiError, urllib.error.URLError, TimeoutError) as e:
-            if isinstance(e, ApiError) and e.status < 500 and e.status != 429:
+        except Exception as e:  # noqa: BLE001 - filtered by is_transient
+            if not is_transient(e):
                 raise  # Auth, permission or bad request: retrying will not help.
             print(f"Build lookup failed, retrying: {e}")
             builds = []
@@ -134,20 +180,10 @@ def main():
     build = builds[0]
     print(f"Build id {build['id']}, state {build['attributes'].get('processingState')}")
 
-    locs = client.request("GET", f"/v1/builds/{build['id']}/betaBuildLocalizations",
-                          {"limit": "50"})["data"]
-    en = next((l for l in locs if l["attributes"].get("locale") == "en-US"), None)
-    if en:
-        client.request("PATCH", f"/v1/betaBuildLocalizations/{en['id']}", body={"data": {
-            "type": "betaBuildLocalizations", "id": en["id"],
-            "attributes": {"whatsNew": notes}}})
-        print("Updated en-US What to Test")
-    else:
-        client.request("POST", "/v1/betaBuildLocalizations", body={"data": {
-            "type": "betaBuildLocalizations",
-            "attributes": {"locale": "en-US", "whatsNew": notes},
-            "relationships": {"build": {"data": {"type": "builds", "id": build["id"]}}}}})
-        print("Created en-US What to Test")
+    # A 409 means en-US already exists: the next try re-reads it and PATCHes.
+    with_retries("Setting notes", lambda: upsert_notes(client, build["id"], notes),
+                 retryable=lambda e: is_transient(e)
+                 or (isinstance(e, ApiError) and e.status == 409))
 
 
 if __name__ == "__main__":
