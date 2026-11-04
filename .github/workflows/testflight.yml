@@ -164,9 +164,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      # Full history, so commits of an older merged branch are not cut off.
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 50
+          fetch-depth: 0
 
       - name: Set TestFlight What to Test
         env:
@@ -184,13 +185,14 @@ jobs:
           export NOTES_FILE="${RUNNER_TEMP}/what-to-test.txt"
           .github/scripts/testflight_notes.sh "$BEFORE_SHA" "$GITHUB_SHA" > "$NOTES_FILE" \
             || echo "Build commit ${GITHUB_SHA::7}" > "$NOTES_FILE"
-          # Commit subjects must not be parsed as workflow commands.
+          # Commit subjects, and API errors that may echo them, must not be
+          # parsed as workflow commands.
           STOP_TOKEN="$(openssl rand -hex 16)"
           echo "::stop-commands::${STOP_TOKEN}"
           cat "$NOTES_FILE"
-          echo "::${STOP_TOKEN}::"
           rc=0
           python3 .github/scripts/testflight_what_to_test.py || rc=$?
+          echo "::${STOP_TOKEN}::"
           if [ "$rc" -eq 2 ]; then
             echo "::warning::Build ${BUILD_NUMBER} was not listed by App Store Connect in time, so What to Test was not set. The upload itself succeeded."
           elif [ "$rc" -ne 0 ]; then

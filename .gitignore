@@ -22,3 +22,5 @@ blueberry.data/
 AGENTS.local.md
 AuthKey*.p8
 .env*
+__pycache__/
+*.pyc

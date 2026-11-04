@@ -51,6 +51,7 @@ class ApiError(RuntimeError):
 def _is_emoji(ch):
     cp = ord(ch)
     return (cp >= 0x10000  # Emoji, flags, symbols outside the BMP.
+            or 0x2300 <= cp <= 0x23FF  # Technical symbols such as the stopwatch.
             or 0x2600 <= cp <= 0x27BF  # Misc symbols and dingbats.
             or 0x2B00 <= cp <= 0x2BFF  # Arrows and stars such as the star emoji.
             or cp in (0x200D, 0x20E3, 0xFE0E, 0xFE0F))  # Joiners and selectors.
@@ -58,7 +59,11 @@ def _is_emoji(ch):
 
 def sanitize(text):
     """Removes what App Store Connect rejects in whatsNew: emoji and "<"."""
-    cleaned = "".join(ch for ch in text if ch != "<" and not _is_emoji(ch))
+    # A character followed by U+FE0F is shown as an emoji (e.g. a keycap
+    # digit or a heart), so it goes too, along with the selector.
+    cleaned = "".join(ch for i, ch in enumerate(text)
+                      if ch != "<" and not _is_emoji(ch)
+                      and text[i + 1:i + 2] != "\uFE0F")
     # Drop spaces left behind, e.g. "feat: \u2728 x" -> "feat: x".
     return "\n".join(re.sub(r" {2,}", " ", line).rstrip() for line in cleaned.split("\n"))
 
@@ -191,16 +196,21 @@ def main():
               "filter[processingState]": "PROCESSING,FAILED,INVALID,VALID", "limit": "1"}
     deadline = time.time() + timeout
     while True:
+        last_error = None
         try:
             builds = client.request("GET", "/v1/builds", params)["data"]
         except Exception as e:  # noqa: BLE001 - filtered by is_transient
             if not is_transient(e):
                 raise  # Auth, permission or bad request: retrying will not help.
             print(f"Build lookup failed, retrying: {e}")
-            builds = []
+            builds, last_error = [], e
         if builds:
             break
         if time.time() > deadline:
+            # Only a real "Apple has not listed it yet" is soft; an API that is
+            # still failing at the deadline is an outage and fails the job.
+            if last_error is not None:
+                raise RuntimeError(f"build lookup still failing after {timeout}s: {last_error}")
             raise BuildNotListed(f"build {build_number} not listed after {timeout}s")
         print(f"Build {build_number} not visible yet, waiting {poll}s")
         time.sleep(poll)
