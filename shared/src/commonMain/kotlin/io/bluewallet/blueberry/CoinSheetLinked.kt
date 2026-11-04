@@ -1,5 +1,6 @@
 package io.bluewallet.blueberry
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -60,10 +62,9 @@ internal fun LinkedCoinsCard(
             if (model.links.isEmpty()) {
                 NoLinks(model.addressUseCount)
             } else {
-                LinkRows(model.links, selected, onSelect)
-                model.links.find { it.other == selected }?.let { link ->
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(SheetPalette.tile))
-                    LinkPath(link, model.unspentKeys)
+                Column {
+                    LinkRows(model.links, selected, onSelect)
+                    LinkPathAccordion(model.links, selected, model.unspentKeys)
                 }
             }
         }
@@ -143,6 +144,33 @@ private fun LinkRow(
             SheetText(link.summary, 12.sp)
         }
         SheetText(formatLinkAmount(link.valueSat), 14.sp, SheetPalette.soft, FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun LinkPathAccordion(
+    links: List<CoinLink>,
+    selected: String?,
+    unspent: Set<String>,
+) {
+    Column {
+        for (link in links) {
+            key(link.other) {
+                AnimatedVisibility(
+                    visible = link.other == selected,
+                    enter = txAccordionEnter,
+                    exit = txAccordionExit,
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(top = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(SheetPalette.tile))
+                        LinkPath(link, unspent)
+                    }
+                }
+            }
+        }
     }
 }
 

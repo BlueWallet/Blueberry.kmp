@@ -11,19 +11,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -49,14 +45,20 @@ import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.parse.ReceiveSnapshot
 import io.bluewallet.blueberry.parse.snapshotReceive
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.ui.AlwaysBounceScroll
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.OverlayBackEffects
+import io.bluewallet.blueberry.ui.PlatformLargeTitle
+import io.bluewallet.blueberry.ui.PlatformScreenHeader
+import io.bluewallet.blueberry.ui.PlatformScrollEdge
 import io.bluewallet.blueberry.ui.QrPlaceholder
 import io.bluewallet.blueberry.ui.ScannableQr
-import io.bluewallet.blueberry.ui.ScreenHeader
+import io.bluewallet.blueberry.ui.platformBottomEdgeClearance
+import io.bluewallet.blueberry.ui.platformHeaderClearance
+import io.bluewallet.blueberry.wallet.AddressScriptType
 import io.bluewallet.blueberry.wallet.HD_SCRIPT_TYPES
 import io.bluewallet.blueberry.wallet.WalletSecretKind
 import io.bluewallet.blueberry.wallet.compactFilterFrom
@@ -67,6 +69,9 @@ import io.bluewallet.blueberry.wallet.parseWalletSecret
 import io.bluewallet.blueberry.wallet.receiveLabel
 import io.bluewallet.blueberry.wallet.saveReceiveScriptType
 import kotlin.math.max
+
+/** Space between the navigation bar and the large title. */
+private val HeaderToContent = 24.dp
 
 /** Placeholder drawn while the label sheet is up; deliberately not a bitcoin address. */
 private const val PLACEHOLDER_ADDRESS = "•••• •••• •••• •••• ••••"
@@ -137,6 +142,8 @@ fun ReceiveScreen(
     val keyFocus = remember { FocusRequester() }
     // Re-take key focus whenever the sheet comes or goes, so desktop arrow keys keep stepping.
     LaunchedEffect(sheetShown) { runCatching { keyFocus.requestFocus() } }
+    val safe = WindowInsets.safeDrawing.asPaddingValues()
+    val topChrome = safe.calculateTopPadding() + platformHeaderClearance()
     OverlayBackEffects(enabled = editing, onDismiss = { editing = false }) {
         // Sheet sits below the content (not over it), so the placeholder centres in the space left above it.
         Column(
@@ -146,34 +153,41 @@ fun ReceiveScreen(
                     .background(BwColors.Paper)
                     .receiveArrowKeys(nav, keyFocus),
         ) {
-            Column(
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                        .padding(horizontal = BwSpace.ScreenX, vertical = BwSpace.ScreenY),
-                verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
-            ) {
-                ScreenHeader(title = "Receive", onBack = onBack)
-                if (showsReceiveTypePicker(db)) {
-                    Box {
-                        Text(
-                            text = receiveType.receiveLabel(),
-                            color = BwColors.Link,
-                            fontFamily = BwFontFamily,
-                            fontSize = BwType.BodySize,
-                            fontWeight = BwType.Body,
-                            modifier = Modifier.clickable { menuOpen = true },
-                        )
-                        DropdownMenu(
-                            expanded = menuOpen,
-                            onDismissRequest = { menuOpen = false },
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                PlatformScrollEdge(
+                    modifier = Modifier.fillMaxSize(),
+                    top = topChrome,
+                    bottom = if (sheetShown) null else safe.calculateBottomPadding(),
+                ) {
+                    AlwaysBounceScroll(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .padding(top = topChrome + HeaderToContent)
+                                .windowInsetsPadding(
+                                    WindowInsets.safeDrawing.only(
+                                        if (sheetShown) {
+                                            WindowInsetsSides.Horizontal
+                                        } else {
+                                            WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
+                                        },
+                                    ),
+                                ).padding(horizontal = BwSpace.ScreenX)
+                                .padding(bottom = if (sheetShown) 0.dp else platformBottomEdgeClearance()),
+                        growWithContent = true,
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap),
                         ) {
-                            for (type in HD_SCRIPT_TYPES) {
-                                DropdownMenuItem(
-                                    text = { Text(type.receiveLabel()) },
-                                    onClick = {
+                            PlatformLargeTitle(title = "Receive")
+                            if (showsReceiveTypePicker(db)) {
+                                ReceiveTypePicker(
+                                    label = receiveType.receiveLabel(),
+                                    expanded = menuOpen,
+                                    onOpen = { menuOpen = true },
+                                    onDismiss = { menuOpen = false },
+                                    onSelect = { type ->
                                         saveReceiveScriptType(db, type)
                                         receiveType = type
                                         menuOpen = false
@@ -182,30 +196,42 @@ fun ReceiveScreen(
                                 )
                             }
                         }
+                        Column(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(BwSpace.Gap, Alignment.CenterVertically),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            val shown = address
+                            when {
+                                shown == null -> NoUnusedAddress()
+                                // Cover: while the sheet is up the real QR and address are never composed.
+                                sheetShown -> ReceiveAddressPlaceholder(nav)
+                                else ->
+                                    ReceiveAddress(
+                                        address = shown,
+                                        label = label.orEmpty(),
+                                        nav = nav,
+                                        onEditLabel = {
+                                            draft = label.orEmpty()
+                                            editing = true
+                                        },
+                                    )
+                            }
+                        }
                     }
                 }
-                Column(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(BwSpace.Gap, Alignment.CenterVertically),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    val shown = address
-                    when {
-                        shown == null -> NoUnusedAddress()
-                        // Cover: while the sheet is up the real QR and address are never composed.
-                        sheetShown -> ReceiveAddressPlaceholder(nav)
-                        else ->
-                            ReceiveAddress(
-                                address = shown,
-                                label = label.orEmpty(),
-                                nav = nav,
-                                onEditLabel = {
-                                    draft = label.orEmpty()
-                                    editing = true
-                                },
-                            )
-                    }
-                }
+                PlatformScreenHeader(
+                    title = "Receive",
+                    onBack = onBack,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(
+                                top = safe.calculateTopPadding(),
+                                start = BwSpace.ScreenX,
+                                end = BwSpace.ScreenX,
+                            ),
+                )
             }
             AnimatedVisibility(
                 visible = sheetShown,
@@ -231,8 +257,34 @@ fun ReceiveScreen(
                     onDismiss = { if (editing) editing = false else onBack() },
                 )
             }
-            // The sheet pads itself for the nav bar and keyboard; otherwise keep the bottom safe inset.
-            if (!sheetShown) Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.safeDrawing))
+        }
+    }
+}
+
+@Composable
+private fun ReceiveTypePicker(
+    label: String,
+    expanded: Boolean,
+    onOpen: () -> Unit,
+    onDismiss: () -> Unit,
+    onSelect: (AddressScriptType) -> Unit,
+) {
+    Box {
+        Text(
+            text = label,
+            color = BwColors.Link,
+            fontFamily = BwFontFamily,
+            fontSize = BwType.BodySize,
+            fontWeight = BwType.Body,
+            modifier = Modifier.clickable(onClick = onOpen),
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+            for (type in HD_SCRIPT_TYPES) {
+                DropdownMenuItem(
+                    text = { Text(type.receiveLabel()) },
+                    onClick = { onSelect(type) },
+                )
+            }
         }
     }
 }
@@ -298,10 +350,9 @@ private fun ReceiveAddress(
 }
 
 @Composable
-private fun ColumnScope.ReceiveAddressPlaceholder(nav: ReceiveNav?) {
-    // Shrinks below 200dp when little room is left (small screen, keyboard open).
-    ReceiveQrRow(nav, Modifier.weight(1f, fill = false)) {
-        QrPlaceholder(Modifier.sizeIn(maxWidth = 200.dp, maxHeight = 200.dp).aspectRatio(1f))
+private fun ReceiveAddressPlaceholder(nav: ReceiveNav?) {
+    ReceiveQrRow(nav) {
+        QrPlaceholder(Modifier.size(200.dp))
     }
     Text(
         text = PLACEHOLDER_ADDRESS,
