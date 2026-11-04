@@ -147,3 +147,22 @@ jobs:
           UUID="$(sed -n 's/.*Delivery UUID:[[:space:]]*//p' "$LOG" | tr -d '\r' | head -n 1)"
           test -n "$UUID"
           echo "Uploaded $UUID"
+
+      # The upload has already succeeded here, so a failure only warns and does
+      # not fail the job. Apple can take 5 to 30+ minutes to list the build.
+      - name: Set TestFlight What to Test
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          BUNDLE_ID: io.bluewallet.blueberry
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          export ASC_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          export BUILD_NUMBER="$CURRENT_PROJECT_VERSION"
+          export NOTES_FILE="${RUNNER_TEMP}/what-to-test.txt"
+          .github/scripts/testflight_notes.sh "$BEFORE_SHA" "$GITHUB_SHA" > "$NOTES_FILE" \
+            || echo "Build commit ${GITHUB_SHA::7}" > "$NOTES_FILE"
+          cat "$NOTES_FILE"
+          if ! python3 .github/scripts/testflight_what_to_test.py; then
+            echo "::warning::Could not set TestFlight What to Test for build ${BUILD_NUMBER}; the upload itself succeeded."
+          fi
