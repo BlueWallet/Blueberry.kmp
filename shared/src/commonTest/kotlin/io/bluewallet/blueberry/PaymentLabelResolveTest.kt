@@ -46,7 +46,6 @@ class PaymentLabelResolveTest {
         val unlabeled = snapshotFromDb(db, 1, 1, wallet).txs.single()
         assertNull(unlabeled.paymentLabel)
         assertEquals("donation", unlabeled.utxoLabel)
-        assertEquals("donation", txListSecondary(unlabeled.shortTxid, unlabeled.paymentLabel, unlabeled.utxoLabel))
 
         db.txPaymentLabels.upsert(
             io.bluewallet.blueberry.storage
@@ -55,7 +54,6 @@ class PaymentLabelResolveTest {
         val labeled = snapshotFromDb(db, 2, 2, wallet).txs.single()
         assertEquals("payroll", labeled.paymentLabel)
         assertEquals("donation", labeled.utxoLabel)
-        assertEquals("payroll", txListSecondary(labeled.shortTxid, labeled.paymentLabel, labeled.utxoLabel))
 
         db.close()
     }

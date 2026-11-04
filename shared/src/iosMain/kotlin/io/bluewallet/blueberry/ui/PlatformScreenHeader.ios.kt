@@ -29,6 +29,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.useContents
+import platform.CoreGraphics.CGRectMake
+import platform.CoreGraphics.CGSizeMake
 import platform.UIKit.NSLineBreakByTruncatingTail
 import platform.UIKit.NSTextAlignmentCenter
 import platform.UIKit.UIAction
@@ -37,10 +40,12 @@ import platform.UIKit.UIButtonConfiguration
 import platform.UIKit.UIColor
 import platform.UIKit.UIControlStateNormal
 import platform.UIKit.UIFont
+import platform.UIKit.UIFontWeightRegular
 import platform.UIKit.UIFontWeightSemibold
 import platform.UIKit.UIImage
 import platform.UIKit.UILabel
 import platform.UIKit.UIMenu
+import platform.UIKit.UIView
 
 private val NavigationBarHeight = 44.dp
 
@@ -63,18 +68,21 @@ actual fun PlatformScreenHeader(
     menu: List<HeaderMenuItem>,
     showBack: Boolean,
     onClose: (() -> Unit)?,
+    subtitle: String?,
 ) {
+    val spoken = if (subtitle.isNullOrEmpty()) title else "$title, $subtitle"
     Box(
         modifier =
             modifier
                 .fillMaxWidth()
                 .height(NavigationBarHeight)
-                .semantics { contentDescription = title },
+                .semantics { contentDescription = spoken },
     ) {
         if (showBarTitle) {
             // UIKit overlay above the scroll-edge blur. Inset so it does not cover side controls.
             IosBarTitle(
                 title = title,
+                subtitle = subtitle,
                 modifier =
                     Modifier
                         .align(Alignment.Center)
@@ -165,26 +173,21 @@ private fun IosOverlayMenuButton(
 internal fun IosBarTitle(
     title: String,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
 ) {
     val ink = BwColors.Ink
+    val secondary = BwColors.InkSecondary
     UIKitView(
-        factory = {
-            val label = UILabel()
-            label.text = title
-            label.textAlignment = NSTextAlignmentCenter
-            label.font = UIFont.systemFontOfSize(17.0, UIFontWeightSemibold)
-            label.textColor = ink.toUiColor()
-            label.backgroundColor = UIColor.clearColor
-            label.numberOfLines = 1L
-            label.lineBreakMode = NSLineBreakByTruncatingTail
-            label.userInteractionEnabled = false
-            label
-        },
+        factory = { BarTitleView() },
         modifier = modifier,
-        update = { label ->
-            label.text = title
-            label.textColor = ink.toUiColor()
-            label.userInteractionEnabled = false
+        update = { view ->
+            view.titleLabel.text = title
+            view.titleLabel.textColor = ink.toUiColor()
+            val line = subtitle?.takeIf { it.isNotEmpty() }
+            view.subtitleLabel.text = line.orEmpty()
+            view.subtitleLabel.hidden = line == null
+            view.subtitleLabel.textColor = secondary.toUiColor()
+            view.setNeedsLayout()
         },
         properties =
             UIKitInteropProperties(
@@ -192,6 +195,48 @@ internal fun IosBarTitle(
                 isNativeAccessibilityEnabled = false,
             ),
     )
+}
+
+/** Title over an optional subtitle, centered in the navigation bar. */
+@OptIn(ExperimentalForeignApi::class)
+private class BarTitleView : UIView(CGRectMake(0.0, 0.0, 0.0, 0.0)) {
+    val titleLabel = barLabel(17.0, UIFontWeightSemibold)
+    val subtitleLabel = barLabel(12.0, UIFontWeightRegular)
+
+    init {
+        backgroundColor = UIColor.clearColor
+        userInteractionEnabled = false
+        addSubview(titleLabel)
+        addSubview(subtitleLabel)
+    }
+
+    override fun layoutSubviews() {
+        super.layoutSubviews()
+        val width = bounds.useContents { size.width }
+        val height = bounds.useContents { size.height }
+        val titleHeight = titleLabel.sizeThatFits(CGSizeMake(width, height)).useContents { this.height }
+        val showSub = !subtitleLabel.hidden
+        val subHeight = if (showSub) subtitleLabel.sizeThatFits(CGSizeMake(width, height)).useContents { this.height } else 0.0
+        val gap = if (showSub) 1.0 else 0.0
+        val top = ((height - titleHeight - gap - subHeight) / 2.0).coerceAtLeast(0.0)
+        titleLabel.setFrame(CGRectMake(0.0, top, width, titleHeight))
+        subtitleLabel.setFrame(CGRectMake(0.0, top + titleHeight + gap, width, subHeight))
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun barLabel(
+    size: Double,
+    weight: Double,
+): UILabel {
+    val label = UILabel()
+    label.textAlignment = NSTextAlignmentCenter
+    label.font = UIFont.systemFontOfSize(size, weight)
+    label.backgroundColor = UIColor.clearColor
+    label.numberOfLines = 1L
+    label.lineBreakMode = NSLineBreakByTruncatingTail
+    label.userInteractionEnabled = false
+    return label
 }
 
 /**

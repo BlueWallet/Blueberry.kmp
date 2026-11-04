@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,7 +27,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.SpanStyle
@@ -39,9 +40,11 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.bluewallet.blueberry.parse.styleBtc
+import io.bluewallet.blueberry.ui.AddressGroups
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.Pressable
 import io.bluewallet.blueberry.ui.numberFontFamily
 import kotlin.math.roundToInt
 
@@ -49,29 +52,40 @@ private val ChipShape = RoundedCornerShape(14.dp)
 private const val FEE_DASH_ON_DP = 2f
 private const val FEE_DASH_OFF_DP = 4f
 private const val FLOW_AMOUNT_SP = 12.5f
+private const val FLOW_LABEL_SP = 11f
 private const val CHANGE_ARGB = 0xFFAEB4BA
 private const val PAYMENT_ARGB = 0xFF3788E0
 private const val MUTED_ARGB = 0xFF6E767D
 
-/** Draws the coins and outputs. [description] is the only thing a screen reader hears for the whole graph. */
+/**
+ * Draws the coins and outputs. [description] is the only thing a screen reader hears when no chip
+ * opens a coin row. [onCoin] receives the outpoint of a tapped coin chip.
+ */
 @Composable
 internal fun TxFlowGraph(
     inputs: List<TxFlowNode>,
     outputs: List<TxFlowNode>,
     description: String,
+    openCoin: String? = null,
+    onCoin: ((String) -> Unit)? = null,
 ) {
-    SubcomposeLayout(
-        modifier =
+    val reader =
+        if (onCoin == null) {
+            Modifier.clearAndSetSemantics { contentDescription = description }
+        } else {
             Modifier
-                .fillMaxWidth()
-                .clearAndSetSemantics { contentDescription = description },
+        }
+    SubcomposeLayout(
+        modifier = Modifier.fillMaxWidth().then(reader),
     ) { constraints ->
         val canvas = if (constraints.hasBoundedWidth) constraints.maxWidth.toDp().value else TX_FLOW_WIDTH_DP
         val preview = txFlowModel(inputs, outputs, widthDp = canvas)
         val nodes = preview.inputs.map { it.node } + preview.outputs.map { it.node }
         val placeables =
             nodes.mapIndexed { index, node ->
-                subcompose(index) { FlowChip(node) }.first().measure(Constraints())
+                subcompose(index) {
+                    FlowChip(node, open = node.coinKey != null && node.coinKey == openCoin, onCoin = onCoin)
+                }.first().measure(Constraints())
             }
         val measured = placeables.map { it.width.toDp().value }
         val widths = measured.iterator()
@@ -163,38 +177,106 @@ private fun DrawScope.drawCurve(curve: TxFlowCurve) {
 private fun DrawScope.feeDash(): PathEffect = PathEffect.dashPathEffect(floatArrayOf(FEE_DASH_ON_DP.dp.toPx(), FEE_DASH_OFF_DP.dp.toPx()))
 
 @Composable
-private fun FlowChip(node: TxFlowNode) {
+private fun FlowChip(
+    node: TxFlowNode,
+    open: Boolean,
+    onCoin: ((String) -> Unit)?,
+) {
     val payment = node.role == TxFlowRole.Payment
-    val border = if (payment) BwColors.Accent.copy(alpha = 0.55f) else BwColors.Ink.copy(alpha = 0.06f)
+    val border =
+        when {
+            open -> BwColors.Accent
+            payment -> BwColors.Accent.copy(alpha = 0.55f)
+            else -> BwColors.Ink.copy(alpha = 0.06f)
+        }
     val fill = if (payment) BwColors.AccentSoft else BwColors.InputFill
     val labelColor = if (payment) BwColors.Accent else BwColors.InkQuiet
-    Row(
-        modifier =
-            Modifier
-                .height(TX_FLOW_CHIP_HEIGHT_DP.dp)
-                .clip(ChipShape)
-                .background(fill)
-                .border(1.dp, border, ChipShape)
-                .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        FlowDot(node)
-        Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-            FlowAmount(sats = node.sats, color = if (payment) BwColors.Accent else BwColors.Ink)
-            Text(
-                text = flowChipLabel(node.label),
-                color = labelColor,
-                fontFamily = BwFontFamily,
-                fontSize = 11.sp,
-                lineHeight = 12.sp,
-                fontWeight = if (payment) BwType.Label else BwType.Body,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-            )
+    val chip: @Composable () -> Unit = {
+        Row(
+            modifier =
+                Modifier
+                    .height(TX_FLOW_CHIP_HEIGHT_DP.dp)
+                    .clip(ChipShape)
+                    .background(fill)
+                    .border(1.dp, border, ChipShape)
+                    .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            FlowDot(node)
+            FlowChipLines(node, labelColor)
         }
     }
+    val key = node.coinKey
+    if (key != null && onCoin != null) {
+        Pressable(onClick = { onCoin(key) }, role = Role.Button) { chip() }
+    } else {
+        chip()
+    }
+}
+
+/** The caption stays within the amount line and ellipsizes past it. */
+@Composable
+private fun FlowChipLines(
+    node: TxFlowNode,
+    labelColor: Color,
+) {
+    val payment = node.role == TxFlowRole.Payment
+    Layout(
+        content = {
+            if (node.headline != null) {
+                Text(
+                    text = node.headline,
+                    color = if (payment) BwColors.Accent else BwColors.Ink,
+                    fontFamily = BwFontFamily,
+                    fontSize = FLOW_AMOUNT_SP.sp,
+                    lineHeight = 13.sp,
+                    fontWeight = BwType.Label,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else {
+                FlowAmount(sats = node.sats, color = if (payment) BwColors.Accent else BwColors.Ink)
+            }
+            FlowChipCaption(node.label, labelColor)
+        },
+    ) { measurables, constraints ->
+        val top = measurables[0].measure(constraints)
+        val caption = measurables[1].measure(Constraints(maxWidth = top.width))
+        layout(top.width, top.height + caption.height) {
+            top.place(0, 0)
+            caption.place(0, top.height)
+        }
+    }
+}
+
+@Composable
+private fun FlowChipCaption(
+    label: String,
+    color: Color,
+) {
+    val address = flowAddressOrNull(label)
+    if (address != null) {
+        AddressGroups(
+            address = address,
+            modifier = Modifier.fillMaxWidth(),
+            fontSize = FLOW_LABEL_SP.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        return
+    }
+    Text(
+        text = flowChipLabel(label),
+        color = color,
+        fontFamily = BwFontFamily,
+        fontSize = FLOW_LABEL_SP.sp,
+        lineHeight = 12.sp,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 /** Full satoshi amount: B plus eight decimal places. The chip grows to fit it. */
@@ -228,7 +310,15 @@ private fun FlowDot(node: TxFlowNode) {
         Box(
             Modifier
                 .size(10.dp)
-                .border(2.dp, Color(CHANGE_ARGB), CircleShape),
+                .border(2.dp, Color(node.colorArgb ?: CHANGE_ARGB), CircleShape),
+        )
+        return
+    }
+    if (node.ring) {
+        Box(
+            Modifier
+                .size(10.dp)
+                .border(1.5.dp, Color(node.colorArgb ?: MUTED_ARGB), CircleShape),
         )
         return
     }

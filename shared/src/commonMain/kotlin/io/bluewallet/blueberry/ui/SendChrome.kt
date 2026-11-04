@@ -70,6 +70,9 @@ fun ToPill(
 fun AddressGroups(
     address: String,
     modifier: Modifier = Modifier,
+    fontSize: TextUnit = BwType.BodySize,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
 ) {
     val ink = BwColors.Ink
     val quiet = BwColors.InkQuiet
@@ -83,7 +86,10 @@ fun AddressGroups(
             },
         modifier = modifier,
         fontFamily = FontFamily.Monospace,
-        fontSize = BwType.BodySize,
+        fontSize = fontSize,
+        maxLines = maxLines,
+        overflow = overflow,
+        softWrap = maxLines > 1,
     )
 }
 

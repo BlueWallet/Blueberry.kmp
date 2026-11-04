@@ -130,6 +130,7 @@ internal fun WalletNavHost(
 
     CompositionLocalProvider(
         LocalHomeVisible provides homeVisible,
+        LocalHomeWallet provides runtime.wallet,
         LocalBroadcastSessions provides broadcastSessions,
         LocalOpenBroadcast provides openBroadcast,
     ) {

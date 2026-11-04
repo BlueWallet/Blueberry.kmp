@@ -16,7 +16,9 @@ import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.ui.LocalDarkPalette
 import io.bluewallet.blueberry.ui.PlatformModalSheet
 import io.bluewallet.blueberry.ui.SheetClose
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.time.Clock
@@ -38,13 +40,13 @@ internal fun CoinSheetOverlay(
     onDismiss: () -> Unit,
     nav: CoinSheetNav,
 ) {
-    // Outlives the sheet, so a label upload started as it closes still finishes.
+    // Outlives the sheet, so a label upload or a push started as it closes still finishes.
     val scope = rememberCoroutineScope()
     if (outpoint == null) return
     key(outpoint) {
         val coin =
             remember {
-                OpenCoin(outpoint) { text ->
+                OpenCoin(outpoint, scope) { text ->
                     runtime.wallet?.let { wallet ->
                         setUtxoName(db, wallet, runtime.walletTxsStore, outpoint, text)
                         uploadLabels(scope, db)
@@ -61,9 +63,13 @@ internal fun CoinSheetOverlay(
     }
 }
 
-/** One open sheet: its coin, and a label typed but not saved, which is saved however the sheet closes. */
+/**
+ * One open sheet: its coin, and a label typed but not saved, which is saved however the sheet closes.
+ * [handoff] outlives the sheet, unlike the sheet content's own scope.
+ */
 private class OpenCoin(
     val outpoint: String,
+    val handoff: CoroutineScope,
     val saveLabel: (String) -> Unit,
 ) {
     var unsavedLabel: String? = null
@@ -115,7 +121,16 @@ private fun CoinSheetHost(
                 }
             },
             onSend = { close { nav.onSend(outpoint) } },
-            onOpenTx = { txid -> close { nav.onOpenTx(txid) } },
+            onOpenTx = { txid ->
+                close {
+                    // A push started inside the sheet dismiss completion is dropped on iOS, and this
+                    // host's scope is cancelled once the sheet is gone.
+                    coin.handoff.launch {
+                        delay(SHEET_DISMISS_HANDOFF_MS)
+                        nav.onOpenTx(txid)
+                    }
+                }
+            },
         )
     val current = model
     if (current == null) {
@@ -145,3 +160,6 @@ private fun loadCoinSheet(
         ),
     )
 }
+
+/** Lets the sheet's dismiss transition finish before the next screen push starts. */
+private const val SHEET_DISMISS_HANDOFF_MS = 32L

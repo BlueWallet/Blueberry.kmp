@@ -1,0 +1,9 @@
+get:
+SELECT via FROM broadcast_via WHERE txid = ?;
+
+upsert:
+INSERT INTO broadcast_via(txid, via) VALUES (?, ?)
+ON CONFLICT(txid) DO UPDATE SET via = excluded.via;
+
+list:
+SELECT txid, via FROM broadcast_via ORDER BY txid;

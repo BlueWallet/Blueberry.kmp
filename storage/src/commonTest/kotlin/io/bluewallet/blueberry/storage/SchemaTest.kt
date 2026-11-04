@@ -16,6 +16,7 @@ class SchemaTest {
                 listOf(
                     "address_labels",
                     "blocks",
+                    "broadcast_via",
                     "filter_headers",
                     "filters",
                     "filters_unscanned",
@@ -25,6 +26,7 @@ class SchemaTest {
                     "parsed_blocks",
                     "peers",
                     "private_sends",
+                    "replaced_txs",
                     "sends",
                     "transactions",
                     "tx_payment_labels",
@@ -105,6 +107,11 @@ class SchemaTest {
                     "created_at",
                 ),
                 columnNames(driver, "sends"),
+            )
+            assertEquals(listOf("txid", "via"), columnNames(driver, "broadcast_via"))
+            assertEquals(
+                listOf("txid", "replacement_txid", "outcome"),
+                columnNames(driver, "replaced_txs"),
             )
             assertEquals(
                 listOf("height", "block_hash_internal_hex"),

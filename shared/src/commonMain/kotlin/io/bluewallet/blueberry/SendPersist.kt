@@ -12,6 +12,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
+/** Every broadcast goes over Tor (bridge or direct relay), so this is the only path recorded. */
+const val BROADCAST_VIA_TOR = "tor"
+
 fun shouldPersistSend(
     phase: String?,
     broadcastTxHex: String?,
@@ -40,6 +43,7 @@ fun persistSendIfBroadcast(
 ): Boolean {
     if (!shouldPersistSend(broadcast.phase, broadcast.txHex, row.txHex)) return false
     db.sends.upsert(row)
+    db.broadcastVia.upsert(row.txid, BROADCAST_VIA_TOR)
     return true
 }
 

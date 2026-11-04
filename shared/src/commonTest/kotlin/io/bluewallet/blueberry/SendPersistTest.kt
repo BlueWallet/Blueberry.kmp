@@ -63,6 +63,7 @@ class SendPersistTest {
         assertEquals(50_000L, saved.coins[0].valueSats)
         assertEquals(0L, saved.confirmedInBlock)
         assertTrue(saved.createdAt > 0L)
+        assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
         db.close()
     }
 

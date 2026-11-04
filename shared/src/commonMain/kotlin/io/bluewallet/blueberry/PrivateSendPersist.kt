@@ -40,6 +40,7 @@ fun persistPrivateSendIfBroadcast(
 ): Boolean {
     if (!shouldPersistPrivateSend(broadcast.phase, broadcast.txHex, row.txHex)) return false
     db.privateSends.upsert(row)
+    db.broadcastVia.upsert(row.txid, BROADCAST_VIA_TOR)
     return true
 }
 

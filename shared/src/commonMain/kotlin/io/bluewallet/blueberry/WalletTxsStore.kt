@@ -27,6 +27,9 @@ import io.bluewallet.blueberry.parse.spendingTxs
 import io.bluewallet.blueberry.parse.utxoValueBar
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
+import io.bluewallet.blueberry.storage.PrivateSendRow
+import io.bluewallet.blueberry.storage.ReplacedTxRow
+import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.hexToBytes
@@ -49,6 +52,10 @@ data class WalletTxRow(
     val privateSend: Boolean = false,
     val fee: TxFee? = null,
     val blockTimeS: Long? = null,
+    val createdAtMs: Long = 0,
+    val replaced: Boolean = false,
+    val replacementTxid: String? = null,
+    val ownSend: Boolean = false,
 )
 
 data class WalletUtxoRow(
@@ -267,7 +274,10 @@ private fun pendingSendRows(
         val confirmedHeight = confirmedByTxid[row.txid]
         val spender = if (confirmedHeight == null) row.coins.firstNotNullOfOrNull { spenders[outpointKey(it.txid, it.vout)] } else null
         when {
-            confirmedHeight != null -> row.markConfirmed(confirmedHeight)
+            confirmedHeight != null -> {
+                db.replacedTxs.delete(row.txid)
+                row.markConfirmed(confirmedHeight)
+            }
             spender != null -> settleBySpender(db, row, spender)
             else -> stillPending += row
         }
@@ -289,6 +299,7 @@ private fun settleBySpender(
     if (unsigned != null && unsigned == unsignedTxid(spender.tx)) {
         editLabels(db) { movePaymentLabel(db, row.txid, spender.txid) }
     }
+    db.replacedTxs.upsert(ReplacedTxRow(row.txid, spender.txid, "Replaced"))
     row.markConfirmed(spender.height.toLong())
 }
 
@@ -309,6 +320,57 @@ private fun pendingWalletRows(
         pendingWalletTxRow(row, delta, labels)
     }
 
+private fun replacedWalletRows(
+    db: Database,
+    storedTxids: Set<String>,
+    labels: TxRowLabels,
+): List<WalletTxRow> {
+    val sends = db.sends.list().associateBy { it.txid }
+    val privateSends = db.privateSends.list().associateBy { it.txid }
+    return db.replacedTxs.list().mapNotNull { replaced ->
+        if (replaced.txid in storedTxids) {
+            null
+        } else {
+            replacedWalletRow(replaced, sends[replaced.txid], privateSends[replaced.txid], labels)
+        }
+    }
+}
+
+private fun replacedWalletRow(
+    replaced: ReplacedTxRow,
+    send: SendRow?,
+    privateSend: PrivateSendRow?,
+    labels: TxRowLabels,
+): WalletTxRow? {
+    val txHex = send?.txHex ?: privateSend?.txHex ?: return null
+    val coins = send?.coins ?: privateSend?.coins.orEmpty()
+    val destination = send?.destination ?: privateSend?.destination.orEmpty()
+    val delta =
+        runCatching {
+            inferPendingSendNetDelta(
+                coins = coins,
+                destination = destination,
+                txHex = txHex,
+                keepAddresses = emptyList(),
+            )
+        }.getOrElse { -coins.sumOf { coin -> coin.valueSats } }
+    return WalletTxRow(
+        txid = replaced.txid,
+        shortTxid = shortTxid(replaced.txid),
+        height = 0,
+        timeLabel = padBlockTimeLabel("replaced"),
+        netDeltaSats = delta,
+        netDeltaLabel = formatNetDelta(delta),
+        paymentLabel = labels.noteByTxid[replaced.txid],
+        addressLabel = labels.address(runCatching { hexToBytes(txHex) }.getOrNull()),
+        privateSend = privateSend != null,
+        createdAtMs = send?.createdAt ?: privateSend?.createdAt ?: 0L,
+        replaced = true,
+        replacementTxid = replaced.replacementTxid,
+        ownSend = true,
+    )
+}
+
 private fun pendingWalletTxRow(
     row: PendingSendCandidate,
     delta: Long,
@@ -325,6 +387,8 @@ private fun pendingWalletTxRow(
         utxoLabel = labels.utxoByTxid[row.txid],
         addressLabel = labels.address(runCatching { hexToBytes(row.txHex) }.getOrNull()),
         privateSend = row.privateSend,
+        createdAtMs = row.createdAt,
+        ownSend = true,
     )
 
 private class WalletCoins(
@@ -409,12 +473,54 @@ private fun walletCoins(
     return WalletCoins(utxos, scan.fees, linkage, history.graph, fingerprint)
 }
 
+@Suppress("LongParameterList")
+private fun listedWalletTxs(
+    db: Database,
+    stored: List<StoredTx>,
+    wallet: Wallet?,
+    labels: TxRowLabels,
+    fees: Map<String, TxFee>,
+    timeLabels: MutableMap<Int, HeightTimeLabel>,
+    nowMs: Long,
+    privateSendTxids: Set<String>,
+): List<WalletTxRow> {
+    val ownSendTxids = privateSendTxids + db.sends.list().map { it.txid }
+    val confirmedTxs =
+        stored.map { tx ->
+            val whenLabel = timeLabelForHeight(db, tx.height, nowMs, timeLabels)
+            confirmedTxRow(
+                tx,
+                whenLabel,
+                labels,
+                privateSend = tx.txid in privateSendTxids,
+                fee = fees[tx.txid],
+                ownSend = tx.txid in ownSendTxids,
+            )
+        }
+    val pending =
+        pendingSendRows(
+            db = db,
+            stored = stored,
+            labels = labels,
+            keepAddresses =
+                wallet
+                    ?.snapshot()
+                    ?.addresses
+                    ?.map { it.address }
+                    .orEmpty(),
+        )
+    val replaced = replacedWalletRows(db, stored.map { it.txid }.toSet(), labels)
+    return pending + replaced + confirmedTxs
+}
+
+@Suppress("LongParameterList")
 private fun confirmedTxRow(
     tx: StoredTx,
     whenLabel: HeightTimeLabel,
     labels: TxRowLabels,
     privateSend: Boolean,
     fee: TxFee?,
+    ownSend: Boolean,
 ): WalletTxRow =
     WalletTxRow(
         txid = tx.txid,
@@ -429,6 +535,7 @@ private fun confirmedTxRow(
         addressLabel = labels.address(tx.tx),
         privateSend = privateSend,
         fee = fee,
+        ownSend = ownSend,
     )
 
 /** Linkage computed for one exact history; reused only while that history is unchanged. */
@@ -501,23 +608,8 @@ fun snapshotFromDb(
     val fees = coins.fees
     val linkage = coins.linkage
 
-    val confirmedTxs =
-        stored.map { tx ->
-            val whenLabel = timeLabelForHeight(db, tx.height, nowMs, timeLabels)
-            confirmedTxRow(tx, whenLabel, labels, privateSend = tx.txid in privateSendTxids, fee = fees[tx.txid])
-        }
-    val pending =
-        pendingSendRows(
-            db = db,
-            stored = stored,
-            labels = labels,
-            keepAddresses =
-                wallet
-                    ?.snapshot()
-                    ?.addresses
-                    ?.map { it.address }
-                    .orEmpty(),
-        )
+    val txs =
+        listedWalletTxs(db, stored, wallet, labels, fees, timeLabels, nowMs, privateSendTxids)
     return WalletTxsSnapshot(
         at = at,
         balanceSats = balanceSats,
@@ -525,7 +617,7 @@ fun snapshotFromDb(
         blocksParsed = db.parsedBlocks.count(),
         blocksTotal = db.blocks.count(),
         etaMs = null,
-        txs = pending + confirmedTxs,
+        txs = txs,
         utxos = utxos,
         utxosReady = wallet != null,
         coinGroupIds = linkage.likely,

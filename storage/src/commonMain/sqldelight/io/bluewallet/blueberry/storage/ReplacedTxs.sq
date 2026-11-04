@@ -1,0 +1,21 @@
+get:
+SELECT txid, replacement_txid, outcome FROM replaced_txs WHERE txid = ?;
+
+upsert:
+INSERT INTO replaced_txs(txid, replacement_txid, outcome) VALUES (?, ?, ?)
+ON CONFLICT(txid) DO UPDATE SET
+  replacement_txid = excluded.replacement_txid,
+  outcome = excluded.outcome;
+
+delete:
+DELETE FROM replaced_txs WHERE txid = ?;
+
+list:
+SELECT txid, replacement_txid, outcome FROM replaced_txs ORDER BY txid;
+
+deleteReopened:
+DELETE FROM replaced_txs WHERE txid IN (
+  SELECT txid FROM sends WHERE confirmed_in_block = 0
+  UNION
+  SELECT txid FROM private_sends WHERE confirmed_in_block = 0
+);

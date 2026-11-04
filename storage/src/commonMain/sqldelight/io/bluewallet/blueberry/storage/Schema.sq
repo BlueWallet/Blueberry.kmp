@@ -101,6 +101,17 @@ CREATE TABLE IF NOT EXISTS sends (
   created_at INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS broadcast_via (
+  txid TEXT PRIMARY KEY,
+  via TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS replaced_txs (
+  txid TEXT PRIMARY KEY,
+  replacement_txid TEXT NOT NULL,
+  outcome TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS headers_hash_internal_hex
   ON headers(hash_internal_hex);
 CREATE INDEX IF NOT EXISTS filters_height_hash

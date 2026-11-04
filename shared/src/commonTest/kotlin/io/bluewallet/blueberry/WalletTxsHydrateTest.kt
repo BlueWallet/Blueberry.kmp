@@ -308,7 +308,9 @@ class WalletTxsHydrateTest {
         db.transactions.upsert(StoredTx(signed.txid.toString(), 300, 0, "33".repeat(32), Transaction.write(signed), -41_000L))
         val snap = snapshotFromDb(db, 2, 2)
 
-        assertEquals(listOf(signed.txid.toString()), snap.txs.map { it.txid })
+        assertEquals(listOf(txid, signed.txid.toString()), snap.txs.map { it.txid })
+        assertTrue(snap.txs[0].replaced)
+        assertEquals(signed.txid.toString(), snap.txs[0].replacementTxid)
         assertEquals(300L, db.sends.get(txid)!!.confirmedInBlock)
         assertTrue(loadStoredHolds(db).isEmpty())
         assertEquals("rent", db.txPaymentLabels.get(signed.txid.toString())?.label)
@@ -329,9 +331,10 @@ class WalletTxsHydrateTest {
         db.txPaymentLabels.upsert(TxPaymentLabelRow(txid, "rent"))
 
         db.transactions.upsert(StoredTx(conflict.txid.toString(), 301, 0, "34".repeat(32), Transaction.write(conflict), -46_000L))
-        snapshotFromDb(db, 1, 1)
+        val snap = snapshotFromDb(db, 1, 1)
 
         assertEquals(301L, db.sends.get(txid)!!.confirmedInBlock)
+        assertTrue(snap.txs.any { it.txid == txid && it.replaced && it.replacementTxid == conflict.txid.toString() })
         assertTrue(loadStoredHolds(db).isEmpty())
         assertNull(db.txPaymentLabels.get(conflict.txid.toString()))
         db.close()
