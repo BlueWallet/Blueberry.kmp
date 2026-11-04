@@ -1,5 +1,6 @@
 package io.bluewallet.blueberry
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -9,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,22 +30,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.bluewallet.blueberry.ui.Pressable
 
 /** Address and Where it came from, collapsed by default. */
 @Composable
 internal fun DetailsCard(
     address: AddressSheet?,
     origin: OriginSheet?,
+    onCopy: (String) -> Unit,
     onOpenTx: (String) -> Unit,
 ) {
     if (address == null && origin == null) return
     SheetCard {
         if (address != null) {
-            Accordion("Address", address.collapsed) { AddressBody(address) }
+            Accordion("Address", address.collapsed) { AddressBody(address, onCopy) }
         }
         if (address != null && origin != null) SheetDivider()
         if (origin != null) {
-            Accordion("Where it came from", origin.collapsed) { OriginBody(origin) { onOpenTx(origin.txid) } }
+            Accordion("Where it came from", origin.collapsed) { OriginBody(origin, onCopy) { onOpenTx(origin.txid) } }
         }
     }
 }
@@ -59,23 +61,31 @@ private fun Accordion(
     var open by remember(title) { mutableStateOf(false) }
     val turn by animateFloatAsState(if (open) 90f else 0f)
     Column {
-        Row(
+        Pressable(
+            onClick = { open = !open },
+            role = Role.Button,
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 66.dp)
-                    .toggleable(value = open, role = Role.Button) { open = it }
-                    .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                    .semantics { stateDescription = if (open) "Expanded" else "Collapsed" },
         ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                SheetText(title, 15.sp, SheetPalette.text, FontWeight.Bold)
-                SheetText(collapsed, 13.sp)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    SheetText(title, 15.sp, SheetPalette.text, FontWeight.Bold)
+                    SheetText(collapsed, 13.sp)
+                }
+                SheetGlyphView(SheetGlyph.Chevron, SheetPalette.secondary, Modifier.size(16.dp).rotate(turn))
             }
-            SheetGlyphView(SheetGlyph.Chevron, SheetPalette.secondary, Modifier.size(16.dp).rotate(turn))
         }
-        if (open) {
+        AnimatedVisibility(
+            visible = open,
+            enter = txAccordionEnter,
+            exit = txAccordionExit,
+        ) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -108,8 +118,13 @@ private fun QuadText(
 }
 
 @Composable
-private fun AddressBody(address: AddressSheet) {
-    QuadText(address.address)
+private fun AddressBody(
+    address: AddressSheet,
+    onCopy: (String) -> Unit,
+) {
+    CopyableArea(label = "Copy address", onCopy = { onCopy(address.address) }) {
+        QuadText(address.address)
+    }
     if (address.chips.isNotEmpty()) {
         SheetText("Derivation path", 13.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -133,10 +148,13 @@ private fun AddressBody(address: AddressSheet) {
 @Composable
 private fun OriginBody(
     origin: OriginSheet,
+    onCopy: (String) -> Unit,
     onOpenTx: () -> Unit,
 ) {
     SheetText("Outpoint", 13.sp)
-    QuadText(origin.txid, trailing = ":${origin.vout}")
+    CopyableArea(label = "Copy outpoint", onCopy = { onCopy("${origin.txid}:${origin.vout}") }) {
+        QuadText(origin.txid, trailing = ":${origin.vout}")
+    }
     SheetText(origin.body, 13.sp, SheetPalette.soft)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FactTile("Block", origin.block, Modifier.weight(1f))

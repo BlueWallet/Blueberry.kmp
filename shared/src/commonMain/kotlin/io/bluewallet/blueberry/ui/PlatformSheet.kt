@@ -1,6 +1,7 @@
 package io.bluewallet.blueberry.ui
 
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -14,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,6 +28,12 @@ import kotlinx.coroutines.launch
 
 /** Animates the sheet away, then runs the given action. */
 typealias SheetClose = (after: () -> Unit) -> Unit
+
+/**
+ * False while a sheet is short of full height. Body scroll stays pinned to the top until then,
+ * so a drag grows the sheet instead of moving the content.
+ */
+val LocalSheetScrollEnabled = staticCompositionLocalOf { true }
 
 /**
  * The platform's own modal sheet while composed: a UIKit page sheet on iOS, Material
@@ -49,8 +57,9 @@ class SheetHeaderAction(
 )
 
 /**
- * Sheet title bar. iOS: centered title, leading close, trailing action button.
- * Material: title row under the drag handle with a trailing text action; the handle dismisses.
+ * Sheet title bar. An empty [title] draws no title. iOS: leading close, optional centered
+ * title, trailing action button. Material: title row under the drag handle with a trailing
+ * text action; the handle dismisses. An empty title and no action draws nothing.
  */
 @Composable
 expect fun PlatformSheetHeader(
@@ -98,16 +107,21 @@ internal fun MaterialSheetHeader(
     action: SheetHeaderAction?,
     modifier: Modifier = Modifier,
 ) {
+    if (title.isEmpty() && action == null) return
     Row(
         modifier = modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 24.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = title,
-            modifier = Modifier.weight(1f).semantics { heading() },
-            color = BwColors.Ink,
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-        )
+        if (title.isNotEmpty()) {
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f).semantics { heading() },
+                color = BwColors.Ink,
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+            )
+        } else {
+            Spacer(Modifier.weight(1f))
+        }
         if (action != null) {
             TextAction(
                 text = action.text,

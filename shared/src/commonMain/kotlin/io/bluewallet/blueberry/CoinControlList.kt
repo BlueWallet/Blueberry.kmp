@@ -221,34 +221,6 @@ internal fun CoinControlRow(
         Row(
             modifier =
                 Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .then(
-                        if (coin.canSelect) {
-                            Modifier
-                                .semantics { contentDescription = selectA11y }
-                                .toggleable(value = selected, role = Role.Checkbox, onValueChange = { onToggle() })
-                        } else {
-                            Modifier.semantics {
-                                contentDescription = selectA11y
-                                disabled()
-                            }
-                        },
-                    ).padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            CoinSelector(selected = selected, frozen = coin.isFrozen, sending = coin.sending)
-            Box(
-                modifier =
-                    Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(Color(coin.colorArgb), CircleShape),
-            )
-        }
-        Row(
-            modifier =
-                Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(12.dp))
                     .then(
@@ -264,6 +236,13 @@ internal fun CoinControlRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(Color(coin.colorArgb), CircleShape),
+            )
             Column(modifier = Modifier.weight(1f)) {
                 BtcAmountText(
                     sats = coin.valueSats,
@@ -311,12 +290,26 @@ internal fun CoinControlRow(
                     )
                 }
             }
-            Text(
-                text = coin.ageLabel,
-                color = BwColors.InkSecondary,
-                fontFamily = BwFontFamily,
-                fontSize = 13.sp,
-            )
+        }
+        Row(
+            modifier =
+                Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .then(
+                        if (coin.canSelect) {
+                            Modifier
+                                .semantics { contentDescription = selectA11y }
+                                .toggleable(value = selected, role = Role.Checkbox, onValueChange = { onToggle() })
+                        } else {
+                            Modifier.semantics {
+                                contentDescription = selectA11y
+                                disabled()
+                            }
+                        },
+                    ).padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CoinSelector(selected = selected, frozen = coin.isFrozen, sending = coin.sending)
         }
     }
 }
@@ -338,8 +331,6 @@ private fun coinDetailsDescription(
         if (coin.isFrozen) append("frozen, ")
         if (coin.sending) append("sending, ")
         append(subtitle)
-        append(", ")
-        append(coin.ageLabel)
         append(", opens coin details")
     }
 

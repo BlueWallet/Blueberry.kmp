@@ -28,10 +28,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -50,11 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.bluewallet.blueberry.ui.BtcAmountText
 import io.bluewallet.blueberry.ui.BwFontFamily
+import io.bluewallet.blueberry.ui.LocalSheetScrollEnabled
 import io.bluewallet.blueberry.ui.PlatformSheetHeader
-import io.bluewallet.blueberry.ui.SheetHeaderAction
-import kotlinx.coroutines.delay
-
-private const val COPIED_MS = 1_600L
 
 /** What the sheet can ask its host to do. */
 class CoinSheetActions(
@@ -75,12 +72,11 @@ class CoinLabelActions(
 /** Header only, while the model loads; a short note if the coin is gone. */
 @Composable
 internal fun CoinSheetPending(
-    outpoint: String,
     actions: CoinSheetActions,
     missing: Boolean,
 ) {
     Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
-        SheetHeader(outpoint, actions)
+        SheetHeader(actions)
         Box(Modifier.fillMaxWidth().heightIn(min = 240.dp).padding(24.dp), contentAlignment = Alignment.TopCenter) {
             if (missing) SheetText("This coin is no longer in this wallet.", 15.sp)
         }
@@ -94,9 +90,18 @@ internal fun CoinSheet(
     actions: CoinSheetActions,
     modifier: Modifier = Modifier,
 ) {
-    var selected by remember(model.outpoint) { mutableStateOf(model.links.firstOrNull()?.other) }
-    val activeLink = selected?.takeIf { key -> model.links.any { it.other == key } } ?: model.links.firstOrNull()?.other
+    var selected by remember(model.outpoint) { mutableStateOf<String?>(null) }
+    val activeLink = selected?.takeIf { key -> model.links.any { it.other == key } }
     val focus = LocalFocusManager.current
+    val scroll = rememberScrollState()
+    val scrollEnabled = LocalSheetScrollEnabled.current
+    LaunchedEffect(scroll, scrollEnabled) {
+        if (!scrollEnabled) {
+            snapshotFlow { scroll.value }.collect { offset ->
+                if (offset != 0) scroll.scrollTo(0)
+            }
+        }
+    }
     val dismissKeyboardOnScroll =
         remember(focus) {
             object : NestedScrollConnection {
@@ -114,7 +119,7 @@ internal fun CoinSheet(
             .fillMaxWidth()
             .pointerInput(focus) { detectTapGestures { focus.clearFocus() } },
     ) {
-        SheetHeader(model.outpoint, actions)
+        SheetHeader(actions)
         Column(
             modifier =
                 Modifier
@@ -122,12 +127,12 @@ internal fun CoinSheet(
                     .fillMaxWidth()
                     .imePadding()
                     .nestedScroll(dismissKeyboardOnScroll)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scroll)
                     .navigationBarsPadding()
-                    .padding(top = 8.dp, bottom = 24.dp),
+                    .padding(top = 24.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            SheetBody(model, actions, activeLink) { selected = it }
+            SheetBody(model, actions, activeLink) { key -> selected = if (selected == key) null else key }
         }
     }
 }
@@ -148,35 +153,14 @@ private fun SheetBody(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { SpendCard(model.spendRows) }
         }
         ActionsCard(model, actions.onFreeze, actions.onSend)
-        DetailsCard(model.address, model.origin, actions.onOpenTx)
+        DetailsCard(model.address, model.origin, actions.onCopy, actions.onOpenTx)
     }
 }
 
+/** Close only. This sheet has no title. */
 @Composable
-private fun SheetHeader(
-    outpoint: String,
-    actions: CoinSheetActions,
-) {
-    var copies by remember { mutableIntStateOf(0) }
-    var copied by remember { mutableStateOf(false) }
-    LaunchedEffect(copies) {
-        if (copies > 0) {
-            copied = true
-            delay(COPIED_MS)
-            copied = false
-        }
-    }
-    val copy =
-        remember(outpoint, actions) {
-            SheetHeaderAction(text = "Copy", accessibilityLabel = "Copy outpoint", iosSymbol = "doc.on.doc") {
-                actions.onCopy(outpoint)
-                copies++
-            }
-        }
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        PlatformSheetHeader(title = "Coin", onClose = actions.onClose, action = copy)
-        if (copied) SheetText("Outpoint copied", 13.sp, SheetPalette.green, FontWeight.Bold)
-    }
+private fun SheetHeader(actions: CoinSheetActions) {
+    PlatformSheetHeader(title = "", onClose = actions.onClose, action = null)
 }
 
 @Composable

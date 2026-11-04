@@ -391,7 +391,12 @@ internal fun txListCard(): Color = if (io.bluewallet.blueberry.ui.LocalDarkPalet
 internal fun txCoinActionFill(): Color = if (io.bluewallet.blueberry.ui.LocalDarkPalette.current) Color(0xFF1B1E21) else Color(0xFFD5D9E0)
 
 @Composable
-internal fun txRowDivider(): Color = if (io.bluewallet.blueberry.ui.LocalDarkPalette.current) Color(0xFF3A4148) else Color(0xFFE4E7EB)
+internal fun txRowDivider(): Color =
+    if (io.bluewallet.blueberry.ui.LocalDarkPalette.current) {
+        Color.White.copy(alpha = 0.08f)
+    } else {
+        Color(0xFFE4E7EB)
+    }
 
 internal fun Modifier.txCircleButton(): Modifier =
     this

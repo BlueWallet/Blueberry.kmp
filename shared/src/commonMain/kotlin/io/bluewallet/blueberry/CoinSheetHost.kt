@@ -134,7 +134,7 @@ private fun CoinSheetHost(
         )
     val current = model
     if (current == null) {
-        CoinSheetPending(outpoint, actions, missing = loaded)
+        CoinSheetPending(actions, missing = loaded)
     } else {
         CoinSheet(model = current, actions = actions)
     }

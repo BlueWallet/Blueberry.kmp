@@ -29,7 +29,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -154,15 +154,8 @@ fun PeersScreen(
             blocks = blocks,
         )
     val homeVisible = LocalHomeVisible.current
-    var listEpoch by remember { mutableStateOf(0) }
-    var wasHomeVisible by remember { mutableStateOf(homeVisible) }
-    LaunchedEffect(homeVisible) {
-        if (homeVisible && !wasHomeVisible) {
-            listEpoch++
-        }
-        wasHomeVisible = homeVisible
-    }
-    val listState = remember(listEpoch) { LazyListState() }
+    // Scroll position stays put while another screen covers home.
+    val listState = rememberLazyListState()
     val parseBusy = walletTxs.blocksTotal > walletTxs.blocksParsed
     val dockIdle = isSyncDockIdle(unified, parseBusy)
     val alwaysShowSync = LocalAlwaysShowSync.current
