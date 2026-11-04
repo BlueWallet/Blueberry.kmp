@@ -1,7 +1,11 @@
 package io.bluewallet.blueberry
 
+import io.bluewallet.blueberry.parse.CoinGraphCoin
+import io.bluewallet.blueberry.parse.CoinLinkEdge
 import io.bluewallet.blueberry.parse.CoinLinkGraph
 import io.bluewallet.blueberry.parse.CoinLinkage
+import io.bluewallet.blueberry.parse.LinkNode
+import io.bluewallet.blueberry.parse.Relation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -129,6 +133,42 @@ class CoinSheetModelTest {
         assertNotNull(own)
         assertEquals("Mine", own.label)
         assertEquals("Rent", own.labelPlaceholder)
+    }
+
+    @Test
+    fun linked_coin_shows_its_address_label_like_the_coin_list() {
+        val origin = utxo("aa", 60_000, name = "Salary")
+        val rent = utxo("bb", 30_000).copy(addressLabel = "Rent")
+        val rows = listOf(origin, rent)
+        val root = origin.key
+        val keys = mapOf(origin.key to root, rent.key to root)
+        val control = buildCoinControlSnapshot(rows, CoinLinkage(keys, keys), emptySet(), null)
+        val graph =
+            CoinLinkGraph(
+                coins =
+                    rows.associate {
+                        it.key to CoinGraphCoin(it.key, it.txid, it.valueSats, "0014", it.isChange, spent = false)
+                    },
+                txs = emptyMap(),
+                neighbors =
+                    mapOf(
+                        LinkNode.Coin(origin.key) to
+                            listOf(CoinLinkEdge(LinkNode.Coin(rent.key), Relation.SameAddressAs, warning = true)),
+                        LinkNode.Coin(rent.key) to
+                            listOf(CoinLinkEdge(LinkNode.Coin(origin.key), Relation.SameAddressAs, warning = true)),
+                    ),
+            )
+        val snap = WalletTxsSnapshot(utxos = rows, coinLinkGraph = graph)
+        val model = buildCoinSheetModel(CoinSheetRequest(origin.key, snap, control, emptyMap(), 0, null, false))
+        assertNotNull(model)
+        assertEquals(
+            "Rent",
+            model.links
+                .single()
+                .steps
+                .last()
+                .title,
+        )
     }
 }
 
