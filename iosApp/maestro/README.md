@@ -1,7 +1,7 @@
 # iOS end-to-end tests (Maestro)
 
-CI job **E2E / ios-simulator** (`.github/workflows/e2e-ios.yml`) builds the Debug simulator app,
-boots an iPhone simulator, and runs `run-e2e.sh`, which runs every flow in `flows/` in one Maestro
+CI job **Build / e2e-ios-simulator** (`.github/workflows/build.yml`) reuses the Debug simulator app
+built by the `ios-simulator` job (artifact `ios-simulator`, a tarball of `Blueberry.app`), boots an iPhone simulator, and runs `run-e2e.sh`, which runs every flow in `flows/` in one Maestro
 session. Results are uploaded as the `e2e-ios` artifact:
 
 - `flows/<flow>/` – that flow's screenshots (`takeScreenshot/`), Maestro `commands.json`, logs, `check.log`
