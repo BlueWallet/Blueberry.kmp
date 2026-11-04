@@ -200,9 +200,60 @@ jobs:
       - name: Check simulator app
         run: test -d iosApp/build/DerivedData/Build/Products/Debug-iphonesimulator/Blueberry.app
 
+      # Tarred so the app keeps its executable bits; the e2e-ios-simulator job below reuses it.
+      - name: Package simulator app
+        run: tar -czf Blueberry-ios-simulator.tar.gz -C iosApp/build/DerivedData/Build/Products/Debug-iphonesimulator Blueberry.app
+
       - uses: actions/upload-artifact@v7
         with:
           name: ios-simulator
-          path: iosApp/build/DerivedData/Build/Products/Debug-iphonesimulator/Blueberry.app
+          path: Blueberry-ios-simulator.tar.gz
           if-no-files-found: error
+          retention-days: 14
+
+  e2e-ios-simulator:
+    name: e2e-ios-simulator
+    needs: ios
+    runs-on: macos-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: ios-simulator
+
+      - name: Unpack simulator app
+        run: |
+          mkdir -p app
+          tar -xzf Blueberry-ios-simulator.tar.gz -C app
+          test -x app/Blueberry.app/Blueberry
+
+      - name: Install Maestro (pinned, checksum verified)
+        env:
+          MAESTRO_VERSION: "2.12.1"
+          MAESTRO_SHA256: "54dbb0716425626604973cbb374c585ca30272375d9ce15177a1152765ddd9d7"
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/maestro.zip" \
+            "https://github.com/mobile-dev-inc/maestro/releases/download/cli-${MAESTRO_VERSION}/maestro.zip"
+          echo "${MAESTRO_SHA256}  $RUNNER_TEMP/maestro.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$HOME/.maestro-cli"
+          echo "$HOME/.maestro-cli/maestro/bin" >> "$GITHUB_PATH"
+
+      # Runs every flow in iosApp/maestro/flows (see iosApp/maestro/README.md). Test Tor flows use the
+      # live Tor network, no mocks.
+      - name: Run Maestro flows on an iPhone simulator
+        env:
+          MAESTRO_CLI_NO_ANALYTICS: "1"
+          MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: "true"
+        run: iosApp/maestro/run-e2e.sh app/Blueberry.app e2e-ios-out
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: e2e-ios
+          path: e2e-ios-out
+          if-no-files-found: warn
           retention-days: 14
