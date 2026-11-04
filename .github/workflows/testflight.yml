@@ -155,7 +155,9 @@ jobs:
 
   # Runs on Linux after a successful upload, so waiting for Apple to list the
   # build (5 to 30+ minutes) costs no macOS time and does not block the next
-  # upload. A failure only warns: the build is already on TestFlight.
+  # upload. The build is already on TestFlight either way. If Apple is just slow
+  # to list it, the job only warns; any other failure (key role, rejected notes)
+  # fails this job so it is noticed.
   testflight-notes:
     name: testflight-notes
     needs: ios
@@ -187,6 +189,11 @@ jobs:
           echo "::stop-commands::${STOP_TOKEN}"
           cat "$NOTES_FILE"
           echo "::${STOP_TOKEN}::"
-          if ! python3 .github/scripts/testflight_what_to_test.py; then
-            echo "::warning::Could not set TestFlight What to Test for build ${BUILD_NUMBER}; the upload itself succeeded."
+          rc=0
+          python3 .github/scripts/testflight_what_to_test.py || rc=$?
+          if [ "$rc" -eq 2 ]; then
+            echo "::warning::Build ${BUILD_NUMBER} was not listed by App Store Connect in time, so What to Test was not set. The upload itself succeeded."
+          elif [ "$rc" -ne 0 ]; then
+            echo "::error::Could not set TestFlight What to Test for build ${BUILD_NUMBER}. The upload itself succeeded."
+            exit "$rc"
           fi

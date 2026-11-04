@@ -13,12 +13,20 @@ other 4xx fail fast. The notes write is an upsert retried as a unit: each try
 re-reads the build's localizations, so a retry after an uncertain POST (or a
 409 because en-US appeared meanwhile) updates instead of duplicating.
 
+Notes are cleaned before upload: App Store Connect rejects emoji and "<" in
+whatsNew (fastlane pilot strips them too), so they are removed first.
+
+Exit codes: 0 notes set, 2 the build was not listed before the timeout (Apple
+can be slow, so CI only warns), 1 anything else (bad key or role, rejected
+notes, missing app: CI fails the job so it gets noticed).
+
 Env: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH, BUNDLE_ID, BUILD_NUMBER,
      NOTES_FILE, TIMEOUT_SECONDS (default 2700), POLL_SECONDS (default 30).
 """
 import base64
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -30,10 +38,29 @@ API = "https://api.appstoreconnect.apple.com"
 MAX_NOTES_BYTES = 4000  # Apple's limit for whatsNew, counted in UTF-8 bytes.
 
 
+class BuildNotListed(RuntimeError):
+    pass
+
+
 class ApiError(RuntimeError):
     def __init__(self, status, message):
         super().__init__(message)
         self.status = status
+
+
+def _is_emoji(ch):
+    cp = ord(ch)
+    return (cp >= 0x10000  # Emoji, flags, symbols outside the BMP.
+            or 0x2600 <= cp <= 0x27BF  # Misc symbols and dingbats.
+            or 0x2B00 <= cp <= 0x2BFF  # Arrows and stars such as the star emoji.
+            or cp in (0x200D, 0x20E3, 0xFE0E, 0xFE0F))  # Joiners and selectors.
+
+
+def sanitize(text):
+    """Removes what App Store Connect rejects in whatsNew: emoji and "<"."""
+    cleaned = "".join(ch for ch in text if ch != "<" and not _is_emoji(ch))
+    # Drop spaces left behind, e.g. "feat: \u2728 x" -> "feat: x".
+    return "\n".join(re.sub(r" {2,}", " ", line).rstrip() for line in cleaned.split("\n"))
 
 
 def truncate_utf8(text, limit=MAX_NOTES_BYTES):
@@ -147,7 +174,7 @@ def main():
     client = Client(env["ASC_KEY_ID"], env["ASC_ISSUER_ID"], env["ASC_KEY_PATH"])
     bundle_id, build_number = env["BUNDLE_ID"], env["BUILD_NUMBER"]
     with open(env["NOTES_FILE"], encoding="utf-8") as f:
-        notes = truncate_utf8(f.read().strip())
+        notes = truncate_utf8(sanitize(f.read()).strip())
     timeout = int(env.get("TIMEOUT_SECONDS", "2700"))
     poll = int(env.get("POLL_SECONDS", "30"))
 
@@ -174,7 +201,7 @@ def main():
         if builds:
             break
         if time.time() > deadline:
-            raise RuntimeError(f"build {build_number} not found after {timeout}s")
+            raise BuildNotListed(f"build {build_number} not listed after {timeout}s")
         print(f"Build {build_number} not visible yet, waiting {poll}s")
         time.sleep(poll)
     build = builds[0]
@@ -189,6 +216,9 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except BuildNotListed as e:
+        print(f"Setting What to Test timed out: {e}", file=sys.stderr)
+        sys.exit(2)
     except Exception as e:  # noqa: BLE001 - reported as a CI failure below
         print(f"Setting What to Test failed: {e}", file=sys.stderr)
         sys.exit(1)
