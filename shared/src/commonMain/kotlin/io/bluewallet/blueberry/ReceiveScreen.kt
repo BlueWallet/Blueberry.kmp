@@ -54,6 +54,7 @@ import io.bluewallet.blueberry.ui.BwFontFamily
 import io.bluewallet.blueberry.ui.BwSpace
 import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.OverlayBackEffects
+import io.bluewallet.blueberry.ui.QrPlaceholder
 import io.bluewallet.blueberry.ui.ScannableQr
 import io.bluewallet.blueberry.ui.ScreenHeader
 import io.bluewallet.blueberry.wallet.HD_SCRIPT_TYPES
@@ -68,9 +69,8 @@ import io.bluewallet.blueberry.wallet.saveReceiveScriptType
 import kotlin.math.max
 
 /** Placeholder drawn while the label sheet is up; deliberately not a bitcoin address. */
-private const val PLACEHOLDER_QR_DATA = "blueberry"
 private const val PLACEHOLDER_ADDRESS = "•••• •••• •••• •••• ••••"
-internal const val PLACEHOLDER_ALPHA = 0.15f
+private const val PLACEHOLDER_ALPHA = 0.15f
 
 fun currentReceiveAddress(
     runtime: PeersRuntime,
@@ -246,7 +246,7 @@ private fun ReceiveAddress(
 ) {
     var copied by remember(address) { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
-    ReceiveQrRow(nav, hidden = false) {
+    ReceiveQrRow(nav) {
         ScannableQr(
             data = address,
             contentDescription = "Receive address QR code",
@@ -300,16 +300,8 @@ private fun ReceiveAddress(
 @Composable
 private fun ColumnScope.ReceiveAddressPlaceholder(nav: ReceiveNav?) {
     // Shrinks below 200dp when little room is left (small screen, keyboard open).
-    ReceiveQrRow(nav, hidden = true, Modifier.weight(1f, fill = false)) {
-        ScannableQr(
-            data = PLACEHOLDER_QR_DATA,
-            contentDescription = "Receive address QR code placeholder",
-            modifier =
-                Modifier
-                    .sizeIn(maxWidth = 200.dp, maxHeight = 200.dp)
-                    .aspectRatio(1f)
-                    .alpha(PLACEHOLDER_ALPHA),
-        )
+    ReceiveQrRow(nav, Modifier.weight(1f, fill = false)) {
+        QrPlaceholder(Modifier.sizeIn(maxWidth = 200.dp, maxHeight = 200.dp).aspectRatio(1f))
     }
     Text(
         text = PLACEHOLDER_ADDRESS,
