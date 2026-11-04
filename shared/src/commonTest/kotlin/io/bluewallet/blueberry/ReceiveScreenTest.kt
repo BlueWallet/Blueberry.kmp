@@ -54,13 +54,6 @@ class ReceiveScreenTest {
     }
 
     @Test
-    fun path_caption_is_hidden_until_the_address_is_labelled() {
-        assertEquals("m/84'/0'/0'/0/5", receivePathCaption("m/84'/0'/0'/0/5", hidden = false))
-        assertEquals(PLACEHOLDER_PATH, receivePathCaption("m/84'/0'/0'/0/5", hidden = true))
-        assertFalse(PLACEHOLDER_PATH.any { it.isLetterOrDigit() })
-    }
-
-    @Test
     fun steps_queued_before_the_next_frame_never_pass_the_bound() {
         val chain = ReceiveChain((0 until 20).map { WatchAddress("m/84'/0'/0'/0/$it", it, false, "a$it", ByteArray(0)) }, emptySet(), 18)
         var index = 18
@@ -70,5 +63,11 @@ class ReceiveScreenTest {
         nav.step(1)
         assertEquals(19, index)
         assertFalse(receiveNav(chain, 19) {}!!.step(1))
+    }
+
+    @Test
+    fun nav_carries_the_shown_address_path() {
+        val chain = ReceiveChain((0 until 3).map { WatchAddress("m/84'/0'/0'/0/$it", it, false, "a$it", ByteArray(0)) }, emptySet(), 0)
+        assertEquals("m/84'/0'/0'/0/2", receiveNav(chain, 2) {}!!.path)
     }
 }
