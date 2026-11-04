@@ -81,6 +81,7 @@ internal class TxFacts(
     val sends: Map<String, SendPack>,
     val broadcast: Map<String, String>,
     val stored: Map<String, StoredTx>,
+    val feeRateSatPerVb: Double?,
 )
 
 private fun txFacts(query: TxQuery): TxFacts {
@@ -115,6 +116,7 @@ private fun txFacts(query: TxQuery): TxFacts {
         sends = sends + privateSends,
         broadcast = db.broadcastVia.list().associate { it.txid to it.via },
         stored = stored,
+        feeRateSatPerVb = loadSendFeeRate(db),
     )
 }
 
@@ -244,15 +246,11 @@ internal fun whenEpoch(row: WalletTxRow): Long? =
 
 internal fun civilOf(epochS: Long): TxCivilTime? = txCivilFromYmdHm(formatLocalYmdHm(epochS))
 
+/** Only a recorded path counts. Sends from before the record existed, or from another device, say nothing. */
 private fun broadcastOf(
     row: WalletTxRow,
     facts: TxFacts,
-): TxBroadcast =
-    when (facts.broadcast[row.txid]) {
-        BROADCAST_VIA_TOR -> TxBroadcast.Tor
-        BROADCAST_VIA_DIRECT -> TxBroadcast.Direct
-        else -> if (row.ownSend) TxBroadcast.Tor else TxBroadcast.Unknown
-    }
+): TxBroadcast = if (facts.broadcast[row.txid] == BROADCAST_VIA_TOR) TxBroadcast.Tor else TxBroadcast.Unknown
 
 private fun displayBlock(
     row: WalletTxRow,

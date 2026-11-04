@@ -14,7 +14,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -110,7 +109,7 @@ private fun TxStatusHeading(status: TxStatus) {
     val blueFg = txStatusBlueFg()
     val blueBg = txStatusBlueBg()
     val iconFg = if (status.failed) TxAmber else blueFg
-    val iconBg = if (status.failed) Color(0xFF3A2C17) else blueBg
+    val iconBg = if (status.failed) txStatusAmberBg() else blueBg
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(Modifier.size(34.dp).clip(CircleShape).background(iconBg), contentAlignment = Alignment.Center) {
             Text(if (pending || status.failed) "◷" else "✓", color = iconFg, fontSize = 16.sp)

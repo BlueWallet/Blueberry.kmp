@@ -61,7 +61,10 @@ internal val TxAmber = Color(0xFFE0A24A)
 internal val TxGlyphMuted = Color(0xFF6E757C)
 internal val TxMoved = Color(0xFF8E959C)
 internal val TxFrozen = Color(0xFF9CC8F0)
-internal val TxFailedTitle = Color(0xFFC9CED3)
+
+/** Title of a failed or replaced row: dimmer than ink, still readable on both papers. */
+@Composable
+internal fun txFailedTitle(): Color = if (LocalDarkPalette.current) Color(0xFFC9CED3) else BwColors.InkSecondary
 
 @Composable
 internal fun txAmountTone(
@@ -222,6 +225,9 @@ internal fun txStatusBlueFg(): Color = if (LocalDarkPalette.current) Color(0xFF9
 internal fun txStatusBlueBg(): Color = if (LocalDarkPalette.current) Color(0xFF1C2D3D) else Color(0xFFD6E8FA)
 
 @Composable
+internal fun txStatusAmberBg(): Color = if (LocalDarkPalette.current) Color(0xFF3A2C17) else Color(0xFFFBEBD2)
+
+@Composable
 private fun StripCell(
     cell: TxStripCell,
     radius: Dp,
@@ -372,6 +378,10 @@ internal fun txRaisedCard(): Color = if (io.bluewallet.blueberry.ui.LocalDarkPal
 /** A fill that sits on a card: darker in dark mode, a gray field in light mode. */
 @Composable
 internal fun txInsetFill(): Color = if (io.bluewallet.blueberry.ui.LocalDarkPalette.current) Color(0xFF121416) else BwColors.InputFill
+
+/** Outline of a field drawn on [txInsetFill]. */
+@Composable
+internal fun txInsetBorder(): Color = if (io.bluewallet.blueberry.ui.LocalDarkPalette.current) Color(0xFF3A3F44) else BwColors.Border
 
 @Composable
 internal fun txListCard(): Color = if (io.bluewallet.blueberry.ui.LocalDarkPalette.current) Color(0xFF1B1E21) else BwColors.Card

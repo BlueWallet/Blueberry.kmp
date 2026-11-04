@@ -181,7 +181,7 @@ private fun TxLabelField(
                 .height(50.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(txInsetFill())
-                .border(1.dp, Color(0xFF3A3F44), RoundedCornerShape(16.dp))
+                .border(1.dp, txInsetBorder(), RoundedCornerShape(16.dp))
                 .padding(horizontal = 14.dp, vertical = 14.dp),
         decorationBox = { inner ->
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {

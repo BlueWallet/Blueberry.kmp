@@ -15,7 +15,8 @@ internal fun displayOutputs(
     var gaveDestination = false
     return tx.txOut.mapIndexed { vout, output ->
         val key = outpointKey(row.txid, vout)
-        val script = scriptHex(output.publicKeyScript.toByteArray())
+        val scriptBytes = output.publicKeyScript.toByteArray()
+        val script = scriptHex(scriptBytes)
         val watch = facts.watchByScript[script]
         val held = facts.utxos[key]
         val graphCoin = facts.graph.coins[key]
@@ -44,6 +45,7 @@ internal fun displayOutputs(
             spentLabel = spender?.let { facts.labels[it.txid] },
             groupName = group?.first,
             groupSize = group?.second ?: 1,
+            spendCostSat = spendCostSat(scriptBytes, facts.feeRateSatPerVb),
         )
     }
 }

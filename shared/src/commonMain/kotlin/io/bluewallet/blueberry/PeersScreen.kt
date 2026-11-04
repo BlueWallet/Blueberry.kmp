@@ -204,21 +204,7 @@ fun PeersScreen(
                 val dockVisible = showDock && !detailedSync
                 val broadcastRows =
                     broadcastListRows(LocalBroadcastSessions.current, walletTxs.txs.map { it.txid }.toSet())
-                val homeWallet = LocalHomeWallet.current
-                val txSections =
-                    remember(walletTxs, headers.height, homeWallet) {
-                        txHomeSections(
-                            TxQuery(
-                                db = db,
-                                wallet = homeWallet,
-                                snap = walletTxs,
-                                tipHeight = db.headers.tip()?.height,
-                                nowEpochS =
-                                    io.bluewallet.blueberry.headers
-                                        .nowMillis() / 1000,
-                            ),
-                        )
-                    }
+                val txSections = rememberHomeTxSections(db, LocalHomeWallet.current, walletTxs, headers.height)
                 val openBroadcast = LocalOpenBroadcast.current
                 LazyColumn(
                     modifier =

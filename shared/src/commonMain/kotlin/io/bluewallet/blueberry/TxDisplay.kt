@@ -49,7 +49,6 @@ internal fun txDetail(input: TxDisplayInput): TxDetail {
 private fun txViewDirection(input: TxDisplayInput): String =
     when (input.outcome) {
         TxOutcome.Replaced -> "Replaced"
-        TxOutcome.Dropped -> "Dropped"
         TxOutcome.None ->
             when (input.direction) {
                 TxDirection.In -> "Received"
@@ -164,7 +163,6 @@ private fun listSubtitle(
     date: String,
 ): TxListSubtitle {
     if (input.outcome == TxOutcome.Replaced) return TxListSubtitle.Status("Replaced")
-    if (input.outcome == TxOutcome.Dropped) return TxListSubtitle.Status("Dropped")
     if (pending) return TxListSubtitle.Strip(pending = true, confirmations = 0, label = "Pending")
     val conf = confirmationCount(input)
     if (conf != null && conf in 1 until TX_LIST_STRIP) {

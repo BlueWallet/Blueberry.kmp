@@ -12,9 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
+/** Every broadcast goes over Tor (bridge or direct relay), so this is the only path recorded. */
 const val BROADCAST_VIA_TOR = "tor"
-
-const val BROADCAST_VIA_DIRECT = "direct"
 
 fun shouldPersistSend(
     phase: String?,

@@ -15,7 +15,7 @@ internal fun txStatus(input: TxDisplayInput): TxStatus {
 
 private fun txFailedStatus(input: TxDisplayInput): TxStatus? {
     if (input.outcome == TxOutcome.None) return null
-    val title = if (input.outcome == TxOutcome.Replaced) "Replaced" else "Dropped"
+    val title = "Replaced"
     return TxStatus(
         title = title,
         sub = "This transaction will not confirm.",

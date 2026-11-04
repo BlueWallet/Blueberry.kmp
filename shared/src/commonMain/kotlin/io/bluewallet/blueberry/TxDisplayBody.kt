@@ -218,11 +218,5 @@ private fun broadcastReveal(input: TxDisplayInput): TxReveal? =
                 "Broadcast over Tor",
                 "Peers saw it arrive from the Tor network, not from your IP address.",
             )
-        TxBroadcast.Direct ->
-            TxReveal(
-                TxTone.Neutral,
-                "Broadcast directly",
-                "Peers saw it come from your IP address. Turn on Tor broadcast in settings to hide it.",
-            )
         TxBroadcast.Unknown -> null
     }

@@ -92,7 +92,7 @@ private fun TxBroadcastRow(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     text = row.title,
-                    color = if (failed) TxFailedTitle else BwColors.Ink,
+                    color = if (failed) txFailedTitle() else BwColors.Ink,
                     fontFamily = BwFontFamily,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -138,7 +138,7 @@ private fun TxDayRow(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     text = row.title,
-                    color = if (row.titleMuted) TxFailedTitle else BwColors.Ink,
+                    color = if (row.titleMuted) txFailedTitle() else BwColors.Ink,
                     fontFamily = BwFontFamily,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,

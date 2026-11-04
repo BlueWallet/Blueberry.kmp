@@ -11,9 +11,9 @@ data class TxCivilTime(
 
 enum class TxDirection { In, Out, Moved }
 
-enum class TxOutcome { None, Replaced, Dropped }
+enum class TxOutcome { None, Replaced }
 
-enum class TxBroadcast { Tor, Direct, Unknown }
+enum class TxBroadcast { Tor, Unknown }
 
 enum class TxTone { Green, Blue, Amber, Neutral }
 
@@ -49,7 +49,7 @@ data class TxDisplayOutput(
     val spentLabel: String? = null,
     val groupName: String? = null,
     val groupSize: Int = 1,
-    /** Cost to spend this output, when a fee rate is known. Dust uses it. */
+    /** Cost to spend this output at the saved send fee rate; unset before one is saved. Dust uses it. */
     val spendCostSat: Long? = null,
 )
 
