@@ -18,6 +18,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Test TestFlight notes scripts
         run: python3 -B -W error::ResourceWarning .github/scripts/test_testflight_scripts.py

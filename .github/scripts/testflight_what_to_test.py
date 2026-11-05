@@ -48,24 +48,39 @@ class ApiError(RuntimeError):
         self.status = status
 
 
-# Code points shown as emoji on their own, inside otherwise ordinary BMP blocks
-# (the Unicode Emoji=Yes list, minus the digits, "#", "*", and plain (c) (R) TM,
-# which are normal text; they go only when followed by U+FE0F, see sanitize).
-_BMP_EMOJI = frozenset([
-    0x203C, 0x2049, 0x2139, *range(0x2194, 0x219A), 0x21A9, 0x21AA,
-    0x24C2, 0x25AA, 0x25AB, 0x25B6, 0x25C0, *range(0x25FB, 0x25FF),
-    0x2934, 0x2935, 0x3030, 0x303D, 0x3297, 0x3299,
-    0x200D, 0x20E3, 0xFE0E, 0xFE0F,  # Joiner, keycap and variation selectors.
-])
+# BMP code points with the Unicode Emoji property (emoji-data.txt, Unicode 16),
+# minus "#", "*", the digits and (c) (R) TM, which are normal text; those go only
+# when written in emoji style, followed by U+FE0F (see sanitize). Ordinary
+# symbols such as the command key or a ballot box are kept.
+_BMP_EMOJI_RANGES = (
+    "203C 2049 2139 2194-2199 21A9-21AA 231A-231B 2328 23CF 23E9-23F3 23F8-23FA "
+    "24C2 25AA-25AB 25B6 25C0 25FB-25FE 2600-2604 260E 2611 2614-2615 2618 261D "
+    "2620 2622-2623 2626 262A 262E-262F 2638-263A 2640 2642 2648-2653 265F-2660 "
+    "2663 2665-2666 2668 267B 267E-267F 2692-2697 2699 269B-269C 26A0-26A1 26A7 "
+    "26AA-26AB 26B0-26B1 26BD-26BE 26C4-26C5 26C8 26CE-26CF 26D1 26D3-26D4 "
+    "26E9-26EA 26F0-26F5 26F7-26FA 26FD 2702 2705 2708-270D 270F 2712 2714 2716 "
+    "271D 2721 2728 2733-2734 2744 2747 274C 274E 2753-2755 2757 2763-2764 "
+    "2795-2797 27A1 27B0 27BF 2934-2935 2B05-2B07 2B1B-2B1C 2B50 2B55 3030 303D "
+    "3297 3299 "
+    "200D 20E3 FE0E FE0F"  # Joiner, keycap and variation selectors.
+)
+
+
+def _parse_ranges(spec):
+    out = set()
+    for part in spec.split():
+        lo, _, hi = part.partition("-")
+        out.update(range(int(lo, 16), int(hi or lo, 16) + 1))
+    return frozenset(out)
+
+
+_BMP_EMOJI = _parse_ranges(_BMP_EMOJI_RANGES)
 
 
 def _is_emoji(ch):
     cp = ord(ch)
     return (0x1F000 <= cp <= 0x1FAFF  # Emoji, flags, skin tones, emoji symbols.
             or 0xE0020 <= cp <= 0xE007F  # Tag characters of subdivision flags.
-            or 0x2300 <= cp <= 0x23FF  # Technical symbols such as the stopwatch.
-            or 0x2600 <= cp <= 0x27BF  # Misc symbols and dingbats.
-            or 0x2B00 <= cp <= 0x2BFF  # Arrows and stars such as the star emoji.
             or cp in _BMP_EMOJI)
 
 

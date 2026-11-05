@@ -224,6 +224,9 @@ class PureFunctions(Base):
             "\u00a9 \u00ae \u2122 plain": "\u00a9 \u00ae \u2122 plain",
             "emoji \u00a9\uFE0F": "emoji",
             "rare \U00020BB7 \U0001D400 kept": "rare \U00020BB7 \U0001D400 kept",
+            "Fix \u2318+K, \u2610 todo, \u2192 next, \u2605 \u2713 \u2022 \u2014 \u00b0":
+                "Fix \u2318+K, \u2610 todo, \u2192 next, \u2605 \u2713 \u2022 \u2014 \u00b0",
+            "- \u231A \u2614 \u26A1 \u2705 \u274C \u2B50 \u2B55 \u27BF ok": "- ok",
         }
         for given, want in cases.items():
             self.assertEqual(wtt.sanitize(given), want, given)

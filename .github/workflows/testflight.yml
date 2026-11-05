@@ -168,6 +168,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          # Only git log runs here; nothing needs the token afterwards.
+          persist-credentials: false
 
       - name: Set TestFlight What to Test
         env:
@@ -183,12 +185,19 @@ jobs:
           chmod 600 "$ASC_KEY_PATH"
           unset APP_STORE_CONNECT_API_KEY
           export NOTES_FILE="${RUNNER_TEMP}/what-to-test.txt"
-          .github/scripts/testflight_notes.sh "$BEFORE_SHA" "$GITHUB_SHA" > "$NOTES_FILE" \
-            || echo "Build commit ${GITHUB_SHA::7}" > "$NOTES_FILE"
-          # Commit subjects, and API errors that may echo them, must not be
+          NOTES_ERR="${RUNNER_TEMP}/what-to-test.err"
+          notes_rc=0
+          .github/scripts/testflight_notes.sh "$BEFORE_SHA" "$GITHUB_SHA" \
+            > "$NOTES_FILE" 2> "$NOTES_ERR" || notes_rc=$?
+          if [ "$notes_rc" -ne 0 ]; then
+            echo "::warning::testflight_notes.sh failed (exit ${notes_rc}), so What to Test lists only the commit sha. Its error is printed below."
+            echo "Build commit ${GITHUB_SHA::7}" > "$NOTES_FILE"
+          fi
+          # Commit subjects, and errors that may echo them, must not be
           # parsed as workflow commands.
           STOP_TOKEN="$(openssl rand -hex 16)"
           echo "::stop-commands::${STOP_TOKEN}"
+          cat "$NOTES_ERR"
           cat "$NOTES_FILE"
           rc=0
           python3 .github/scripts/testflight_what_to_test.py || rc=$?
