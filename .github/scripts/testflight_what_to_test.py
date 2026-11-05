@@ -48,13 +48,25 @@ class ApiError(RuntimeError):
         self.status = status
 
 
+# Code points shown as emoji on their own, inside otherwise ordinary BMP blocks
+# (the Unicode Emoji=Yes list, minus the digits, "#", "*", and plain (c) (R) TM,
+# which are normal text; they go only when followed by U+FE0F, see sanitize).
+_BMP_EMOJI = frozenset([
+    0x203C, 0x2049, 0x2139, *range(0x2194, 0x219A), 0x21A9, 0x21AA,
+    0x24C2, 0x25AA, 0x25AB, 0x25B6, 0x25C0, *range(0x25FB, 0x25FF),
+    0x2934, 0x2935, 0x3030, 0x303D, 0x3297, 0x3299,
+    0x200D, 0x20E3, 0xFE0E, 0xFE0F,  # Joiner, keycap and variation selectors.
+])
+
+
 def _is_emoji(ch):
     cp = ord(ch)
-    return (cp >= 0x10000  # Emoji, flags, symbols outside the BMP.
+    return (0x1F000 <= cp <= 0x1FAFF  # Emoji, flags, skin tones, emoji symbols.
+            or 0xE0020 <= cp <= 0xE007F  # Tag characters of subdivision flags.
             or 0x2300 <= cp <= 0x23FF  # Technical symbols such as the stopwatch.
             or 0x2600 <= cp <= 0x27BF  # Misc symbols and dingbats.
             or 0x2B00 <= cp <= 0x2BFF  # Arrows and stars such as the star emoji.
-            or cp in (0x200D, 0x20E3, 0xFE0E, 0xFE0F))  # Joiners and selectors.
+            or cp in _BMP_EMOJI)
 
 
 def sanitize(text):
@@ -177,7 +189,10 @@ class Client:
 def main():
     env = os.environ
     client = Client(env["ASC_KEY_ID"], env["ASC_ISSUER_ID"], env["ASC_KEY_PATH"])
-    bundle_id, build_number = env["BUNDLE_ID"], env["BUILD_NUMBER"]
+    bundle_id, build_number = env["BUNDLE_ID"].strip(), env["BUILD_NUMBER"].strip()
+    # An empty value would drop the filter and could match some other build.
+    if not bundle_id or not build_number:
+        raise RuntimeError("BUNDLE_ID and BUILD_NUMBER must not be empty")
     with open(env["NOTES_FILE"], encoding="utf-8") as f:
         notes = truncate_utf8(sanitize(f.read()).strip())
     timeout = int(env.get("TIMEOUT_SECONDS", "2700"))
@@ -215,6 +230,10 @@ def main():
         print(f"Build {build_number} not visible yet, waiting {poll}s")
         time.sleep(poll)
     build = builds[0]
+    # Never write notes to a build other than the one just uploaded.
+    if build["attributes"].get("version") != build_number:
+        raise RuntimeError(f"lookup for build {build_number} returned build "
+                           f"{build['attributes'].get('version')!r}, not writing notes")
     print(f"Build id {build['id']}, state {build['attributes'].get('processingState')}")
 
     # A 409 means en-US already exists: the next try re-reads it and PATCHes.

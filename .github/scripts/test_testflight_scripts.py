@@ -14,6 +14,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -54,7 +55,9 @@ class FakeAsc:
     def reset(self, **kw):
         self.log, self.writes, self.locs = [], [], []
         self.app_fail, self.post_fail, self.builds_fail = [], [], []
-        self.builds = [{"id": "B1", "attributes": {"processingState": "PROCESSING"}}]
+        self.builds = [{"id": "B1", "attributes": {"version": "202611040900",
+                                                   "processingState": "PROCESSING"}}]
+        self.queries = {}  # Path -> list of parsed query dicts, one per request.
         for k, v in kw.items():
             setattr(self, k, v)
 
@@ -73,8 +76,9 @@ class FakeAsc:
                 self.wfile.write(b)
 
             def handle_any(self, m):
-                p = self.path.split("?")[0]
+                p, _, q = self.path.partition("?")
                 fake.log.append(f"{m} {p}")
+                fake.queries.setdefault(p, []).append(dict(urllib.parse.parse_qsl(q)))
                 n = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(n)) if n else None
                 if not self.headers.get("Authorization", "").startswith("Bearer "):
@@ -215,6 +219,11 @@ class PureFunctions(Base):
             "time \u23F1\uFE0F": "time",
             "key 1\uFE0F\u20E3 x": "key x",
             "\u65e5\u672c caf\u00e9 #1 v2.0": "\u65e5\u672c caf\u00e9 #1 v2.0",
+            "- \u203C \u2049 \u2139 \u2194 \u25AA \u3030 \u3299 ok": "- ok",
+            "flag \U0001F1EF\U0001F1F5 \U0001F3F4\U000E0067\U000E0062\U000E007F x": "flag x",
+            "\u00a9 \u00ae \u2122 plain": "\u00a9 \u00ae \u2122 plain",
+            "emoji \u00a9\uFE0F": "emoji",
+            "rare \U00020BB7 \U0001D400 kept": "rare \U00020BB7 \U0001D400 kept",
         }
         for given, want in cases.items():
             self.assertEqual(wtt.sanitize(given), want, given)
@@ -249,6 +258,29 @@ class ApiFlow(Base):
         self.fake.reset()
         self.run_main(self.env(notes="Build commit abc1234\n\n- feat: \U0001F680 a < b\n"))
         self.assertEqual(self.fake.writes, [("POST", "Build commit abc1234\n\n- feat: a b")])
+
+    def test_build_lookup_filters(self):
+        self.fake.reset(builds_fail=[503])  # One retried poll, then success.
+        self.run_main(self.env())
+        want = {"filter[app]": "A1", "filter[version]": "202611040900",
+                "filter[processingState]": "PROCESSING,FAILED,INVALID,VALID", "limit": "1"}
+        self.assertEqual(self.fake.queries["/v1/builds"], [want, want])
+        self.assertEqual(self.fake.queries["/v1/apps"], [{"filter[bundleId]": BUNDLE}])
+
+    def test_empty_build_number_or_bundle_writes_nothing(self):
+        for key in ("BUILD_NUMBER", "BUNDLE_ID"):
+            self.fake.reset()
+            env = self.env()
+            env[key] = " "
+            with self.assertRaises(RuntimeError, msg=key):
+                self.run_main(env)
+            self.assertEqual(self.fake.log, [], key)
+
+    def test_other_build_returned_writes_nothing(self):
+        self.fake.reset(builds=[{"id": "B1", "attributes": {"version": "202611010000"}}])
+        with self.assertRaises(RuntimeError):
+            self.run_main(self.env())
+        self.assertEqual(self.fake.writes, [])
 
     def test_exit_codes(self):
         self.fake.reset(builds=[])
