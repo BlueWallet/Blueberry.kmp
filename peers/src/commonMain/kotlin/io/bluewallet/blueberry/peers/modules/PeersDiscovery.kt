@@ -10,6 +10,7 @@ import io.bluewallet.blueberry.bus.PeersSocketsPayload
 import io.bluewallet.blueberry.bus.PeersUpdatedPayload
 import io.bluewallet.blueberry.peers.Config
 import io.bluewallet.blueberry.peers.currentTimeMillis
+import io.bluewallet.blueberry.peers.loadBlocksPerPeer
 import io.bluewallet.blueberry.peers.log
 import io.bluewallet.blueberry.peers.logError
 import io.bluewallet.blueberry.peers.net.MAINNET_DNS_SEEDS
@@ -142,7 +143,7 @@ fun createPeersDiscoveryModule(
             .listAliveWithServices(
                 NODE_NETWORK,
                 minAliveBlockPeers,
-                AliveServiceOptions(maxBlocksServed = Config.maxBlocksPerPeer),
+                AliveServiceOptions(maxBlocksServed = loadBlocksPerPeer(ctx.db)),
             ).size
 
     fun needsBlockPeers(): Boolean = pendingBlockDownloads() && unusedAliveNetworkCount() < minAliveBlockPeers
@@ -153,7 +154,7 @@ fun createPeersDiscoveryModule(
                 .listUnprobedWithServicesUnused(
                     NODE_NETWORK,
                     minAliveBlockPeers,
-                    Config.maxBlocksPerPeer,
+                    loadBlocksPerPeer(ctx.db),
                 ).size <
             minAliveBlockPeers
 
@@ -307,7 +308,7 @@ fun createPeersDiscoveryModule(
                 ctx.db.peers.listUnprobedWithServicesUnused(
                     NODE_NETWORK,
                     window,
-                    Config.maxBlocksPerPeer,
+                    loadBlocksPerPeer(ctx.db),
                 )
             val neverProbed =
                 ctx.db.peers
@@ -327,7 +328,7 @@ fun createPeersDiscoveryModule(
                 ctx.db.peers.listUnprobedWithServicesUnused(
                     NODE_NETWORK,
                     halfOrAll() + concurrency + 32,
-                    Config.maxBlocksPerPeer,
+                    loadBlocksPerPeer(ctx.db),
                 )
             if (freshNetwork.isNotEmpty()) {
                 take(freshNetwork, (picked.size + halfOrAll()).coerceAtMost(limit))
@@ -349,7 +350,7 @@ fun createPeersDiscoveryModule(
                     .listOldestDeadWithServices(
                         NODE_NETWORK,
                         retryMax + concurrency + 32,
-                        Config.maxBlocksPerPeer,
+                        loadBlocksPerPeer(ctx.db),
                     ).filter { due(it) },
                 (picked.size + retryMax).coerceAtMost(limit),
             )
@@ -366,7 +367,7 @@ fun createPeersDiscoveryModule(
                 ctx.db.peers.listUnprobedWithServicesUnused(
                     NODE_NETWORK,
                     nnMax + concurrency + 32,
-                    Config.maxBlocksPerPeer,
+                    loadBlocksPerPeer(ctx.db),
                 ),
                 (picked.size + nnMax).coerceAtMost(limit),
             )

@@ -20,13 +20,16 @@ import io.bluewallet.blueberry.peers.net.BlockSessionApi
 import io.bluewallet.blueberry.peers.net.BlockSyncOptions
 import io.bluewallet.blueberry.peers.net.DnsResolver
 import io.bluewallet.blueberry.peers.net.PlatformNet
+import io.bluewallet.blueberry.peers.saveBlocksPerPeer
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.MatchedBlock
 import io.bluewallet.blueberry.storage.PeerWrite
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -126,6 +129,71 @@ private fun makeOpenSession(
             }
         BlockBatchResult.Ok(session)
     }
+
+private fun peerBlocksServed(
+    db: Database,
+    host: String,
+): Int =
+    db.peers
+        .list()
+        .single { it.host == host }
+        .blocksServed
+
+class BlocksPerPeerLimitTest {
+    @Test
+    fun block_limit_changes_apply_to_the_running_module() =
+        runBlocking {
+            val db = createSqliteDatabase(":memory:")
+            val bus = createMessageBus()
+            val blocks = List(4) { makeVariantBlock(it.toUInt()) }
+            val fixtures = blocks.associateBy { internalHashHex(it) }
+            seedPeer(db, "1.1.1.1")
+            val limits = Channel<String>(Channel.UNLIMITED)
+            val stalled = CompletableDeferred<Unit>()
+            val mod =
+                createBlocksDownloadModule(
+                    ModuleContext(bus, db),
+                    BlocksDownloadOptions(
+                        net = stubPlatformNet(),
+                        openSession = makeOpenSession(fixtures),
+                        concurrency = 1,
+                        idleDelayMs = 10,
+                        log = { message ->
+                            if (message.startsWith("peer block limit=")) limits.trySend(message)
+                            if (message.startsWith("queue stalled pending=1")) stalled.complete(Unit)
+                        },
+                    ),
+                )
+            try {
+                db.matchedBlocks.insert(MatchedBlock(0, internalHashHex(blocks[0])))
+                mod.start()
+                waitFor { peerBlocksServed(db, "1.1.1.1") == 1 }
+                assertTrue(withTimeout(3_000) { limits.receive() }.startsWith("peer block limit=1 "))
+                saveBlocksPerPeer(db, 3)
+                assertTrue(withTimeout(3_000) { limits.receive() }.startsWith("peer block limit=3 "))
+                db.matchedBlocks.insert(MatchedBlock(1, internalHashHex(blocks[1])))
+                db.matchedBlocks.insert(MatchedBlock(2, internalHashHex(blocks[2])))
+                bus.emit(Event.FiltersMatch, FiltersMatchPayload(2, internalHashHex(blocks[2])))
+                waitFor { peerBlocksServed(db, "1.1.1.1") == 3 }
+                // This peer would be eligible at 3, but not at 1.
+                seedPeer(db, "2.2.2.2")
+                db.peers.markUsedForBlocks("2.2.2.2", 8333)
+                saveBlocksPerPeer(db, 1)
+                assertTrue(withTimeout(3_000) { limits.receive() }.startsWith("peer block limit=1 "))
+                db.matchedBlocks.insert(MatchedBlock(3, internalHashHex(blocks[3])))
+                bus.emit(Event.FiltersMatch, FiltersMatchPayload(3, internalHashHex(blocks[3])))
+                withTimeout(3_000) { stalled.await() }
+                assertEquals(3, db.blocks.count())
+                seedPeer(db, "3.3.3.3")
+                bus.emit(Event.PeersUpdated, PeersUpdatedPayload(at = nowMillis()))
+                waitFor { db.blocks.count() == 4 }
+                assertEquals(1, peerBlocksServed(db, "3.3.3.3"))
+            } finally {
+                mod.stop()
+                db.close()
+            }
+        }
+}
 
 class BlocksDownloadTest {
     @Test

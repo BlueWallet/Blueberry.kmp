@@ -135,6 +135,7 @@ fun SettingsScreen(
                         launchTorDirectRelay(on, warmUpAfter = torWarmUp)
                     },
                 )
+                BlocksPerPeerCard(db)
                 SecretCard(secret = secret, onShow = onOpenSecret)
                 StorageCard(databaseSize = databaseSize, onClear = { confirmClear = true })
                 ClickMeContent()

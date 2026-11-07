@@ -18,7 +18,7 @@ class ConfigTest {
         assertEquals(15_000L, Config.blockConnectTimeoutMs)
         assertEquals(30_000L, Config.blockSyncTimeoutMs)
         assertEquals(30, Config.blockConcurrency)
-        assertEquals(1, Config.maxBlocksPerPeer)
+        assertEquals(1, DEFAULT_BLOCKS_PER_PEER)
         assertEquals(8_000L, Config.peerAddrTimeoutMs)
     }
 
