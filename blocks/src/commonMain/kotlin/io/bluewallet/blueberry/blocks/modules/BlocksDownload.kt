@@ -12,6 +12,7 @@ import io.bluewallet.blueberry.bus.PeersSocketsPayload
 import io.bluewallet.blueberry.headers.internalHexToDisplayHex
 import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.peers.Config
+import io.bluewallet.blueberry.peers.loadBlocksPerPeer
 import io.bluewallet.blueberry.peers.log
 import io.bluewallet.blueberry.peers.modules.Module
 import io.bluewallet.blueberry.peers.modules.ModuleContext
@@ -166,7 +167,7 @@ fun createBlocksDownloadModule(
         for (key in stale) peerCoolUntil.remove(key)
     }
 
-    suspend fun leasePeer(): PeerRef? =
+    suspend fun leasePeer(maxBlocksPerPeer: Int): PeerRef? =
         lock.withLock {
             pruneCooldownsLocked()
             val candidates =
@@ -174,7 +175,7 @@ fun createBlocksDownloadModule(
                     .listAliveWithServices(
                         NODE_NETWORK,
                         512,
-                        AliveServiceOptions(maxBlocksServed = Config.maxBlocksPerPeer),
+                        AliveServiceOptions(maxBlocksServed = maxBlocksPerPeer),
                     ).filter { p ->
                         val key = peerKey(PeerRef(p.host, p.port))
                         !leasedPeers.contains(key) && !peerCoolUntil.containsKey(key)
@@ -330,7 +331,13 @@ fun createBlocksDownloadModule(
     suspend fun loop() {
         options.onDownloadRun?.invoke()
         emitProgress(true)
+        var lastBlockLimit = 0
         while (!isStopped()) {
+            val maxBlocksPerPeer = loadBlocksPerPeer(ctx.db)
+            if (maxBlocksPerPeer != lastBlockLimit) {
+                diagnosticLog("peer block limit=$maxBlocksPerPeer (new leases; in-flight downloads finish)")
+                lastBlockLimit = maxBlocksPerPeer
+            }
             val flying = inFlightHeights()
             val pending =
                 ctx.db.matchedBlocks
@@ -347,7 +354,7 @@ fun createBlocksDownloadModule(
             for (job in pending) {
                 if (isStopped()) break
                 if (inFlightSize() >= concurrency) break
-                val peer = leasePeer()
+                val peer = leasePeer(maxBlocksPerPeer)
                 if (peer == null) {
                     starved = true
                     break

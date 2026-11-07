@@ -22,4 +22,4 @@ fun logError(
     err.printStackTrace()
 }
 
-private fun logged(scope: String): Boolean = scope == "broadcast" || scope == "tor"
+private fun logged(scope: String): Boolean = scope == "broadcast" || scope == "tor" || scope == "blocks-download"
