@@ -149,7 +149,7 @@ class BlocksPerPeerLimitTest {
             val fixtures = blocks.associateBy { internalHashHex(it) }
             seedPeer(db, "1.1.1.1")
             val limits = Channel<String>(Channel.UNLIMITED)
-            val stalled = CompletableDeferred<Unit>()
+            val stalled = Channel<Unit>(Channel.UNLIMITED)
             val mod =
                 createBlocksDownloadModule(
                     ModuleContext(bus, db),
@@ -160,7 +160,7 @@ class BlocksPerPeerLimitTest {
                         idleDelayMs = 10,
                         log = { message ->
                             if (message.startsWith("peer block limit=")) limits.trySend(message)
-                            if (message.startsWith("queue stalled pending=1")) stalled.complete(Unit)
+                            if (message.startsWith("queue stalled pending=1")) stalled.trySend(Unit)
                         },
                     ),
                 )
@@ -169,11 +169,14 @@ class BlocksPerPeerLimitTest {
                 mod.start()
                 waitFor { peerBlocksServed(db, "1.1.1.1") == 1 }
                 assertTrue(withTimeout(3_000) { limits.receive() }.startsWith("peer block limit=1 "))
+                db.matchedBlocks.insert(MatchedBlock(1, internalHashHex(blocks[1])))
+                withTimeout(3_000) { stalled.receive() }
+                assertEquals(1, db.blocks.count())
+                // Raising the limit alone must unstick the exhausted queue: no bus kick or restart.
                 saveBlocksPerPeer(db, 3)
                 assertTrue(withTimeout(3_000) { limits.receive() }.startsWith("peer block limit=3 "))
-                db.matchedBlocks.insert(MatchedBlock(1, internalHashHex(blocks[1])))
+                waitFor { peerBlocksServed(db, "1.1.1.1") == 2 }
                 db.matchedBlocks.insert(MatchedBlock(2, internalHashHex(blocks[2])))
-                bus.emit(Event.FiltersMatch, FiltersMatchPayload(2, internalHashHex(blocks[2])))
                 waitFor { peerBlocksServed(db, "1.1.1.1") == 3 }
                 // This peer would be eligible at 3, but not at 1.
                 seedPeer(db, "2.2.2.2")
@@ -181,8 +184,7 @@ class BlocksPerPeerLimitTest {
                 saveBlocksPerPeer(db, 1)
                 assertTrue(withTimeout(3_000) { limits.receive() }.startsWith("peer block limit=1 "))
                 db.matchedBlocks.insert(MatchedBlock(3, internalHashHex(blocks[3])))
-                bus.emit(Event.FiltersMatch, FiltersMatchPayload(3, internalHashHex(blocks[3])))
-                withTimeout(3_000) { stalled.await() }
+                withTimeout(3_000) { stalled.receive() }
                 assertEquals(3, db.blocks.count())
                 seedPeer(db, "3.3.3.3")
                 bus.emit(Event.PeersUpdated, PeersUpdatedPayload(at = nowMillis()))
