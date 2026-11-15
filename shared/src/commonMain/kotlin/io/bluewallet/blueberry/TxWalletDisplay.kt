@@ -212,13 +212,35 @@ private fun txDirection(
     inputs: List<TxDisplayInputCoin>,
     outputs: List<TxDisplayOutput>,
     ownSend: Boolean,
+): TxDirection =
+    txDirectionOf(
+        walletInputCount = inputs.size,
+        inputCount = tx.txIn.size,
+        walletInputSats = inputs.sumOf { it.valueSat },
+        mineSats = outputs.filter { it.mine }.sumOf { it.valueSat },
+        outputSum = outputs.sumOf { it.valueSat },
+        allOutputsMine = outputs.isNotEmpty() && outputs.all { it.mine },
+        ownSend = ownSend,
+    )
+
+/** A gain stays a receive even when one of your coins is also spent. */
+@Suppress("LongParameterList")
+internal fun txDirectionOf(
+    walletInputCount: Int,
+    inputCount: Int,
+    walletInputSats: Long,
+    mineSats: Long,
+    outputSum: Long,
+    allOutputsMine: Boolean,
+    ownSend: Boolean,
 ): TxDirection {
-    val known = !tx.isCoinbase() && inputs.size == tx.txIn.size && inputs.isNotEmpty()
-    val fee = inputs.sumOf { it.valueSat } - outputs.sumOf { it.valueSat }
-    val allMine = outputs.isNotEmpty() && outputs.all { it.mine }
+    val known = walletInputCount == inputCount && walletInputCount > 0
+    val fee = walletInputSats - outputSum
+    val net = mineSats - walletInputSats
     return when {
-        known && fee >= 0 && allMine -> TxDirection.Moved
-        inputs.isNotEmpty() || ownSend -> TxDirection.Out
+        known && fee >= 0 && allOutputsMine -> TxDirection.Moved
+        !known && walletInputCount > 0 && net > 0 -> TxDirection.In
+        walletInputCount > 0 || ownSend -> TxDirection.Out
         else -> TxDirection.In
     }
 }

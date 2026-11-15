@@ -314,7 +314,7 @@ private fun ReceiveAddress(
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onEditLabel),
     )
-    if (nav?.used == true) {
+    if (showsReceiveUsedMark(nav?.used == true)) {
         Text(
             text = "used",
             color = BwColors.Danger,
@@ -353,6 +353,15 @@ private fun ReceiveAddress(
 private fun ReceiveAddressPlaceholder(nav: ReceiveNav?) {
     ReceiveQrRow(nav) {
         QrPlaceholder(Modifier.size(200.dp))
+    }
+    if (showsReceiveUsedMark(nav?.used == true)) {
+        Text(
+            text = "used",
+            color = BwColors.Danger,
+            fontFamily = BwFontFamily,
+            fontSize = BwType.CaptionSize,
+            fontWeight = BwType.Caption,
+        )
     }
     Text(
         text = PLACEHOLDER_ADDRESS,

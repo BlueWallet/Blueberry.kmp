@@ -165,6 +165,24 @@ class TxFlowTest {
         )
         assertEquals("7 in · 3 out", model.countLabel)
     }
+
+    @Test
+    fun a_foreign_chip_stays_when_own_coins_fold() {
+        val coins = (1..6).map { node(it * 10_000L, "Coin $it") }
+        val foreign = TxFlowNode(0L, "", TxFlowRole.Input, headline = "6 not yours", ring = true)
+        val model =
+            txFlowModel(
+                inputs = coins + foreign,
+                outputs = listOf(TxFlowNode(200_000, "To Rent", TxFlowRole.Payment)),
+            )
+        assertEquals(
+            "6 not yours",
+            model.inputs
+                .last()
+                .node.headline,
+        )
+        assertEquals("+2 more coins", model.inputs[model.inputs.lastIndex - 1].node.label)
+    }
 }
 
 private fun node(

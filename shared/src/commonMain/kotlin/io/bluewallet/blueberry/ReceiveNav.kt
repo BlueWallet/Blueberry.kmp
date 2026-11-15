@@ -23,6 +23,9 @@ import io.bluewallet.blueberry.ui.BwType
 import io.bluewallet.blueberry.ui.NavArrow
 import io.bluewallet.blueberry.ui.NavArrowDirection
 
+/** The label sheet covers the QR and the address. A used index still says so. */
+fun showsReceiveUsedMark(addressIsUsed: Boolean): Boolean = addressIsUsed
+
 fun canStepReceive(
     index: Int,
     delta: Int,

@@ -15,7 +15,8 @@ internal fun txDetail(input: TxDisplayInput): TxDetail {
     val whenTime = input.block?.mined ?: input.broadcastAt
     val dated = whenTime?.let { txWhenLabel(it, input.now) }.orEmpty()
     val external = input.outputs.filter { !it.mine }
-    val to = if (received || input.direction == TxDirection.Moved) null else external.firstOrNull()
+    val netOnly = amounts.feeSats == null && input.walletInputs.isNotEmpty()
+    val to = if (received || input.direction == TxDirection.Moved || netOnly) null else external.firstOrNull()
     val weight = txWeight(input)
     val vsize = txVsize(input)
     val block = input.block

@@ -59,7 +59,6 @@ internal const val TX_FLOW_CHIP_HEIGHT_DP = 46f
 
 private const val ROW_DP = 56f
 private const val MIN_MIDDLE_DP = 36f
-private const val SHOWN_INPUTS = 5
 private const val INPUT_CAP = 6
 private const val MIN_WIDTH_DP = 2f
 private const val MAX_EXTRA_WIDTH_DP = 5f
@@ -105,16 +104,20 @@ fun txFlowModel(
 }
 
 private fun collapseInputs(ordered: List<TxFlowNode>): List<TxFlowNode> {
-    if (ordered.size <= INPUT_CAP) return ordered
-    val rest = ordered.drop(SHOWN_INPUTS)
+    val pinned = ordered.filter { it.headline != null }
+    val coins = ordered.filter { it.headline == null }
+    val room = INPUT_CAP - pinned.size
+    if (room <= 0 || coins.size <= room) return coins + pinned
+    val kept = room - 1
+    val dropped = coins.drop(kept)
     val more =
         TxFlowNode(
-            sats = rest.sumOf { it.sats },
-            label = "+${rest.size} more coins",
+            sats = dropped.sumOf { it.sats },
+            label = "+${dropped.size} more coins",
             role = TxFlowRole.Input,
             colorArgb = MUTED_ARGB,
         )
-    return ordered.take(SHOWN_INPUTS) + more
+    return coins.take(kept) + more + pinned
 }
 
 private fun column(
