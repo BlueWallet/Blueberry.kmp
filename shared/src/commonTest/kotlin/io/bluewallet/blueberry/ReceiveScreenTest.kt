@@ -38,6 +38,12 @@ class ReceiveScreenTest {
     }
 
     @Test
+    fun used_mark_stays_while_the_label_sheet_covers_the_address() {
+        assertTrue(showsReceiveUsedMark(addressIsUsed = true))
+        assertFalse(showsReceiveUsedMark(addressIsUsed = false))
+    }
+
+    @Test
     fun label_save_needs_non_blank_draft() {
         assertFalse(canSaveAddressLabel(""))
         assertFalse(canSaveAddressLabel("  \t "))

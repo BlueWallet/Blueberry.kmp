@@ -60,16 +60,21 @@ internal fun txVsize(input: TxDisplayInput): Int = ceil(txWeight(input) / 4.0).t
 internal fun txAmounts(input: TxDisplayInput): TxAmounts {
     val mine = input.outputs.filter { it.mine }.sumOf { it.valueSat }
     val external = input.outputs.filter { !it.mine }.sumOf { it.valueSat }
-    val fee = input.walletInputs.sumOf { it.valueSat } - mine - external
-    val unknown = input.direction != TxDirection.In && fee < 0
+    val walletIn = input.walletInputs.sumOf { it.valueSat }
+    val known = input.walletInputs.isNotEmpty() && input.walletInputs.size == input.inputCount
+    val fee = walletIn - mine - external
+    val feeSats = if (known && fee >= 0 && input.direction != TxDirection.In) fee else null
     val shown =
-        when {
-            input.direction == TxDirection.In -> mine
-            input.direction == TxDirection.Moved && !unknown -> fee
-            input.direction == TxDirection.Moved -> 0L
-            else -> external
+        when (input.direction) {
+            TxDirection.In -> if (walletIn == 0L) mine else (mine - walletIn).coerceAtLeast(0L)
+            TxDirection.Moved -> feeSats ?: 0L
+            TxDirection.Out ->
+                when {
+                    feeSats != null -> external
+                    walletIn > 0L -> (walletIn - mine).coerceAtLeast(0L)
+                    else -> external
+                }
         }
-    val feeSats = if (input.direction == TxDirection.In || unknown) null else fee
     return TxAmounts(shown, feeSats)
 }
 

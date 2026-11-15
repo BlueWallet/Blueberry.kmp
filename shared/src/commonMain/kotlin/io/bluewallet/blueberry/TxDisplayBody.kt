@@ -5,15 +5,13 @@ package io.bluewallet.blueberry
 internal fun txCoinCards(
     input: TxDisplayInput,
     txid: String,
-): List<TxCoinCard> = input.outputs.filter { it.mine && (it.inWallet || it.spent) }.map { txCoinCard(input, it, txid) }
+): List<TxCoinCard> = input.outputs.filter { it.mine && (it.inWallet || it.spent) }.map { txCoinCard(it, txid) }
 
 private fun txCoinCard(
-    input: TxDisplayInput,
     output: TxDisplayOutput,
     txid: String,
 ): TxCoinCard {
-    val titledChange = output.change || input.direction == TxDirection.Moved
-    val title = coinTitle(output, titledChange)
+    val title = coinTitle(output, output.change)
     val frozen = output.frozen && !output.spent
     val sub = coinSub(output, output.change, frozen)
     val chain = if (output.change) "Change address" else "Receive address"
@@ -77,7 +75,12 @@ private fun addressNote(
     return "$chain$index · $use"
 }
 
-internal fun txReveals(input: TxDisplayInput): List<TxReveal> = if (input.direction == TxDirection.In) receivedReveals(input) else sentReveals(input)
+internal fun txReveals(input: TxDisplayInput): List<TxReveal> =
+    if (input.direction == TxDirection.In && input.walletInputs.isEmpty()) {
+        receivedReveals(input)
+    } else {
+        sentReveals(input)
+    }
 
 private fun receivedReveals(input: TxDisplayInput): List<TxReveal> {
     val rows = mutableListOf<TxReveal>()
@@ -196,9 +199,18 @@ private fun historyReveal(input: TxDisplayInput): TxReveal {
 }
 
 private fun changeReveal(input: TxDisplayInput): TxReveal {
-    val change = input.outputs.filter { it.mine }
+    val change = input.outputs.filter { it.mine && it.change }
     if (change.isEmpty()) {
-        return TxReveal(TxTone.Green, "No change output", "Nothing from this payment links back to you.")
+        val cameBack = input.outputs.any { it.mine }
+        return TxReveal(
+            TxTone.Green,
+            "No change output",
+            if (cameBack) {
+                "An output came back to a receive address."
+            } else {
+                "Nothing from this payment links back to you."
+            },
+        )
     }
     val coin = change.first()
     val where = if (coin.groupSize > 1 && coin.groupName != null) coin.groupName else "a new history"

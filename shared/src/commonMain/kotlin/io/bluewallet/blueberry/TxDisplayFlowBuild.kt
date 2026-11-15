@@ -3,12 +3,12 @@ package io.bluewallet.blueberry
 private const val TX_FLOW_NODE_CAP = 4
 
 internal fun txFlowView(input: TxDisplayInput): TxFlowView {
-    val received = input.direction == TxDirection.In
-    val built = if (received) receivedFlow(input) else sentFlow(input)
+    val pureReceive = input.direction == TxDirection.In && input.walletInputs.isEmpty()
+    val built = if (pureReceive) receivedFlow(input) else sentFlow(input)
     return TxFlowView(
         count = "${input.inputCount} in · ${input.outputs.size} out",
-        fromColumn = if (received) "From" else "You spend",
-        toColumn = if (received) "To" else "Goes to",
+        fromColumn = if (pureReceive) "From" else "You spend",
+        toColumn = if (pureReceive) "To" else "Goes to",
         inputs = built.inputs,
         outputs = built.outputs,
         note = if (input.direction == TxDirection.Moved) "Moved between your coins" else built.note,
@@ -96,7 +96,7 @@ private fun sentFlow(input: TxDisplayInput): BuiltFlow {
                 title = coin.label?.takeIf { it.isNotBlank() } ?: "No label",
                 colorArgb = coin.colorArgb,
             )
-        }
+        } + foreignInputChips(input)
     val outputs = mutableListOf<TxFlowChipModel>()
     input.outputs.filter { !it.mine }.forEach { output ->
         outputs +=
@@ -108,16 +108,36 @@ private fun sentFlow(input: TxDisplayInput): BuiltFlow {
     }
     input.outputs.filter { it.mine }.forEach { output ->
         outputs +=
-            TxFlowChipModel(
-                kind = "change",
-                amount = output.valueSat,
-                title = "Your change",
-                coinKey = coinKey(input, output),
-            )
+            if (output.change) {
+                TxFlowChipModel(
+                    kind = "change",
+                    amount = output.valueSat,
+                    title = "Your change",
+                    coinKey = coinKey(input, output),
+                )
+            } else {
+                TxFlowChipModel(
+                    kind = "you",
+                    amount = output.valueSat,
+                    title = "You",
+                    coinKey = coinKey(input, output),
+                )
+            }
     }
-    val fee = txAmounts(input).feeSats ?: 0L
-    outputs += TxFlowChipModel(kind = "fee", amount = fee, title = "Network fee")
+    txAmounts(input).feeSats?.let { fee ->
+        outputs += TxFlowChipModel(kind = "fee", amount = fee, title = "Network fee")
+    }
     return BuiltFlow(inputs, outputs, null)
+}
+
+private fun foreignInputChips(input: TxDisplayInput): List<TxFlowChipModel> {
+    if (input.walletInputs.isEmpty()) return emptyList()
+    val count = input.inputCount - input.walletInputs.size
+    return when {
+        count <= 0 -> emptyList()
+        count == 1 -> listOf(TxFlowChipModel(kind = "foreign", title = "Not yours"))
+        else -> listOf(TxFlowChipModel(kind = "foreign", title = "$count not yours"))
+    }
 }
 
 /** Same key as the coin row, and only once that row exists. */

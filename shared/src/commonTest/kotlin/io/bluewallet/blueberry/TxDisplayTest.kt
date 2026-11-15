@@ -279,6 +279,106 @@ class TxDisplayTest {
     }
 
     @Test
+    fun foreign_gain_shows_the_wallet_increase() {
+        val direction =
+            txDirectionOf(
+                walletInputCount = 2,
+                inputCount = 3,
+                walletInputSats = 263_602L,
+                mineSats = 1_229_429L,
+                outputSum = 1_229_429L,
+                allOutputsMine = true,
+                ownSend = false,
+            )
+        assertEquals(TxDirection.In, direction)
+        val detail = txScreen(foreignGain()).detail
+        val inputs = detail.flow.inputs
+        val reveals = detail.reveals
+        assertEquals("Received", detail.header.title)
+        assertEquals(965_827L, detail.amountSats)
+        assertEquals("3 in · 1 out", detail.flow.count)
+        assertEquals(listOf(126_863L, 136_739L, null), inputs.map { it.amount })
+        assertEquals("Not yours", inputs.last().title)
+        assertEquals(listOf("you"), detail.flow.outputs.map { it.kind })
+        assertEquals(
+            "You",
+            detail.flow.outputs
+                .single()
+                .title,
+        )
+        assertEquals("Joined 2 histories", reveals.first().title)
+        assertEquals("An output came back to a receive address.", reveals[1].sub)
+    }
+
+    @Test
+    fun foreign_loss_shows_the_wallet_decrease() {
+        val direction =
+            txDirectionOf(
+                walletInputCount = 1,
+                inputCount = 2,
+                walletInputSats = 100_000L,
+                mineSats = 95_078L,
+                outputSum = 195_078L,
+                allOutputsMine = false,
+                ownSend = false,
+            )
+        assertEquals(TxDirection.Out, direction)
+        val detail = txScreen(foreignLoss()).detail
+        val outputs = detail.flow.outputs
+        assertEquals("Sent", detail.header.title)
+        assertEquals(4_922L, detail.amountSats)
+        assertNull(detail.hero.toLabel)
+        assertEquals(
+            "Not yours",
+            detail.flow.inputs
+                .last()
+                .title,
+        )
+        assertNull(outputs.find { it.kind == "fee" })
+        assertEquals("Your change", outputs.find { it.kind == "change" }?.title)
+    }
+
+    @Test
+    fun self_output_on_a_receive_address_is_not_change() {
+        val output =
+            TxDisplayOutput(
+                vout = 0,
+                valueSat = 111_977L,
+                mine = true,
+                inWallet = true,
+                change = false,
+            )
+        val detail = txScreen(moved().copy(outputs = listOf(output))).detail
+        assertEquals("New coin", detail.coins.single().title)
+        assertEquals(
+            "You",
+            detail.flow.outputs
+                .first { it.kind == "you" }
+                .title,
+        )
+    }
+
+    @Test
+    fun unresolved_inputs_are_not_called_foreign() {
+        val inputs =
+            txScreen(
+                moved().copy(
+                    direction = TxDirection.Out,
+                    inputCount = 2,
+                    walletInputs = emptyList(),
+                ),
+            ).detail.flow.inputs
+        assertTrue(inputs.isEmpty())
+    }
+
+    @Test
+    fun many_foreign_inputs_share_one_chip() {
+        val inputs = txScreen(foreignLoss().copy(inputCount = 51)).detail.flow.inputs
+        assertEquals(listOf(100_000L, null), inputs.map { it.amount })
+        assertEquals("50 not yours", inputs.last().title)
+    }
+
+    @Test
     fun detail_flow_reuses_roles_without_changing_send_review_nodes() {
         val (inputs, outputs) = detailFlowNodes(txScreen(received()).detail.flow)
         assertEquals("Sender", inputs.single().headline)
@@ -290,6 +390,53 @@ class TxDisplayTest {
         assertFalse(review.ring)
     }
 }
+
+private fun foreignGain(): TxDisplayInput =
+    TxDisplayInput(
+        txid = "1c17162a76df38866a08aef2d7aa339461283be23166796fea2a1f03b9d08363",
+        direction = TxDirection.In,
+        inputCount = 3,
+        walletInputs =
+            listOf(
+                TxDisplayInputCoin("in-a", 126_863L),
+                TxDisplayInputCoin("in-b", 136_739L),
+            ),
+        outputs =
+            listOf(
+                TxDisplayOutput(
+                    vout = 0,
+                    valueSat = 1_229_429L,
+                    mine = true,
+                    change = false,
+                    addressIndex = 66,
+                ),
+            ),
+        baseBytes = 200,
+        witnessBytes = 72,
+        block = block(781_647, TxCivilTime(2023, 3, 20, 19, 21), 1, 2_000),
+        now = now(),
+        nowEpochS = 1_000_000L,
+        tipHeight = 975_389,
+    )
+
+private fun foreignLoss(): TxDisplayInput =
+    TxDisplayInput(
+        txid = "e705c6d3fe7bb973ab719f0705e742d095dafa550600e8743a4e134e99fc4541",
+        direction = TxDirection.Out,
+        inputCount = 2,
+        walletInputs = listOf(TxDisplayInputCoin("in-a", 100_000L)),
+        outputs =
+            listOf(
+                TxDisplayOutput(vout = 0, valueSat = 100_000L, mine = false),
+                TxDisplayOutput(vout = 1, valueSat = 95_078L, mine = true, change = true, addressIndex = 198),
+            ),
+        baseBytes = 113,
+        witnessBytes = 109,
+        block = block(848_000, TxCivilTime(2024, 6, 4, 17, 56), 1, 2_000),
+        now = now(),
+        nowEpochS = 1_000_000L,
+        tipHeight = 975_389,
+    )
 
 private fun now() = TxCivilTime(2026, 10, 20, 19, 38)
 

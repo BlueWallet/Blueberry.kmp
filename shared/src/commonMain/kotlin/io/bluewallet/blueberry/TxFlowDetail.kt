@@ -15,6 +15,15 @@ private fun flowNode(
     val amount = chip.amount
     val node =
         when (chip.kind) {
+            "foreign" ->
+                TxFlowNode(
+                    sats = 0L,
+                    label = "",
+                    role = TxFlowRole.Input,
+                    colorArgb = 0xFF8E959C,
+                    headline = chip.title,
+                    ring = true,
+                )
             "sender" ->
                 TxFlowNode(
                     sats = outputTotal,
