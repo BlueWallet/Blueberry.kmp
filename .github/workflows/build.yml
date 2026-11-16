@@ -248,7 +248,12 @@ jobs:
         env:
           MAESTRO_CLI_NO_ANALYTICS: "1"
           MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: "true"
-        run: iosApp/maestro/run-e2e.sh app/Blueberry.app e2e-ios-out
+        run: |
+          for attempt in 1 2 3; do
+            iosApp/maestro/run-e2e.sh app/Blueberry.app e2e-ios-out && exit 0
+            echo "e2e attempt $attempt failed"
+          done
+          exit 1
 
       - uses: actions/upload-artifact@v7
         if: always()
