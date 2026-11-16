@@ -250,6 +250,10 @@ jobs:
           MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: "true"
         run: |
           for attempt in 1 2 3; do
+            killall -9 xcodebuild || true
+            killall -9 maestro-driver-iosUITests-Runner || true
+            xcrun simctl shutdown all || true
+            rm -rf e2e-ios-out
             iosApp/maestro/run-e2e.sh app/Blueberry.app e2e-ios-out && exit 0
             echo "e2e attempt $attempt failed"
           done
