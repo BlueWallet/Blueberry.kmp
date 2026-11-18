@@ -215,7 +215,7 @@ jobs:
     name: e2e-ios-simulator
     needs: ios
     runs-on: macos-latest
-    timeout-minutes: 75
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
         with:
@@ -249,14 +249,85 @@ jobs:
           MAESTRO_CLI_NO_ANALYTICS: "1"
           MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: "true"
         run: |
+          # 35-minute cap per attempt; 120-minute job limit fits three plus setup.
+          ATTEMPT_TIMEOUT=2100
+          SHUTDOWN_WAIT=60
+          JOB_SUMMARY="${GITHUB_STEP_SUMMARY:-}"
+
+          # macOS-safe timeout: no GNU timeout. Kills the process group on expiry (exit 124).
+          run_with_timeout() {
+            local seconds=$1
+            shift
+            perl -e '
+              my $timeout = shift @ARGV;
+              my $pid = fork();
+              die "fork: $!" unless defined $pid;
+              if ($pid == 0) {
+                setpgrp(0, 0);
+                exec @ARGV;
+                exit 127;
+              }
+              $SIG{ALRM} = sub {
+                kill "TERM", -$pid;
+                sleep 2;
+                kill "KILL", -$pid;
+                waitpid($pid, 0);
+                exit 124;
+              };
+              alarm $timeout;
+              waitpid($pid, 0);
+              my $status = $?;
+              alarm 0;
+              exit($status == -1 ? 1 : ($status & 127) ? 1 : ($status >> 8));
+            ' "$seconds" "$@"
+          }
+
+          wait_for_shutdown() {
+            local i
+            for i in $(seq 1 "$SHUTDOWN_WAIT"); do
+              if xcrun simctl list devices -j | python3 -c 'import json,sys; busy={"Booted","Shutting Down","Booting"}; sys.exit(any(d.get("state") in busy for ds in json.load(sys.stdin).get("devices",{}).values() for d in ds))'; then
+                return 0
+              fi
+              sleep 1
+            done
+            echo "warning: simulators still not Shutdown after ${SHUTDOWN_WAIT}s"
+          }
+
+          publish_summary() {
+            if [ -n "$JOB_SUMMARY" ] && [ -f e2e-ios-out/summary.md ]; then
+              cat e2e-ios-out/summary.md >> "$JOB_SUMMARY"
+            fi
+          }
+
           for attempt in 1 2 3; do
             killall -9 xcodebuild || true
             killall -9 maestro-driver-iosUITests-Runner || true
             xcrun simctl shutdown all || true
-            rm -rf e2e-ios-out
-            iosApp/maestro/run-e2e.sh app/Blueberry.app e2e-ios-out && exit 0
-            echo "e2e attempt $attempt failed"
+            wait_for_shutdown
+
+            out="e2e-ios-out-attempt-${attempt}"
+            rm -rf "$out"
+            summary="$(mktemp)"
+            status=0
+            GITHUB_STEP_SUMMARY="$summary" run_with_timeout "$ATTEMPT_TIMEOUT" \
+              iosApp/maestro/run-e2e.sh app/Blueberry.app "$out" || status=$?
+
+            if [ -f "$out/summary.md" ] || [ -f "$out/report.xml" ] || [ -d "$out/maestro" ]; then
+              rm -rf e2e-ios-out
+              mv "$out" e2e-ios-out
+            fi
+
+            if [ "$status" -eq 0 ]; then
+              publish_summary
+              exit 0
+            fi
+            if [ "$status" -eq 124 ]; then
+              echo "e2e attempt $attempt timed out after ${ATTEMPT_TIMEOUT}s"
+            else
+              echo "e2e attempt $attempt failed (status $status)"
+            fi
           done
+          publish_summary
           exit 1
 
       - uses: actions/upload-artifact@v7

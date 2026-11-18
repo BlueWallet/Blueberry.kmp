@@ -9,6 +9,34 @@
 # Maestro commands and logs, check.log), <out-dir>/app-stdout.log, <out-dir>/report.xml.
 set -euo pipefail
 
+# Run a command with a time limit. macOS-safe (no GNU timeout). Exit 124 on expiry.
+run_timed() {
+  local seconds=$1
+  shift
+  perl -e '
+    my $timeout = shift @ARGV;
+    my $pid = fork();
+    die "fork: $!" unless defined $pid;
+    if ($pid == 0) {
+      setpgrp(0, 0);
+      exec @ARGV;
+      exit 127;
+    }
+    $SIG{ALRM} = sub {
+      kill "TERM", -$pid;
+      sleep 2;
+      kill "KILL", -$pid;
+      waitpid($pid, 0);
+      exit 124;
+    };
+    alarm $timeout;
+    waitpid($pid, 0);
+    my $status = $?;
+    alarm 0;
+    exit($status == -1 ? 1 : ($status & 127) ? 1 : ($status >> 8));
+  ' "$seconds" "$@"
+}
+
 APP="$1"
 OUT="$(mkdir -p "$2" && cd "$2" && pwd)"
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -40,7 +68,8 @@ print(best[1]); print(best[2] + " / " + best[3], file=sys.stderr)
 fi
 echo "Simulator: $UDID"
 xcrun simctl boot "$UDID" || true
-xcrun simctl bootstatus "$UDID" -b
+# Bound so a device stuck in Shutting Down cannot hang the attempt.
+run_timed 180 xcrun simctl bootstatus "$UDID" -b
 xcrun simctl uninstall "$UDID" "$BUNDLE" || true
 xcrun simctl install "$UDID" "$APP"
 
