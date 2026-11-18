@@ -251,7 +251,7 @@ jobs:
         run: |
           # 35-minute cap per attempt; 120-minute job limit fits three plus setup.
           ATTEMPT_TIMEOUT=2100
-          SHUTDOWN_WAIT=60
+          export SHUTDOWN_WAIT=60
           JOB_SUMMARY="${GITHUB_STEP_SUMMARY:-}"
 
           # macOS-safe timeout: no GNU timeout. Kills the process group and nested
@@ -315,25 +315,6 @@ jobs:
             ' "$seconds" "$@"
           }
 
-          wait_for_shutdown() {
-            local deadline=$((SECONDS + SHUTDOWN_WAIT))
-            local remaining poll
-            while [ "$SECONDS" -lt "$deadline" ]; do
-              remaining=$((deadline - SECONDS))
-              [ "$remaining" -lt 1 ] && break
-              poll=$remaining
-              [ "$poll" -gt 10 ] && poll=10
-              if run_with_timeout "$poll" xcrun simctl list devices -j | python3 -c 'import json,sys; busy={"Booted","Shutting Down","Booting"}; sys.exit(any(d.get("state") in busy for ds in json.load(sys.stdin).get("devices",{}).values() for d in ds))'; then
-                return 0
-              fi
-              remaining=$((deadline - SECONDS))
-              [ "$remaining" -lt 1 ] && break
-              sleep 1
-            done
-            echo "simulators still not Shutdown after ${SHUTDOWN_WAIT}s" >&2
-            return 126
-          }
-
           publish_summary() {
             [ -n "$JOB_SUMMARY" ] || return 0
             if [ -f e2e-ios-out/summary.md ]; then
@@ -358,12 +339,9 @@ jobs:
             echo "$attempt" > "$out/attempt"
 
             status=0
-            wait_for_shutdown || status=$?
-            if [ "$status" -eq 0 ]; then
-              summary="$(mktemp)"
-              GITHUB_STEP_SUMMARY="$summary" run_with_timeout "$ATTEMPT_TIMEOUT" \
-                iosApp/maestro/run-e2e.sh app/Blueberry.app "$out" || status=$?
-            fi
+            summary="$(mktemp)"
+            GITHUB_STEP_SUMMARY="$summary" run_with_timeout "$ATTEMPT_TIMEOUT" \
+              iosApp/maestro/run-e2e.sh app/Blueberry.app "$out" || status=$?
             echo "$status" > "$out/status"
 
             if [ "$status" -eq 0 ]; then
@@ -372,8 +350,6 @@ jobs:
               reason="attempt timed out after ${ATTEMPT_TIMEOUT}s"
             elif [ "$status" -eq 125 ]; then
               reason="simctl bootstatus timed out after 180s"
-            elif [ "$status" -eq 126 ]; then
-              reason="simulators still not Shutdown after ${SHUTDOWN_WAIT}s"
             else
               reason="failed (status $status)"
             fi

@@ -67,6 +67,40 @@ print(best[1]); print(best[2] + " / " + best[3], file=sys.stderr)
 ')"
 fi
 echo "Simulator: $UDID"
+
+# Wait only on this UDID (other host simulators must not block the attempt).
+# If the deadline hits, save simctl list and continue; bootstatus will fail the
+# attempt if this device is still stuck.
+SHUTDOWN_WAIT="${SHUTDOWN_WAIT:-60}"
+wait_for_shutdown() {
+  local udid="$1"
+  local deadline=$((SECONDS + SHUTDOWN_WAIT))
+  local remaining poll
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    remaining=$((deadline - SECONDS))
+    [ "$remaining" -lt 1 ] && break
+    poll=$remaining
+    [ "$poll" -gt 10 ] && poll=10
+    if run_timed "$poll" xcrun simctl list devices -j | python3 -c 'import json,sys
+udid, busy = sys.argv[1], {"Booted", "Shutting Down", "Booting"}
+for devices in json.load(sys.stdin).get("devices", {}).values():
+    for d in devices:
+        if d.get("udid") == udid and d.get("state") in busy:
+            sys.exit(1)
+sys.exit(0)
+' "$udid"; then
+      return 0
+    fi
+    remaining=$((deadline - SECONDS))
+    [ "$remaining" -lt 1 ] && break
+    sleep 1
+  done
+  echo "warning: simulator $udid still not Shutdown after ${SHUTDOWN_WAIT}s; continuing" >&2
+  xcrun simctl list devices > "$OUT/simctl-list.txt" 2>&1 || true
+  return 0
+}
+wait_for_shutdown "$UDID"
+
 xcrun simctl boot "$UDID" || true
 # Bound so a device stuck in Shutting Down cannot hang the attempt.
 # Exit 125, not 124, so the workflow can tell this from the 35-minute attempt cap.
