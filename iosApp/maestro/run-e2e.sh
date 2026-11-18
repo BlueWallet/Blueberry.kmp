@@ -43,10 +43,21 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 FLOWS="$(cd "${3:-$HERE/flows}" && pwd)"
 BUNDLE=io.bluewallet.blueberry
 
+# Short simctl timeouts use 126 so they are not confused with the 35-minute
+# attempt cap (124) or the 180-second bootstatus cap (125).
+simctl_short() {
+  local status=0
+  run_timed "$@" || status=$?
+  if [ "$status" -eq 124 ]; then
+    return 126
+  fi
+  return "$status"
+}
+
 UDID="${SIM_UDID:-}"
 if [ -z "$UDID" ]; then
   # Prefer a plain "iPhone N" on the newest iOS runtime.
-  UDID="$(xcrun simctl list devices available -j | python3 -c '
+  UDID="$(simctl_short 10 xcrun simctl list devices available -j | python3 -c '
 import json, re, sys
 data = json.load(sys.stdin)["devices"]
 best = None
@@ -63,46 +74,15 @@ for runtime, devices in data.items():
         key = (plain is not None, version, int(plain.group(1)) if plain else 0)
         if best is None or key > best[0]:
             best = (key, d["udid"], d["name"], runtime)
+if not best:
+    sys.exit(1)
 print(best[1]); print(best[2] + " / " + best[3], file=sys.stderr)
 ')"
 fi
 echo "Simulator: $UDID"
 
-# Wait only on this UDID (other host simulators must not block the attempt).
-# If the deadline hits, save simctl list and continue; bootstatus will fail the
-# attempt if this device is still stuck.
-SHUTDOWN_WAIT="${SHUTDOWN_WAIT:-60}"
-wait_for_shutdown() {
-  local udid="$1"
-  local deadline=$((SECONDS + SHUTDOWN_WAIT))
-  local remaining poll
-  while [ "$SECONDS" -lt "$deadline" ]; do
-    remaining=$((deadline - SECONDS))
-    [ "$remaining" -lt 1 ] && break
-    poll=$remaining
-    [ "$poll" -gt 10 ] && poll=10
-    if run_timed "$poll" xcrun simctl list devices -j | python3 -c 'import json,sys
-udid, busy = sys.argv[1], {"Booted", "Shutting Down", "Booting"}
-for devices in json.load(sys.stdin).get("devices", {}).values():
-    for d in devices:
-        if d.get("udid") == udid and d.get("state") in busy:
-            sys.exit(1)
-sys.exit(0)
-' "$udid"; then
-      return 0
-    fi
-    remaining=$((deadline - SECONDS))
-    [ "$remaining" -lt 1 ] && break
-    sleep 1
-  done
-  echo "warning: simulator $udid still not Shutdown after ${SHUTDOWN_WAIT}s; continuing" >&2
-  xcrun simctl list devices > "$OUT/simctl-list.txt" 2>&1 || true
-  return 0
-}
-wait_for_shutdown "$UDID"
-
-xcrun simctl boot "$UDID" || true
-# Bound so a device stuck in Shutting Down cannot hang the attempt.
+simctl_short 30 xcrun simctl boot "$UDID" || true
+# Bound so a stuck boot cannot hang the attempt.
 # Exit 125, not 124, so the workflow can tell this from the 35-minute attempt cap.
 # Capture status with ||, not `if !`, which would set $? to 0.
 status=0
@@ -113,8 +93,13 @@ if [ "$status" -eq 124 ]; then
 elif [ "$status" -ne 0 ]; then
   exit "$status"
 fi
-xcrun simctl uninstall "$UDID" "$BUNDLE" || true
-xcrun simctl install "$UDID" "$APP"
+simctl_short 30 xcrun simctl uninstall "$UDID" "$BUNDLE" || true
+status=0
+simctl_short 60 xcrun simctl install "$UDID" "$APP" || status=$?
+if [ "$status" -ne 0 ]; then
+  echo "simctl install failed (status $status)" >&2
+  exit "$status"
+fi
 
 # The app logs with println (stdout); a pty keeps it line-buffered.
 xcrun simctl launch --console-pty "$UDID" "$BUNDLE" > "$OUT/app-stdout.log" 2>&1 &
@@ -129,7 +114,7 @@ maestro --udid "$UDID" test \
   --test-output-dir "$OUT/maestro" \
   --format junit --output "$OUT/report.xml" \
   "$FLOWS" || STATUS=$?
-xcrun simctl io "$UDID" screenshot "$OUT/final.png" || true
+simctl_short 10 xcrun simctl io "$UDID" screenshot "$OUT/final.png" || true
 kill "$LAUNCH_PID" 2>/dev/null || true
 grep -E "TORCHECK|echalote\.[a-z.]+\.timing" "$OUT/app-stdout.log" > "$OUT/tor-lines.log" || true
 
