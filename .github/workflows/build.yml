@@ -322,14 +322,16 @@ jobs:
             ' "$seconds" "$@"
           }
 
-          # Same preference as run-e2e.sh: a plain "iPhone N" on the newest iOS runtime.
+          # Same preference as run-e2e.sh: a plain "iPhone N" on the newest
+          # iOS runtime. Use that device's type and runtime so the pair is valid.
           pick_type_and_runtime() {
-            local types runtimes devices pick_status
-            types="$(mktemp)"
-            runtimes="$(mktemp)"
+            local devices st
             devices="$(mktemp)"
-            if run_with_timeout 10 xcrun simctl list devices available -j > "$devices" &&
-              python3 - "$devices" <<'PICK'
+            if ! run_with_timeout 10 xcrun simctl list devices available -j > "$devices"; then
+              rm -f "$devices"
+              return 1
+            fi
+            python3 - "$devices" <<'PICK'
           import json, re, sys
           data = json.load(open(sys.argv[1])).get("devices", {})
           best = None
@@ -353,46 +355,9 @@ jobs:
           print(best[2])
           print(f"{best[3]} / {best[2]}", file=sys.stderr)
           PICK
-            then
-              pick_status=0
-            elif run_with_timeout 10 xcrun simctl list devicetypes -j > "$types" &&
-              run_with_timeout 10 xcrun simctl list runtimes -j > "$runtimes" &&
-              python3 - "$types" "$runtimes" <<'PICK'
-          import json, re, sys
-          types = json.load(open(sys.argv[1])).get("devicetypes", [])
-          runtimes = json.load(open(sys.argv[2])).get("runtimes", [])
-          best_rt = None
-          for rt in runtimes:
-              if not rt.get("isAvailable", True):
-                  continue
-              ident = rt.get("identifier", "")
-              m = re.search(r"iOS-(\d+)-(\d+)", ident)
-              if not m:
-                  continue
-              ver = (int(m.group(1)), int(m.group(2)))
-              if best_rt is None or ver > best_rt[0]:
-                  best_rt = (ver, ident)
-          best_dt = None
-          for dt in types:
-              plain = re.fullmatch(r"iPhone (\d+)", dt.get("name", ""))
-              if not plain:
-                  continue
-              n = int(plain.group(1))
-              if best_dt is None or n > best_dt[0]:
-                  best_dt = (n, dt["identifier"], dt["name"])
-          if not best_rt or not best_dt:
-              sys.exit(1)
-          print(best_dt[1])
-          print(best_rt[1])
-          print(f"{best_dt[2]} / {best_rt[1]}", file=sys.stderr)
-          PICK
-            then
-              pick_status=0
-            else
-              pick_status=1
-            fi
-            rm -f "$types" "$runtimes" "$devices"
-            return "$pick_status"
+            st=$?
+            rm -f "$devices"
+            return "$st"
           }
 
           delete_sim() {
@@ -415,16 +380,6 @@ jobs:
             fi
           }
 
-          DEVTYPE=""
-          RUNTIME=""
-          pick="$(mktemp)"
-          if pick_type_and_runtime > "$pick"; then
-            DEVTYPE="$(sed -n '1p' "$pick")"
-            RUNTIME="$(sed -n '2p' "$pick")"
-            echo "Creating simulators as $DEVTYPE / $RUNTIME"
-          fi
-          rm -f "$pick"
-
           for attempt in 1 2 3; do
             killall -9 xcodebuild || true
             killall -9 maestro-driver-iosUITests-Runner || true
@@ -437,12 +392,24 @@ jobs:
             status=0
             reason=""
             udid=""
+            sim_name="e2e-attempt-${attempt}-${GITHUB_RUN_ID:-$$}"
+
+            pick="$(mktemp)"
+            if pick_type_and_runtime > "$pick"; then
+              DEVTYPE="$(sed -n '1p' "$pick")"
+              RUNTIME="$(sed -n '2p' "$pick")"
+              echo "Creating $sim_name as $DEVTYPE / $RUNTIME"
+            else
+              DEVTYPE=""
+              RUNTIME=""
+            fi
+            rm -f "$pick"
 
             if [ -z "$DEVTYPE" ] || [ -z "$RUNTIME" ]; then
               status=1
               reason="could not pick an iPhone device type and iOS runtime"
             else
-              udid="$(run_with_timeout 30 xcrun simctl create "e2e-attempt-${attempt}-${GITHUB_RUN_ID:-$$}" "$DEVTYPE" "$RUNTIME")" || status=$?
+              udid="$(run_with_timeout 30 xcrun simctl create "$sim_name" "$DEVTYPE" "$RUNTIME")" || status=$?
               udid="$(printf '%s' "$udid" | tr -d '[:space:]')"
               if [ "$status" -ne 0 ] || [ -z "$udid" ]; then
                 [ "$status" -eq 0 ] && status=1
@@ -451,7 +418,6 @@ jobs:
                 else
                   reason="simctl create failed (status $status)"
                 fi
-                udid=""
               fi
             fi
 
@@ -481,7 +447,12 @@ jobs:
             echo "$reason" > "$out/reason"
             echo "e2e attempt $attempt $reason"
 
-            delete_sim "$udid"
+            if [ -n "$udid" ]; then
+              delete_sim "$udid"
+            elif [ -n "$DEVTYPE" ]; then
+              # Create ran but produced no UDID; the device may still exist under sim_name.
+              delete_sim "$sim_name"
+            fi
 
             rm -rf e2e-ios-out
             mv "$out" e2e-ios-out
