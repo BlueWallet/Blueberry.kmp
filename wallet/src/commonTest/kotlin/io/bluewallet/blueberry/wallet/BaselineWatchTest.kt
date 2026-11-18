@@ -12,8 +12,9 @@ class BaselineWatchTest {
     }
 
     @Test
-    fun baseline_year_stays_fixed_as_the_clock_moves_forward() {
-        assertEquals(WatchGaps(135, 340), baselineWatchGaps(2019, 2030))
+    fun later_current_year_grows_the_window() {
+        assertEquals(WatchGaps(201, 523), baselineWatchGaps(2019, 2030))
+        assertEquals(WatchGaps(363, 978), baselineWatchGaps(2009, 2030))
     }
 
     @Test
