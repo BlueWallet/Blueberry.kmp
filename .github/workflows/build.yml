@@ -285,7 +285,7 @@ jobs:
           wait_for_shutdown() {
             local i
             for i in $(seq 1 "$SHUTDOWN_WAIT"); do
-              if xcrun simctl list devices -j | python3 -c 'import json,sys; busy={"Booted","Shutting Down","Booting"}; sys.exit(any(d.get("state") in busy for ds in json.load(sys.stdin).get("devices",{}).values() for d in ds))'; then
+              if run_with_timeout 10 xcrun simctl list devices -j | python3 -c 'import json,sys; busy={"Booted","Shutting Down","Booting"}; sys.exit(any(d.get("state") in busy for ds in json.load(sys.stdin).get("devices",{}).values() for d in ds))'; then
                 return 0
               fi
               sleep 1
@@ -294,8 +294,15 @@ jobs:
           }
 
           publish_summary() {
-            if [ -n "$JOB_SUMMARY" ] && [ -f e2e-ios-out/summary.md ]; then
+            [ -n "$JOB_SUMMARY" ] || return 0
+            if [ -f e2e-ios-out/summary.md ]; then
               cat e2e-ios-out/summary.md >> "$JOB_SUMMARY"
+            else
+              {
+                echo "### E2E iOS simulator"
+                echo ""
+                echo "attempt $(cat e2e-ios-out/attempt 2>/dev/null || echo "?"), status $(cat e2e-ios-out/status 2>/dev/null || echo "?"), $(cat e2e-ios-out/reason 2>/dev/null || echo "no summary")"
+              } >> "$JOB_SUMMARY"
             fi
           }
 
@@ -307,24 +314,33 @@ jobs:
 
             out="e2e-ios-out-attempt-${attempt}"
             rm -rf "$out"
+            mkdir -p "$out"
+            echo "$attempt" > "$out/attempt"
+
             summary="$(mktemp)"
             status=0
             GITHUB_STEP_SUMMARY="$summary" run_with_timeout "$ATTEMPT_TIMEOUT" \
               iosApp/maestro/run-e2e.sh app/Blueberry.app "$out" || status=$?
+            echo "$status" > "$out/status"
 
-            if [ -f "$out/summary.md" ] || [ -f "$out/report.xml" ] || [ -d "$out/maestro" ]; then
-              rm -rf e2e-ios-out
-              mv "$out" e2e-ios-out
+            if [ "$status" -eq 0 ]; then
+              reason="success"
+            elif [ "$status" -eq 124 ]; then
+              reason="attempt timed out after ${ATTEMPT_TIMEOUT}s"
+            elif [ "$status" -eq 125 ]; then
+              reason="simctl bootstatus timed out after 180s"
+            else
+              reason="failed (status $status)"
             fi
+            echo "$reason" > "$out/reason"
+            echo "e2e attempt $attempt $reason"
+
+            rm -rf e2e-ios-out
+            mv "$out" e2e-ios-out
 
             if [ "$status" -eq 0 ]; then
               publish_summary
               exit 0
-            fi
-            if [ "$status" -eq 124 ]; then
-              echo "e2e attempt $attempt timed out after ${ATTEMPT_TIMEOUT}s"
-            else
-              echo "e2e attempt $attempt failed (status $status)"
             fi
           done
           publish_summary
