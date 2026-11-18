@@ -70,12 +70,13 @@ echo "Simulator: $UDID"
 xcrun simctl boot "$UDID" || true
 # Bound so a device stuck in Shutting Down cannot hang the attempt.
 # Exit 125, not 124, so the workflow can tell this from the 35-minute attempt cap.
-if ! run_timed 180 xcrun simctl bootstatus "$UDID" -b; then
-  status=$?
-  if [ "$status" -eq 124 ]; then
-    echo "simctl bootstatus timed out after 180s" >&2
-    exit 125
-  fi
+# Capture status with ||, not `if !`, which would set $? to 0.
+status=0
+run_timed 180 xcrun simctl bootstatus "$UDID" -b || status=$?
+if [ "$status" -eq 124 ]; then
+  echo "simctl bootstatus timed out after 180s" >&2
+  exit 125
+elif [ "$status" -ne 0 ]; then
   exit "$status"
 fi
 xcrun simctl uninstall "$UDID" "$BUNDLE" || true

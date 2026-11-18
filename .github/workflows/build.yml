@@ -254,7 +254,8 @@ jobs:
           SHUTDOWN_WAIT=60
           JOB_SUMMARY="${GITHUB_STEP_SUMMARY:-}"
 
-          # macOS-safe timeout: no GNU timeout. Kills the process group on expiry (exit 124).
+          # macOS-safe timeout: no GNU timeout. Kills the process group and nested
+          # groups (inner run_timed setpgrp) on expiry (exit 124).
           run_with_timeout() {
             local seconds=$1
             shift
@@ -267,10 +268,42 @@ jobs:
                 exec @ARGV;
                 exit 127;
               }
+              sub pids_under {
+                my ($root) = @_;
+                my %ppid;
+                open my $fh, "-|", "ps", "-axo", "pid=,ppid=" or return ();
+                while (<$fh>) {
+                  my ($p, $pp) = /^\s*(\d+)\s+(\d+)\s*$/;
+                  $ppid{$p} = $pp if defined $p;
+                }
+                close $fh;
+                my %want = ($root => 1);
+                my $again = 1;
+                while ($again) {
+                  $again = 0;
+                  for my $p (keys %ppid) {
+                    next if $want{$p};
+                    if ($want{$ppid{$p}}) { $want{$p} = 1; $again = 1; }
+                  }
+                }
+                return grep { $_ != $root } keys %want;
+              }
+              sub kill_tree {
+                my ($root, $sig) = @_;
+                my @desc = pids_under($root);
+                my %pg = ($root => 1);
+                for my $p ($root, @desc) {
+                  my $g = `ps -o pgid= -p $p 2>/dev/null`;
+                  $g =~ s/\s+//g;
+                  $pg{$g} = 1 if $g =~ /^\d+$/;
+                }
+                kill $sig, map { -$_ } keys %pg;
+                kill $sig, $root, @desc;
+              }
               $SIG{ALRM} = sub {
-                kill "TERM", -$pid;
+                kill_tree($pid, "TERM");
                 sleep 2;
-                kill "KILL", -$pid;
+                kill_tree($pid, "KILL");
                 waitpid($pid, 0);
                 exit 124;
               };
@@ -283,14 +316,22 @@ jobs:
           }
 
           wait_for_shutdown() {
-            local i
-            for i in $(seq 1 "$SHUTDOWN_WAIT"); do
-              if run_with_timeout 10 xcrun simctl list devices -j | python3 -c 'import json,sys; busy={"Booted","Shutting Down","Booting"}; sys.exit(any(d.get("state") in busy for ds in json.load(sys.stdin).get("devices",{}).values() for d in ds))'; then
+            local deadline=$((SECONDS + SHUTDOWN_WAIT))
+            local remaining poll
+            while [ "$SECONDS" -lt "$deadline" ]; do
+              remaining=$((deadline - SECONDS))
+              [ "$remaining" -lt 1 ] && break
+              poll=$remaining
+              [ "$poll" -gt 10 ] && poll=10
+              if run_with_timeout "$poll" xcrun simctl list devices -j | python3 -c 'import json,sys; busy={"Booted","Shutting Down","Booting"}; sys.exit(any(d.get("state") in busy for ds in json.load(sys.stdin).get("devices",{}).values() for d in ds))'; then
                 return 0
               fi
+              remaining=$((deadline - SECONDS))
+              [ "$remaining" -lt 1 ] && break
               sleep 1
             done
-            echo "warning: simulators still not Shutdown after ${SHUTDOWN_WAIT}s"
+            echo "simulators still not Shutdown after ${SHUTDOWN_WAIT}s" >&2
+            return 126
           }
 
           publish_summary() {
@@ -309,18 +350,20 @@ jobs:
           for attempt in 1 2 3; do
             killall -9 xcodebuild || true
             killall -9 maestro-driver-iosUITests-Runner || true
-            xcrun simctl shutdown all || true
-            wait_for_shutdown
+            run_with_timeout 30 xcrun simctl shutdown all || true
 
             out="e2e-ios-out-attempt-${attempt}"
             rm -rf "$out"
             mkdir -p "$out"
             echo "$attempt" > "$out/attempt"
 
-            summary="$(mktemp)"
             status=0
-            GITHUB_STEP_SUMMARY="$summary" run_with_timeout "$ATTEMPT_TIMEOUT" \
-              iosApp/maestro/run-e2e.sh app/Blueberry.app "$out" || status=$?
+            wait_for_shutdown || status=$?
+            if [ "$status" -eq 0 ]; then
+              summary="$(mktemp)"
+              GITHUB_STEP_SUMMARY="$summary" run_with_timeout "$ATTEMPT_TIMEOUT" \
+                iosApp/maestro/run-e2e.sh app/Blueberry.app "$out" || status=$?
+            fi
             echo "$status" > "$out/status"
 
             if [ "$status" -eq 0 ]; then
@@ -329,6 +372,8 @@ jobs:
               reason="attempt timed out after ${ATTEMPT_TIMEOUT}s"
             elif [ "$status" -eq 125 ]; then
               reason="simctl bootstatus timed out after 180s"
+            elif [ "$status" -eq 126 ]; then
+              reason="simulators still not Shutdown after ${SHUTDOWN_WAIT}s"
             else
               reason="failed (status $status)"
             fi
