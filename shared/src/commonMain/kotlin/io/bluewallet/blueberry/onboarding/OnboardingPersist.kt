@@ -3,8 +3,11 @@ package io.bluewallet.blueberry.onboarding
 import io.bluewallet.blueberry.boot.latestCheckpointYear
 import io.bluewallet.blueberry.boot.saveSyncFromYear
 import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.wallet.HdWatchGaps
 import io.bluewallet.blueberry.wallet.WALLET_SECRET_KEY
+import io.bluewallet.blueberry.wallet.baselineWatchGaps
 import io.bluewallet.blueberry.wallet.markWalletBirthdayPending
+import io.bluewallet.blueberry.wallet.saveHdWatchGaps
 import io.bluewallet.blueberry.wallet.saveWalletSecret
 
 fun persistImportedSecret(
@@ -27,7 +30,11 @@ fun persistSyncYear(
     db: Database,
     year: Int,
 ) {
-    saveSyncFromYear(db, year)
+    val gaps = baselineWatchGaps(year, latestCheckpointYear())
+    db.transaction {
+        saveSyncFromYear(db, year)
+        saveHdWatchGaps(db, HdWatchGaps.uniform(gaps))
+    }
 }
 
 fun forgetImportedSecret(db: Database) {
