@@ -6,6 +6,7 @@ import io.bluewallet.blueberry.headers.nowMillis
 import io.bluewallet.blueberry.storage.Database
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.math.max
 import kotlin.math.round
 
 data class MatchingProgress(
@@ -27,6 +28,9 @@ interface MatchingProgressStore {
 
     fun subscribe(listener: () -> Unit): () -> Unit
 }
+
+/** The run average needs this much run time before it gives a time. */
+private const val ETA_WARMUP_MS = 2_000L
 
 private data class MatchingStoreState(
     val scanned: Int = 0,
@@ -55,13 +59,13 @@ private class MatchingProgressStoreImpl : MatchingProgressStore {
         nextTotal: Int,
         nextAt: Long,
     ): Long? {
-        if (nextTotal > 0 && nextScanned >= nextTotal) return 0
+        if (isFinished(nextScanned, nextTotal)) return 0
         if (nextScanned <= originScanned) return null
         val dt = nextAt - originAt
-        if (dt <= 0) return null
+        if (dt < ETA_WARMUP_MS) return null
         val rate = (nextScanned - originScanned).toDouble() / dt
         if (rate <= 0) return null
-        return round((nextTotal - nextScanned).toDouble() / rate).toLong()
+        return max(1L, round((nextTotal - nextScanned).toDouble() / rate).toLong())
     }
 
     override fun get() = state.load().progress
@@ -75,19 +79,19 @@ private class MatchingProgressStoreImpl : MatchingProgressStore {
             val cur = state.load()
             val nextPercent = progressPercent(scanned, total)
 
-            val wasDone = cur.total > 0 && cur.scanned >= cur.total
-            val isDone = total > 0 && scanned >= total
+            val wasDone = isFinished(cur.scanned, cur.total)
+            val isDone = isFinished(scanned, total)
 
             var nextOriginAt = cur.originAt
             var nextOriginScanned = cur.originScanned
             var nextSeeded = cur.seeded
-            val nextEta: Long?
+            val rawEta: Long?
             if (isDone) {
-                nextEta = 0
+                rawEta = 0
                 nextOriginAt = null
                 nextOriginScanned = null
             } else if (!cur.seeded) {
-                nextEta = null
+                rawEta = null
                 nextSeeded = true
             } else {
                 if (scanned < cur.scanned || wasDone) {
@@ -99,9 +103,9 @@ private class MatchingProgressStoreImpl : MatchingProgressStore {
                         nextOriginAt = at
                         nextOriginScanned = scanned
                     }
-                    nextEta = null
+                    rawEta = null
                 } else {
-                    nextEta =
+                    rawEta =
                         etaFor(
                             nextOriginAt,
                             nextOriginScanned!!,
@@ -112,6 +116,7 @@ private class MatchingProgressStoreImpl : MatchingProgressStore {
                 }
             }
 
+            val nextEta = smoothEtaMs(cur.progress.etaMs.takeIf { nextOriginAt != null }, cur.at, rawEta, at)
             if (
                 cur.scanned == scanned &&
                 cur.total == total &&
