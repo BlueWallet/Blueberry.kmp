@@ -215,7 +215,7 @@ jobs:
     name: e2e-ios-simulator
     needs: ios
     runs-on: macos-latest
-    timeout-minutes: 120
+    timeout-minutes: 135
     steps:
       - uses: actions/checkout@v7
         with:
@@ -249,7 +249,7 @@ jobs:
           MAESTRO_CLI_NO_ANALYTICS: "1"
           MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: "true"
         run: |
-          # 35-minute cap per attempt; 120-minute job limit fits three plus setup.
+          # 35-minute cap per attempt; with create and delete waits (~7 min each), 135-minute job limit fits three.
           ATTEMPT_TIMEOUT=2100
           JOB_SUMMARY="${GITHUB_STEP_SUMMARY:-}"
 
@@ -327,7 +327,7 @@ jobs:
           pick_type_and_runtime() {
             local devices st
             devices="$(mktemp)"
-            if ! run_with_timeout 10 xcrun simctl list devices available -j > "$devices"; then
+            if ! run_with_timeout 30 xcrun simctl list devices available -j > "$devices"; then
               rm -f "$devices"
               return 1
             fi
@@ -360,11 +360,22 @@ jobs:
             return "$st"
           }
 
+          # Delete, then wait up to 120s until CoreSimulator no longer lists the device,
+          # so the next attempt's list and create do not hit a busy CoreSimulator.
           delete_sim() {
-            local udid="$1"
-            [ -n "$udid" ] || return 0
-            run_with_timeout 30 xcrun simctl shutdown "$udid" || true
-            run_with_timeout 30 xcrun simctl delete "$udid" || true
+            local id="$1" deadline
+            [ -n "$id" ] || return 0
+            run_with_timeout 30 xcrun simctl shutdown "$id" || true
+            run_with_timeout 120 xcrun simctl delete "$id" || true
+            deadline=$((SECONDS + 120))
+            while [ "$SECONDS" -lt "$deadline" ]; do
+              if run_with_timeout 30 xcrun simctl list devices > /tmp/e2e-sim-list.txt 2>/dev/null \
+                && ! grep -qF "$id" /tmp/e2e-sim-list.txt; then
+                return 0
+              fi
+              sleep 5
+            done
+            echo "Simulator $id still listed 120s after delete" >&2
           }
 
           publish_summary() {
@@ -409,12 +420,12 @@ jobs:
               status=1
               reason="could not pick an iPhone device type and iOS runtime"
             else
-              udid="$(run_with_timeout 30 xcrun simctl create "$sim_name" "$DEVTYPE" "$RUNTIME")" || status=$?
+              udid="$(run_with_timeout 120 xcrun simctl create "$sim_name" "$DEVTYPE" "$RUNTIME")" || status=$?
               udid="$(printf '%s' "$udid" | tr -d '[:space:]')"
               if [ "$status" -ne 0 ] || [ -z "$udid" ]; then
                 [ "$status" -eq 0 ] && status=1
                 if [ "$status" -eq 124 ]; then
-                  reason="simctl create timed out after 30s"
+                  reason="simctl create timed out after 120s"
                 else
                   reason="simctl create failed (status $status)"
                 fi
@@ -430,7 +441,7 @@ jobs:
               if [ "$status" -eq 0 ]; then
                 reason="success"
               else
-                run_with_timeout 10 xcrun simctl list devices > "$out/simctl-list.txt" 2>&1 || true
+                run_with_timeout 30 xcrun simctl list devices > "$out/simctl-list.txt" 2>&1 || true
                 if [ "$status" -eq 124 ]; then
                   reason="attempt timed out after ${ATTEMPT_TIMEOUT}s"
                 elif [ "$status" -eq 125 ]; then
