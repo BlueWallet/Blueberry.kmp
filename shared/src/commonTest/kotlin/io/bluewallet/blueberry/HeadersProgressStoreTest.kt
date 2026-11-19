@@ -22,10 +22,13 @@ class HeadersProgressStoreTest {
         assertNull(store.get().etaMs)
         assertEquals(1500, store.get().at)
 
-        store.applyEvent(at = 2000, downloaded = 200, total = 1000, height = 200)
-        assertEquals(8000, store.get().etaMs)
+        for (i in 2..7) store.applyEvent(at = i * 1000L, downloaded = i * 100, total = 1000, height = i * 100)
+        assertNull(store.get().etaMs)
 
-        store.applyEvent(at = 3000, downloaded = 1000, total = 1000, height = 1000)
+        store.applyEvent(at = 8000, downloaded = 800, total = 1000, height = 800)
+        assertEquals(2000, store.get().etaMs)
+
+        store.applyEvent(at = 9000, downloaded = 1000, total = 1000, height = 1000)
         assertEquals(100, store.get().percent)
         assertEquals(0, store.get().etaMs)
     }
@@ -113,5 +116,27 @@ class HeadersProgressStoreTest {
     fun chainTipCaption_joins_height_and_age() {
         assertEquals("912,345 · 30 seconds ago", chainTipCaption(912_345, "30 seconds ago"))
         assertEquals("0 · —", chainTipCaption(0, "—"))
+    }
+
+    @Test
+    fun eta_ignores_the_wait_for_peers_and_eases_a_speed_swing() {
+        val store = createHeadersProgressStore()
+        store.applyEvent(at = 0, downloaded = 0, total = 0, height = 0)
+        for (i in 0..7) store.applyEvent(at = 30_000L + i * 1000, downloaded = 2000 * (i + 1), total = 100_000, height = 2000 * (i + 1))
+        assertEquals(42_000L, store.get().etaMs)
+
+        // This batch runs at twice the speed.
+        store.applyEvent(at = 38_000, downloaded = 20_000, total = 100_000, height = 20_000)
+        assertEquals(35_585L, store.get().etaMs)
+    }
+
+    @Test
+    fun new_work_after_the_tip_is_reached_drops_the_eta() {
+        val store = createHeadersProgressStore()
+        for (i in 0..7) store.applyEvent(at = i * 1000L, downloaded = 2000 * (i + 1), total = 16_000, height = 2000 * (i + 1))
+        assertEquals(0L, store.get().etaMs)
+
+        store.applyEvent(at = 60_000, downloaded = 16_000, total = 20_000, height = 16_000)
+        assertNull(store.get().etaMs)
     }
 }

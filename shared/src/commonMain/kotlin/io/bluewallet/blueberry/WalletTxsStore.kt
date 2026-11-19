@@ -37,7 +37,6 @@ import io.bluewallet.blueberry.wallet.unsignedTxid
 import io.bluewallet.headers.decodeBlockHeader
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.math.round
 
 data class WalletTxRow(
     val txid: String,
@@ -122,17 +121,10 @@ interface WalletTxsStore {
 
 val emptyWalletTxsSnapshot = WalletTxsSnapshot()
 
-private const val MAX_SAMPLES = 8
-
-private data class ParseSample(
-    val at: Long,
-    val downloaded: Int,
-)
-
 private data class WalletTxsState(
     val snapshot: WalletTxsSnapshot = emptyWalletTxsSnapshot,
     val parsingActive: Boolean = false,
-    val samples: List<ParseSample> = emptyList(),
+    val speed: ProgressSpeed = ProgressSpeed(),
 )
 
 private fun String?.nonBlank(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
@@ -169,48 +161,6 @@ private fun timeLabelForHeight(
         }
     cache[height] = resolved
     return resolved
-}
-
-private fun addAdvancingSample(
-    samples: List<ParseSample>,
-    sample: ParseSample,
-): List<ParseSample> {
-    val last = samples.lastOrNull()
-    if (last != null && sample.downloaded <= last.downloaded) return samples
-    val next = samples + sample
-    return if (next.size > MAX_SAMPLES) next.takeLast(MAX_SAMPLES) else next
-}
-
-private fun nextProgressSamples(
-    samples: List<ParseSample>,
-    prevDownloaded: Int,
-    prevTotal: Int,
-    at: Long,
-    downloaded: Int,
-    total: Int,
-): List<ParseSample> {
-    val wasDone = prevTotal > 0 && prevDownloaded >= prevTotal
-    val isDone = total > 0 && downloaded >= total
-    if (downloaded < prevDownloaded || (wasDone && !isDone)) {
-        return listOf(ParseSample(at, downloaded))
-    }
-    return addAdvancingSample(samples, ParseSample(at, downloaded))
-}
-
-private fun estimateEtaMs(
-    samples: List<ParseSample>,
-    total: Int,
-): Long? {
-    if (samples.size < 2) return null
-    val first = samples.first()
-    val last = samples.last()
-    val timeDelta = last.at - first.at
-    if (timeDelta <= 0) return null
-    val rate = (last.downloaded - first.downloaded).toDouble() / timeDelta
-    if (total <= last.downloaded) return 0
-    if (rate <= 0) return null
-    val remaining = (total - last.downloaded).toDouble()
-    return round(remaining / rate).toLong()
 }
 
 private data class PendingSendCandidate(
@@ -680,7 +630,7 @@ private class WalletTxsStoreImpl : WalletTxsStore {
                 } else {
                     cur.snapshot
                 }
-            val next = WalletTxsState(snapshot = nextSnap, parsingActive = active, samples = emptyList())
+            val next = WalletTxsState(snapshot = nextSnap, parsingActive = active, speed = ProgressSpeed())
             if (state.compareAndSet(cur, next)) {
                 emitChange()
                 return
@@ -697,34 +647,19 @@ private class WalletTxsStoreImpl : WalletTxsStore {
             val cur = state.load()
             val snap = cur.snapshot
             if (snap.blocksParsed == parsed && snap.blocksTotal == total) return
-            val wasDone = snap.blocksTotal > 0 && snap.blocksParsed >= snap.blocksTotal
-            val isDone = total > 0 && parsed >= total
-            var samples = cur.samples
-            if (parsed < snap.blocksParsed || (wasDone && !isDone)) {
-                samples = emptyList()
-            }
-            if (at != null && cur.parsingActive) {
-                samples =
-                    nextProgressSamples(
-                        samples,
-                        snap.blocksParsed,
-                        snap.blocksTotal,
-                        at,
-                        parsed,
-                        total,
-                    )
-            }
+            val isDone = isFinished(parsed, total)
+            val restarted = isFinished(snap.blocksParsed, snap.blocksTotal) && !isDone
+            val speed = if (cur.parsingActive) cur.speed.next(snap.blocksParsed, parsed, at, restarted) else cur.speed
             val etaMs =
                 when {
                     !cur.parsingActive -> null
                     isDone -> 0L
-                    samples.size < 2 -> null
-                    else -> estimateEtaMs(samples, total)
+                    else -> speed.etaMs(parsed, total)
                 }
             val next =
                 cur.copy(
                     snapshot = snap.copy(blocksParsed = parsed, blocksTotal = total, etaMs = etaMs),
-                    samples = samples,
+                    speed = speed,
                 )
             if (state.compareAndSet(cur, next)) {
                 emitChange()
@@ -752,22 +687,17 @@ private class WalletTxsStoreImpl : WalletTxsStore {
         val at = snapshot.at
         return when {
             !cur.parsingActive ->
-                WalletTxsState(snapshot = snapshot.copy(etaMs = null), parsingActive = false, samples = emptyList())
-            at == null -> cur.copy(snapshot = snapshot.copy(etaMs = null), samples = emptyList())
+                WalletTxsState(snapshot = snapshot.copy(etaMs = null), parsingActive = false, speed = ProgressSpeed())
+            at == null -> cur.copy(snapshot = snapshot.copy(etaMs = null), speed = ProgressSpeed())
             else -> {
                 val prev = cur.snapshot
-                val nextSamples =
-                    nextProgressSamples(
-                        cur.samples,
-                        prev.blocksParsed,
-                        prev.blocksTotal,
-                        at,
-                        snapshot.blocksParsed,
-                        snapshot.blocksTotal,
-                    )
+                val restarted =
+                    isFinished(prev.blocksParsed, prev.blocksTotal) &&
+                        !isFinished(snapshot.blocksParsed, snapshot.blocksTotal)
+                val nextSpeed = cur.speed.next(prev.blocksParsed, snapshot.blocksParsed, at, restarted)
                 val hasBacklog = snapshot.blocksTotal > snapshot.blocksParsed
-                val nextEta = if (hasBacklog) estimateEtaMs(nextSamples, snapshot.blocksTotal) else null
-                cur.copy(snapshot = snapshot.copy(etaMs = nextEta), samples = nextSamples)
+                val nextEta = if (hasBacklog) nextSpeed.etaMs(snapshot.blocksParsed, snapshot.blocksTotal) else null
+                cur.copy(snapshot = snapshot.copy(etaMs = nextEta), speed = nextSpeed)
             }
         }
     }

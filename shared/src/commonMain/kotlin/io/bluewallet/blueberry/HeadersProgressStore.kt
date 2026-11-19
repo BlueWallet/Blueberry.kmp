@@ -34,59 +34,10 @@ interface HeadersProgressStore {
     fun subscribe(listener: () -> Unit): () -> Unit
 }
 
-private const val MAX_SAMPLES = 8
-
-private data class ProgressSample(
-    val at: Long,
-    val downloaded: Int,
-)
-
 private data class HeadersStoreState(
     val progress: HeadersProgress = HeadersProgress(),
-    val samples: List<ProgressSample> = emptyList(),
+    val speed: ProgressSpeed = ProgressSpeed(),
 )
-
-private fun addAdvancingSample(
-    samples: List<ProgressSample>,
-    sample: ProgressSample,
-): List<ProgressSample> {
-    val last = samples.lastOrNull()
-    if (last != null && sample.downloaded <= last.downloaded) return samples
-    val next = samples + sample
-    return if (next.size > MAX_SAMPLES) next.takeLast(MAX_SAMPLES) else next
-}
-
-private fun nextProgressSamples(
-    samples: List<ProgressSample>,
-    prevDownloaded: Int,
-    prevTotal: Int,
-    at: Long,
-    downloaded: Int,
-    total: Int,
-): List<ProgressSample> {
-    val wasDone = prevTotal > 0 && prevDownloaded >= prevTotal
-    val isDone = total > 0 && downloaded >= total
-    if (downloaded < prevDownloaded || (wasDone && !isDone)) {
-        return listOf(ProgressSample(at, downloaded))
-    }
-    return addAdvancingSample(samples, ProgressSample(at, downloaded))
-}
-
-private fun estimateEtaMs(
-    samples: List<ProgressSample>,
-    total: Int,
-): Long? {
-    if (samples.size < 2) return null
-    val first = samples.first()
-    val last = samples.last()
-    val timeDelta = last.at - first.at
-    if (timeDelta <= 0) return null
-    val rate = (last.downloaded - first.downloaded).toDouble() / timeDelta
-    if (total <= last.downloaded) return 0
-    if (rate <= 0) return null
-    val remaining = (total - last.downloaded).toDouble()
-    return kotlin.math.round(remaining / rate).toLong()
-}
 
 @OptIn(ExperimentalAtomicApi::class)
 private class HeadersProgressStoreImpl : HeadersProgressStore {
@@ -110,23 +61,12 @@ private class HeadersProgressStoreImpl : HeadersProgressStore {
         while (true) {
             val cur = state.load()
             val prev = cur.progress
-            val nextSamples =
-                nextProgressSamples(
-                    cur.samples,
-                    prev.downloaded,
-                    prev.total,
-                    at,
-                    downloaded,
-                    total,
-                )
+            val isDone = isFinished(downloaded, total)
+            val restarted = isFinished(prev.downloaded, prev.total) && !isDone
+            val nextSpeed = cur.speed.next(prev.downloaded, downloaded, at, restarted)
             val nextPercent =
                 if (total == 0) 0 else min(100, (100 * downloaded) / total)
-            val nextEta =
-                if (total > 0 && downloaded >= total) {
-                    0L
-                } else {
-                    estimateEtaMs(nextSamples, total)
-                }
+            val nextEta = if (isDone) 0L else nextSpeed.etaMs(downloaded, total)
             if (
                 prev.downloaded == downloaded &&
                 prev.total == total &&
@@ -150,7 +90,7 @@ private class HeadersProgressStoreImpl : HeadersProgressStore {
                             percent = nextPercent,
                             tipTimeS = tipTimeS,
                         ),
-                    samples = nextSamples,
+                    speed = nextSpeed,
                 )
             if (state.compareAndSet(cur, next)) {
                 emitChange()

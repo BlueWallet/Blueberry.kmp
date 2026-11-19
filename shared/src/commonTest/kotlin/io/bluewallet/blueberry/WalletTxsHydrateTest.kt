@@ -145,7 +145,7 @@ class WalletTxsHydrateTest {
     fun forwards_sync_state_so_eta_is_active_only() {
         val bus = createMessageBus()
         val db = createSqliteDatabase(":memory:")
-        for (height in 1..6) {
+        for (height in 1..20) {
             db.blocks.insert(
                 DownloadedBlock(
                     height,
@@ -158,32 +158,36 @@ class WalletTxsHydrateTest {
         val off = bindWalletTxsEvents(bus, db, store)
         hydrateWallet(db, store, null, 1)
 
-        assertEquals(6, store.get().blocksTotal)
+        assertEquals(20, store.get().blocksTotal)
         assertEquals(0, store.get().blocksParsed)
         assertNull(store.get().etaMs)
 
         bus.emit(Event.SyncIdle, SyncIdlePayload(at = 1000))
-        db.parsedBlocks.mark(1)
-        bus.emit(Event.WalletTxs, WalletTxsPayload(at = 1000))
+        for (height in 1..7) {
+            db.parsedBlocks.mark(height)
+            bus.emit(Event.WalletTxs, WalletTxsPayload(at = height * 1000L))
+        }
         assertNull(store.get().etaMs)
-        db.parsedBlocks.mark(2)
-        bus.emit(Event.WalletTxs, WalletTxsPayload(at = 2000))
-        assertEquals(4000, store.get().etaMs)
+        db.parsedBlocks.mark(8)
+        bus.emit(Event.WalletTxs, WalletTxsPayload(at = 8000))
+        assertEquals(12_000, store.get().etaMs)
 
-        bus.emit(Event.SyncCatchup, SyncCatchupPayload(at = 2000, reason = SyncCatchupReason.BLOCKS))
+        bus.emit(Event.SyncCatchup, SyncCatchupPayload(at = 8000, reason = SyncCatchupReason.BLOCKS))
         assertNull(store.get().etaMs)
 
-        db.parsedBlocks.mark(3)
+        db.parsedBlocks.mark(9)
         bus.emit(Event.WalletTxs, WalletTxsPayload(at = 1_000_000))
         assertNull(store.get().etaMs)
 
         bus.emit(Event.SyncIdle, SyncIdlePayload(at = 1_001_000))
-        db.parsedBlocks.mark(4)
-        bus.emit(Event.WalletTxs, WalletTxsPayload(at = 1_001_000))
+        for (height in 10..16) {
+            db.parsedBlocks.mark(height)
+            bus.emit(Event.WalletTxs, WalletTxsPayload(at = 1_000_000L + (height - 9) * 1000))
+        }
         assertNull(store.get().etaMs)
-        db.parsedBlocks.mark(5)
-        bus.emit(Event.WalletTxs, WalletTxsPayload(at = 1_002_000))
-        assertEquals(1000, store.get().etaMs)
+        db.parsedBlocks.mark(17)
+        bus.emit(Event.WalletTxs, WalletTxsPayload(at = 1_008_000))
+        assertEquals(3000, store.get().etaMs)
 
         off()
         db.close()
