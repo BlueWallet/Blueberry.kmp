@@ -9,16 +9,55 @@
 # Maestro commands and logs, check.log), <out-dir>/app-stdout.log, <out-dir>/report.xml.
 set -euo pipefail
 
+# Run a command with a time limit. macOS-safe (no GNU timeout). Exit 124 on expiry.
+run_timed() {
+  local seconds=$1
+  shift
+  perl -e '
+    my $timeout = shift @ARGV;
+    my $pid = fork();
+    die "fork: $!" unless defined $pid;
+    if ($pid == 0) {
+      setpgrp(0, 0);
+      exec @ARGV;
+      exit 127;
+    }
+    $SIG{ALRM} = sub {
+      kill "TERM", -$pid;
+      sleep 2;
+      kill "KILL", -$pid;
+      waitpid($pid, 0);
+      exit 124;
+    };
+    alarm $timeout;
+    waitpid($pid, 0);
+    my $status = $?;
+    alarm 0;
+    exit($status == -1 ? 1 : ($status & 127) ? 1 : ($status >> 8));
+  ' "$seconds" "$@"
+}
+
 APP="$1"
 OUT="$(mkdir -p "$2" && cd "$2" && pwd)"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 FLOWS="$(cd "${3:-$HERE/flows}" && pwd)"
 BUNDLE=io.bluewallet.blueberry
 
+# Short simctl timeouts use 126 so they are not confused with the 35-minute
+# attempt cap (124) or the 180-second bootstatus cap (125).
+simctl_short() {
+  local status=0
+  run_timed "$@" || status=$?
+  if [ "$status" -eq 124 ]; then
+    return 126
+  fi
+  return "$status"
+}
+
 UDID="${SIM_UDID:-}"
 if [ -z "$UDID" ]; then
   # Prefer a plain "iPhone N" on the newest iOS runtime.
-  UDID="$(xcrun simctl list devices available -j | python3 -c '
+  UDID="$(simctl_short 10 xcrun simctl list devices available -j | python3 -c '
 import json, re, sys
 data = json.load(sys.stdin)["devices"]
 best = None
@@ -35,14 +74,32 @@ for runtime, devices in data.items():
         key = (plain is not None, version, int(plain.group(1)) if plain else 0)
         if best is None or key > best[0]:
             best = (key, d["udid"], d["name"], runtime)
+if not best:
+    sys.exit(1)
 print(best[1]); print(best[2] + " / " + best[3], file=sys.stderr)
 ')"
 fi
 echo "Simulator: $UDID"
-xcrun simctl boot "$UDID" || true
-xcrun simctl bootstatus "$UDID" -b
-xcrun simctl uninstall "$UDID" "$BUNDLE" || true
-xcrun simctl install "$UDID" "$APP"
+
+simctl_short 30 xcrun simctl boot "$UDID" || true
+# Bound so a stuck boot cannot hang the attempt.
+# Exit 125, not 124, so the workflow can tell this from the 35-minute attempt cap.
+# Capture status with ||, not `if !`, which would set $? to 0.
+status=0
+run_timed 180 xcrun simctl bootstatus "$UDID" -b || status=$?
+if [ "$status" -eq 124 ]; then
+  echo "simctl bootstatus timed out after 180s" >&2
+  exit 125
+elif [ "$status" -ne 0 ]; then
+  exit "$status"
+fi
+simctl_short 30 xcrun simctl uninstall "$UDID" "$BUNDLE" || true
+status=0
+simctl_short 60 xcrun simctl install "$UDID" "$APP" || status=$?
+if [ "$status" -ne 0 ]; then
+  echo "simctl install failed (status $status)" >&2
+  exit "$status"
+fi
 
 # The app logs with println (stdout); a pty keeps it line-buffered.
 xcrun simctl launch --console-pty "$UDID" "$BUNDLE" > "$OUT/app-stdout.log" 2>&1 &
@@ -57,7 +114,7 @@ maestro --udid "$UDID" test \
   --test-output-dir "$OUT/maestro" \
   --format junit --output "$OUT/report.xml" \
   "$FLOWS" || STATUS=$?
-xcrun simctl io "$UDID" screenshot "$OUT/final.png" || true
+simctl_short 10 xcrun simctl io "$UDID" screenshot "$OUT/final.png" || true
 kill "$LAUNCH_PID" 2>/dev/null || true
 grep -E "TORCHECK|echalote\.[a-z.]+\.timing" "$OUT/app-stdout.log" > "$OUT/tor-lines.log" || true
 

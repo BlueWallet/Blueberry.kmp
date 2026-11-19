@@ -215,7 +215,7 @@ jobs:
     name: e2e-ios-simulator
     needs: ios
     runs-on: macos-latest
-    timeout-minutes: 75
+    timeout-minutes: 135
     steps:
       - uses: actions/checkout@v7
         with:
@@ -248,7 +248,233 @@ jobs:
         env:
           MAESTRO_CLI_NO_ANALYTICS: "1"
           MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: "true"
-        run: iosApp/maestro/run-e2e.sh app/Blueberry.app e2e-ios-out
+        run: |
+          # 35-minute cap per attempt; with create and delete waits (~7 min each), 135-minute job limit fits three.
+          ATTEMPT_TIMEOUT=2100
+          JOB_SUMMARY="${GITHUB_STEP_SUMMARY:-}"
+
+          # macOS-safe timeout: no GNU timeout. On expiry, TERM the tree, remember
+          # process groups, then KILL that set plus any new groups (exit 124).
+          run_with_timeout() {
+            local seconds=$1
+            shift
+            perl -e '
+              my $timeout = shift @ARGV;
+              my $pid = fork();
+              die "fork: $!" unless defined $pid;
+              if ($pid == 0) {
+                setpgrp(0, 0);
+                exec @ARGV;
+                exit 127;
+              }
+              sub pids_under {
+                my ($root) = @_;
+                my %ppid;
+                open my $fh, "-|", "ps", "-axo", "pid=,ppid=" or return ();
+                while (<$fh>) {
+                  my ($p, $pp) = /^\s*(\d+)\s+(\d+)\s*$/;
+                  $ppid{$p} = $pp if defined $p;
+                }
+                close $fh;
+                my %want = ($root => 1);
+                my $again = 1;
+                while ($again) {
+                  $again = 0;
+                  for my $p (keys %ppid) {
+                    next if $want{$p};
+                    if ($want{$ppid{$p}}) { $want{$p} = 1; $again = 1; }
+                  }
+                }
+                return grep { $_ != $root } keys %want;
+              }
+              sub collect_groups {
+                my ($root) = @_;
+                my @desc = pids_under($root);
+                my %pg = ($root => 1);
+                for my $p ($root, @desc) {
+                  my $g = `ps -o pgid= -p $p 2>/dev/null`;
+                  $g =~ s/\s+//g;
+                  $pg{$g} = 1 if $g =~ /^\d+$/;
+                }
+                return (\%pg, [$root, @desc]);
+              }
+              sub kill_groups {
+                my ($sig, $pg, $pids) = @_;
+                kill $sig, map { -$_ } keys %$pg;
+                kill $sig, @$pids;
+              }
+              $SIG{ALRM} = sub {
+                my ($pg, $pids) = collect_groups($pid);
+                kill_groups("TERM", $pg, $pids);
+                sleep 2;
+                my ($pg2, $pids2) = collect_groups($pid);
+                $pg->{$_} = 1 for keys %$pg2;
+                kill_groups("KILL", $pg, $pids2);
+                kill "KILL", @$pids;
+                waitpid($pid, 0);
+                exit 124;
+              };
+              alarm $timeout;
+              waitpid($pid, 0);
+              my $status = $?;
+              alarm 0;
+              exit($status == -1 ? 1 : ($status & 127) ? 1 : ($status >> 8));
+            ' "$seconds" "$@"
+          }
+
+          # Same preference as run-e2e.sh: a plain "iPhone N" on the newest
+          # iOS runtime. Use that device's type and runtime so the pair is valid.
+          pick_type_and_runtime() {
+            local devices st
+            devices="$(mktemp)"
+            if ! run_with_timeout 30 xcrun simctl list devices available -j > "$devices"; then
+              rm -f "$devices"
+              return 1
+            fi
+            python3 - "$devices" <<'PICK'
+          import json, re, sys
+          data = json.load(open(sys.argv[1])).get("devices", {})
+          best = None
+          for runtime, devices in data.items():
+              m = re.search(r"iOS-(\d+)-(\d+)", runtime)
+              if not m:
+                  continue
+              version = (int(m.group(1)), int(m.group(2)))
+              for d in devices:
+                  name = d.get("name", "")
+                  dtype = d.get("deviceTypeIdentifier")
+                  if not dtype or not name.startswith("iPhone"):
+                      continue
+                  plain = re.fullmatch(r"iPhone (\d+)", name)
+                  key = (plain is not None, version, int(plain.group(1)) if plain else 0)
+                  if best is None or key > best[0]:
+                      best = (key, dtype, runtime, name)
+          if not best:
+              sys.exit(1)
+          print(best[1])
+          print(best[2])
+          print(f"{best[3]} / {best[2]}", file=sys.stderr)
+          PICK
+            st=$?
+            rm -f "$devices"
+            return "$st"
+          }
+
+          # Delete, then wait up to 120s until CoreSimulator no longer lists the device,
+          # so the next attempt's list and create do not hit a busy CoreSimulator.
+          delete_sim() {
+            local id="$1" deadline
+            [ -n "$id" ] || return 0
+            run_with_timeout 30 xcrun simctl shutdown "$id" || true
+            run_with_timeout 120 xcrun simctl delete "$id" || true
+            deadline=$((SECONDS + 120))
+            while [ "$SECONDS" -lt "$deadline" ]; do
+              if run_with_timeout 30 xcrun simctl list devices > /tmp/e2e-sim-list.txt 2>/dev/null \
+                && ! grep -qF "$id" /tmp/e2e-sim-list.txt; then
+                return 0
+              fi
+              sleep 5
+            done
+            echo "Simulator $id still listed 120s after delete" >&2
+          }
+
+          publish_summary() {
+            [ -n "$JOB_SUMMARY" ] || return 0
+            {
+              echo "### E2E iOS simulator"
+              echo ""
+              echo "attempt $(cat e2e-ios-out/attempt 2>/dev/null || echo "?"), status $(cat e2e-ios-out/status 2>/dev/null || echo "?"), $(cat e2e-ios-out/reason 2>/dev/null || echo "no summary")"
+              echo ""
+            } >> "$JOB_SUMMARY"
+            if [ -f e2e-ios-out/summary.md ]; then
+              cat e2e-ios-out/summary.md >> "$JOB_SUMMARY"
+            fi
+          }
+
+          for attempt in 1 2 3; do
+            killall -9 xcodebuild || true
+            killall -9 maestro-driver-iosUITests-Runner || true
+
+            out="e2e-ios-out-attempt-${attempt}"
+            rm -rf "$out"
+            mkdir -p "$out"
+            echo "$attempt" > "$out/attempt"
+
+            status=0
+            reason=""
+            udid=""
+            sim_name="e2e-attempt-${attempt}-${GITHUB_RUN_ID:-$$}"
+
+            pick="$(mktemp)"
+            if pick_type_and_runtime > "$pick"; then
+              DEVTYPE="$(sed -n '1p' "$pick")"
+              RUNTIME="$(sed -n '2p' "$pick")"
+              echo "Creating $sim_name as $DEVTYPE / $RUNTIME"
+            else
+              DEVTYPE=""
+              RUNTIME=""
+            fi
+            rm -f "$pick"
+
+            if [ -z "$DEVTYPE" ] || [ -z "$RUNTIME" ]; then
+              status=1
+              reason="could not pick an iPhone device type and iOS runtime"
+            else
+              udid="$(run_with_timeout 120 xcrun simctl create "$sim_name" "$DEVTYPE" "$RUNTIME")" || status=$?
+              udid="$(printf '%s' "$udid" | tr -d '[:space:]')"
+              if [ "$status" -ne 0 ] || [ -z "$udid" ]; then
+                [ "$status" -eq 0 ] && status=1
+                if [ "$status" -eq 124 ]; then
+                  reason="simctl create timed out after 120s"
+                else
+                  reason="simctl create failed (status $status)"
+                fi
+              fi
+            fi
+
+            if [ "$status" -eq 0 ]; then
+              echo "$udid" > "$out/udid"
+              echo "Simulator: $udid"
+              summary="$(mktemp)"
+              GITHUB_STEP_SUMMARY="$summary" SIM_UDID="$udid" run_with_timeout "$ATTEMPT_TIMEOUT" \
+                iosApp/maestro/run-e2e.sh app/Blueberry.app "$out" || status=$?
+              if [ "$status" -eq 0 ]; then
+                reason="success"
+              else
+                run_with_timeout 30 xcrun simctl list devices > "$out/simctl-list.txt" 2>&1 || true
+                if [ "$status" -eq 124 ]; then
+                  reason="attempt timed out after ${ATTEMPT_TIMEOUT}s"
+                elif [ "$status" -eq 125 ]; then
+                  reason="simctl bootstatus timed out after 180s"
+                elif [ "$status" -eq 126 ]; then
+                  reason="simctl command timed out"
+                else
+                  reason="failed (status $status)"
+                fi
+              fi
+            fi
+
+            echo "$status" > "$out/status"
+            echo "$reason" > "$out/reason"
+            echo "e2e attempt $attempt $reason"
+
+            if [ -n "$udid" ]; then
+              delete_sim "$udid"
+            elif [ -n "$DEVTYPE" ]; then
+              # Create ran but produced no UDID; the device may still exist under sim_name.
+              delete_sim "$sim_name"
+            fi
+
+            rm -rf e2e-ios-out
+            mv "$out" e2e-ios-out
+
+            if [ "$status" -eq 0 ]; then
+              publish_summary
+              exit 0
+            fi
+          done
+          publish_summary
+          exit 1
 
       - uses: actions/upload-artifact@v7
         if: always()
