@@ -54,9 +54,9 @@ internal data class ProgressSpeed(
 
 /**
  * The speed after the count moves from [prevCount] to [count]. [restarted] drops the speed (the
- * stores set it when finished work grows again). A count that goes back keeps the speed, and the
- * next gap starts at the next increase. An increase with no time, or no later than the last
- * increase, counts with the next gap.
+ * stores set it when finished work grows again). A count that goes back keeps the speed and ends a
+ * row of pauses, and the next gap starts at the next increase. An increase with no time, or no
+ * later than the last increase, counts with the next gap.
  */
 internal fun ProgressSpeed.next(
     prevCount: Int,
@@ -66,7 +66,7 @@ internal fun ProgressSpeed.next(
 ): ProgressSpeed =
     when {
         restarted -> ProgressSpeed()
-        count < prevCount -> copy(last = null)
+        count < prevCount -> copy(last = null, pauses = 0)
         count == prevCount || at == null -> this
         last == null -> copy(last = ProgressSample(at, count))
         at <= last.at -> this

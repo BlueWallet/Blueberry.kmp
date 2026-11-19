@@ -17,7 +17,7 @@ Measure speed only over real work, and smooth the speed, not the shown time.
 - A pause does not count. A pause is a gap longer than 2 seconds and longer than 8 usual gaps. The usual gap comes from the last 7 gaps that were not pauses, so a second wait right after a pause is a pause too. Work that gets a little slower is not a pause.
 - Three pauses in a row mean the work slowed down for good. The speed starts again from the third pause, so the job shows no time for the next 7 increases.
 - The shown time is the work left at this speed. Finished work shows done at once. A job with work left never shows done. Transaction parsing keeps one old exception: a full rebuild with no work left shows no time.
-- A count that goes back keeps the speed. Finished work that grows again drops the speed, so the job shows no time until 8 new increases.
+- A count that goes back keeps the speed and ends a row of pauses. The gap after it is not measured, so it could hide a normal step. Finished work that grows again drops the speed, so the job shows no time until 8 new increases.
 - Filters match keeps its whole-run speed. It gives a time only after 2 seconds of run time, so the first reading is not noise. Its shown time counts down with the clock and moves toward each new estimate with the same 8 second time constant. A count that goes back starts a new run and shows no time until the new run gives a time. The count goes back when new wallet addresses need a rescan, and then the old time is wrong.
 
 Trade-off: when updates are sparse and irregular, 8 seconds hold little data. An example is one saved block every 1.5 seconds on a slow link. The shown time stays correct on average, but it moves more: about 25% up or down, and a rare long gap can raise it up to about 2 times for a short time. More updates make the time calmer. At about 10 updates a second, as in filters download on a good link, the time moves by about 7%. Sparse updates also show a lasting change more slowly, because each gap fades older work by at most 2 seconds. With 3 second gaps, about half of a halving shows after 15 seconds, and about 90% after a minute.
@@ -39,7 +39,7 @@ The partner swap time stays the value the partner sent.
 - `ProgressSpeed(last, gaps, recentCount, recentMs, pauses)` holds the last increase, the last 7 gaps that were not pauses, the faded sums of work and time, and the number of pauses in a row. The speed is `recentCount / recentMs`, in counts per ms.
 - `ProgressSpeed.next(prevCount, count, at, restarted)`:
   1. `restarted` returns an empty speed.
-  2. A count lower than `prevCount` keeps the speed and the gaps, and forgets the last increase.
+  2. A count lower than `prevCount` keeps the speed and the gaps, forgets the last increase, and sets `pauses` to 0.
   3. No increase, or no time, changes nothing.
   4. The first increase becomes the last increase and keeps the speed.
   5. An increase no later than the last increase changes nothing. The next gap includes it.
@@ -58,7 +58,7 @@ The partner swap time stays the value the partner sent.
 
 ## Testing
 
-- `ProgressEtaTest` covers the speed: first increase, the average of 7 gaps, a later gap with fading, a short stall, the 2 second fade limit, a pause and a second wait right after it, a third pause in a row, slow steady work, an increase at the same time, no time, restart, a count that goes back, and the time left. It also covers `smoothEtaMs`: first time, done, missing estimate, a clock that does not move forward, a steady countdown with no lag, a one-second swing under 2 minutes, at least 80% of a lasting change after 15 seconds, an alternating swing, and no done while work is left.
+- `ProgressEtaTest` covers the speed: first increase, the average of 7 gaps, a later gap with fading, a short stall, the 2 second fade limit, a pause and a second wait right after it, a third pause in a row, slow steady work, an increase at the same time, no time, restart, a count that goes back, a count that goes back between pauses, and the time left. It also covers `smoothEtaMs`: first time, done, missing estimate, a clock that does not move forward, a steady countdown with no lag, a one-second swing under 2 minutes, at least 80% of a lasting change after 15 seconds, an alternating swing, and no done while work is left.
 - Each store test checks the wiring: no time before 8 increases, done, and new work after done. The chain tip, filters download, and transaction parse tests also check the time after a one-second speed swing.
 - The chain tip, filters download, and blocks download tests check that the wait before the first increase does not count.
 - `FiltersProgressStoreTest` checks that a short stall counts once, and that the speed holds through a pause and a second wait right after it.

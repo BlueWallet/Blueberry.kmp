@@ -104,6 +104,13 @@ class ProgressEtaTest {
     }
 
     @Test
+    fun a_count_that_goes_back_ends_the_pause_row() {
+        val twice = fed(steady(8, gapMs = 250, step = 25)).read(225, 5_000).read(250, 8_250)
+        val third = twice.read(240, 8_400).read(265, 8_650).read(290, 11_900)
+        assertEquals(twice.copy(last = ProgressSample(11_900, 290), pauses = 1), third)
+    }
+
+    @Test
     fun etaMs_is_the_time_left_at_the_speed() {
         assertNull(fed(steady(7)).etaMs(count = 700, total = 10_000))
         val seeded = fed(steady(8))
