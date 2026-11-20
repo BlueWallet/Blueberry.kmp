@@ -163,7 +163,7 @@ internal fun SpentBanner(
         ) {
             SheetIconCircle(SheetGlyph.Warn, SheetPalette.amber, SheetPalette.amberFill, 30.dp)
             SheetText(text, 15.sp, SheetPalette.amber, FontWeight.Bold, Modifier.weight(1f))
-            if (onOpenTx != null) SheetPillAction("Open transaction", onOpenTx)
+            if (onOpenTx != null) SheetPillAction("Open spending tx", onOpenTx)
         }
     }
 }

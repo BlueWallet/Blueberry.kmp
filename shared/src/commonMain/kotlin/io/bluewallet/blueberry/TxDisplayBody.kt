@@ -27,7 +27,7 @@ private fun txCoinCard(
         frozen = frozen,
         spent = output.spent,
         spentTxid = output.spentTxid,
-        actions = if (output.spent) listOf("Open transaction") else listOf(if (output.frozen) "Frozen" else "Freeze", "Open coin"),
+        actions = if (output.spent) listOf("Open spending tx") else listOf(if (output.frozen) "Frozen" else "Freeze", "Open coin"),
     )
 }
 

@@ -346,7 +346,7 @@ private fun TxCoinActions(
                     if (!enabled) return@Pressable
                     when (action) {
                         "Open coin" -> host.onOpenCoin(coin.outpoint)
-                        "Open transaction" -> coin.spentTxid?.let(host.onOpenTx)
+                        "Open spending tx" -> coin.spentTxid?.let(host.onOpenTx)
                         "Freeze" -> host.onFreeze(coin.outpoint, true)
                         "Frozen" -> host.onFreeze(coin.outpoint, false)
                     }
@@ -354,7 +354,7 @@ private fun TxCoinActions(
                 enabled = enabled,
                 role = Role.Button,
             ) {
-                val link = action == "Open transaction"
+                val link = action == "Open spending tx"
                 Text(
                     action,
                     color =
