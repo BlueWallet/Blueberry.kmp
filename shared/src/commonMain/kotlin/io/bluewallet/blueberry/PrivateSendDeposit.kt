@@ -118,14 +118,14 @@ internal fun PrivateSendDeposit(
         )
         Text(
             text =
-                "This will create multi-hop transaction routed through 3rd parties to unlink your source funds from destination",
+                "This creates a multi-hop transaction routed through third parties, to unlink your source funds from the destination.",
             color = BwColors.InkSecondary,
             fontFamily = BwFontFamily,
             fontSize = BwType.CaptionSize,
         )
         PrivateSendTermsRow(checked = agreed, onCheckedChange = { agreed = it })
         PillButton(
-            text = "Private Broadcast",
+            text = "Send privately",
             onClick = onBroadcast,
             modifier = Modifier.fillMaxWidth(),
             enabled = privateBroadcastEnabled(agreed),

@@ -187,7 +187,7 @@ private fun OriginBody(
         FactTile("Age", origin.age, Modifier.weight(1f))
         FactTile("Spend size", origin.spendSize, Modifier.weight(1f))
     }
-    SheetPillAction("Open transaction", onOpenTx, Modifier.fillMaxWidth())
+    SheetPillAction("Open funding tx", onOpenTx, Modifier.fillMaxWidth())
 }
 
 @Composable

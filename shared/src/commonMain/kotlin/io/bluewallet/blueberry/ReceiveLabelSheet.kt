@@ -46,7 +46,7 @@ internal fun ReceiveLabelSheet(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
-            text = "Label",
+            text = "Address label",
             color = BwColors.InkSecondary,
             fontFamily = BwFontFamily,
             fontSize = BwType.CaptionSize,

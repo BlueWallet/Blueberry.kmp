@@ -166,7 +166,7 @@ class TxDisplayTest {
                 .sub,
         )
         assertEquals(
-            "Frozen",
+            "Unfreeze",
             frozen.detail.coins
                 .single()
                 .actions

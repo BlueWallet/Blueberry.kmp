@@ -295,7 +295,7 @@ private class OpenSendHost(
 )
 
 /**
- * An unconfirmed payment: its latest broadcast status, Send again when this device signed it, Show PSBT
+ * An unconfirmed payment: its latest broadcast status, Broadcast again when this device signed it, Show PSBT
  * when another device signs it, and Forget.
  */
 @Composable
@@ -339,7 +339,7 @@ private fun OpenSendActions(
         )
         if (signed && !sending) {
             TintedPillButton(
-                text = "Send again",
+                text = "Broadcast again",
                 onClick = {
                     val destination =
                         db.sends.get(txid)?.destination ?: db.privateSends
@@ -410,7 +410,7 @@ private fun toggleLabelEdit(
 
 private fun openSendExplainer(signed: Boolean): String =
     if (signed) {
-        "This payment was given to Bitcoin nodes and may still confirm. Send again gives the same transaction to more nodes. " +
+        "This payment was given to Bitcoin nodes and may still confirm. Broadcast again gives the same transaction to more nodes. " +
             "Forgetting it does not pull it back, and a new spend of these coins conflicts with it."
     } else {
         "This payment waits to be signed and published from another device. Show PSBT to scan it there. " +

@@ -340,7 +340,7 @@ private fun TxCoinActions(
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         coin.actions.forEach { action ->
-            val freeze = action == "Freeze" || action == "Frozen"
+            val freeze = action == "Freeze" || action == "Unfreeze"
             Pressable(
                 onClick = {
                     if (!enabled) return@Pressable
@@ -348,7 +348,7 @@ private fun TxCoinActions(
                         "Open coin" -> host.onOpenCoin(coin.outpoint)
                         "Open spending tx" -> coin.spentTxid?.let(host.onOpenTx)
                         "Freeze" -> host.onFreeze(coin.outpoint, true)
-                        "Frozen" -> host.onFreeze(coin.outpoint, false)
+                        "Unfreeze" -> host.onFreeze(coin.outpoint, false)
                     }
                 },
                 enabled = enabled,
