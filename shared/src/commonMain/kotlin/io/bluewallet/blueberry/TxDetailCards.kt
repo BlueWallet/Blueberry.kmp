@@ -340,21 +340,21 @@ private fun TxCoinActions(
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         coin.actions.forEach { action ->
-            val freeze = action == "Freeze" || action == "Frozen"
+            val freeze = action == "Freeze" || action == "Unfreeze"
             Pressable(
                 onClick = {
                     if (!enabled) return@Pressable
                     when (action) {
                         "Open coin" -> host.onOpenCoin(coin.outpoint)
-                        "Open transaction" -> coin.spentTxid?.let(host.onOpenTx)
+                        "Open spending tx" -> coin.spentTxid?.let(host.onOpenTx)
                         "Freeze" -> host.onFreeze(coin.outpoint, true)
-                        "Frozen" -> host.onFreeze(coin.outpoint, false)
+                        "Unfreeze" -> host.onFreeze(coin.outpoint, false)
                     }
                 },
                 enabled = enabled,
                 role = Role.Button,
             ) {
-                val link = action == "Open transaction"
+                val link = action == "Open spending tx"
                 Text(
                     action,
                     color =

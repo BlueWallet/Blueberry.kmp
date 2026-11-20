@@ -194,7 +194,7 @@ private fun LabelField(
 ) {
     var draft by remember(model.outpoint) { mutableStateOf(model.label) }
     SheetLabelField(
-        title = "Label",
+        title = "Coin label",
         placeholder = model.labelPlaceholder,
         draft = draft,
         onDraftChange = { draft = it },

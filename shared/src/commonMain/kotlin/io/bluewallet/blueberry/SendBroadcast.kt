@@ -34,7 +34,7 @@ fun broadcastStatus(snap: BroadcastSnapshot): BroadcastStatusUi =
                 "Sent",
                 "Given to Bitcoin nodes",
                 "No node confirmed it took it, but one may still pass it on, so its coins stay locked until it confirms. " +
-                    "Send again gives the same transaction to other nodes.",
+                    "Broadcast again gives the same transaction to other nodes.",
                 BroadcastTone.Sent,
                 resend = true,
             )
@@ -49,7 +49,7 @@ fun broadcastStatus(snap: BroadcastSnapshot): BroadcastStatusUi =
             BroadcastStatusUi(
                 "Not sent yet",
                 snap.error?.takeIf { it.isNotBlank() } ?: "No node accepted it.",
-                "No node kept this transaction. Retry sends the same one again.",
+                "No node kept this transaction. Broadcast again gives the same transaction to nodes once more.",
                 BroadcastTone.Failed,
             )
         else -> workingStatus(snap)

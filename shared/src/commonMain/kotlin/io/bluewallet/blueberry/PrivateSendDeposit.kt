@@ -91,7 +91,7 @@ internal fun PrivateSendDeposit(
                     if (status.resend) SendAgainButton(finish.onRetry)
                 }
                 BroadcastTone.Failed ->
-                    PillButton(text = "Retry", onClick = finish.onRetry, modifier = Modifier.fillMaxWidth(), pressable = true)
+                    PillButton(text = "Broadcast again", onClick = finish.onRetry, modifier = Modifier.fillMaxWidth(), pressable = true)
                 BroadcastTone.Working -> WorkingBroadcastActions(finish.onStop)
             }
         }
@@ -118,14 +118,15 @@ internal fun PrivateSendDeposit(
         )
         Text(
             text =
-                "This will create multi-hop transaction routed through 3rd parties to unlink your source funds from destination",
+                "This creates a multi-hop transaction routed through third parties, to break the on-chain link between your source funds " +
+                    "and the destination. RocketX sees both.",
             color = BwColors.InkSecondary,
             fontFamily = BwFontFamily,
             fontSize = BwType.CaptionSize,
         )
         PrivateSendTermsRow(checked = agreed, onCheckedChange = { agreed = it })
         PillButton(
-            text = "Private Broadcast",
+            text = "Send privately",
             onClick = onBroadcast,
             modifier = Modifier.fillMaxWidth(),
             enabled = privateBroadcastEnabled(agreed),

@@ -95,7 +95,7 @@ internal fun WorkingBroadcastActions(onStop: (() -> Unit)?) {
     }
 }
 
-/** Done, plus Send again while no node has confirmed the transaction. */
+/** Done, plus Broadcast again while no node has confirmed the transaction. */
 @Composable
 private fun SentBroadcastActions(
     finish: BroadcastFinishActions,
@@ -110,7 +110,7 @@ private fun SentBroadcastActions(
 /** Gives the same signed transaction to nodes again. Shared by Send and Private Send. */
 @Composable
 internal fun SendAgainButton(onRetry: () -> Unit) {
-    PlainPillButton(text = "Send again", onClick = onRetry, modifier = Modifier.fillMaxWidth())
+    PlainPillButton(text = "Broadcast again", onClick = onRetry, modifier = Modifier.fillMaxWidth())
 }
 
 /** Stops a broadcast before any node has it. Shared by Send and Private Send. */
@@ -123,7 +123,7 @@ internal fun StopSendingButton(onStop: () -> Unit) {
 private fun FailedBroadcastActions(actions: SendBroadcastActions) {
     val forget = actions.onForget
     Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
-        TintedPillButton(text = "Retry", onClick = actions.finish.onRetry, modifier = Modifier.fillMaxWidth())
+        TintedPillButton(text = "Broadcast again", onClick = actions.finish.onRetry, modifier = Modifier.fillMaxWidth())
         if (forget != null) {
             PlainPillButton(
                 text = "Forget this transaction",
