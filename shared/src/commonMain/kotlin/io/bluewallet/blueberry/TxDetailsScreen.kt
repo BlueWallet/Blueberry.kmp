@@ -62,6 +62,7 @@ fun TxDetailsScreen(
     db: Database,
     txid: String,
     onBack: () -> Unit,
+    labelScope: CoroutineScope,
     onShowPsbt: () -> Unit = {},
     coinNav: CoinSheetNav = CoinSheetNav(onSend = {}, onOpenTx = {}),
 ) {
@@ -71,6 +72,7 @@ fun TxDetailsScreen(
         db,
         txid,
         onBack,
+        labelScope,
         onShowPsbt,
         onOpenCoin = { coinKey = it },
         onOpenTx = { other -> if (other != txid) coinNav.onOpenTx(other) },
@@ -96,6 +98,7 @@ private fun TxDetailsContent(
     db: Database,
     txid: String,
     onBack: () -> Unit,
+    labelScope: CoroutineScope,
     onShowPsbt: () -> Unit,
     onOpenCoin: (String) -> Unit,
     onOpenTx: (String) -> Unit,
@@ -117,7 +120,7 @@ private fun TxDetailsContent(
         remember {
             AddressLabelDrafts { address, text ->
                 if (setAddressLabel(db, runtime.wallet, runtime.walletTxsStore, address, text)) {
-                    uploadLabels(scope, db)
+                    uploadLabels(labelScope, db)
                 }
             }
         }

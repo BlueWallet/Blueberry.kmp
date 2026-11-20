@@ -212,6 +212,7 @@ internal fun WalletNavHost(
                     db = db,
                     txid = route.txid,
                     onBack = backFrom(entry),
+                    labelScope = scope,
                     onShowPsbt = { navController.navigate(StoredPsbtRoute(route.txid)) { launchSingleTop = true } },
                     coinNav =
                         CoinSheetNav(
