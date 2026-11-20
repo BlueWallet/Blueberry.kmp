@@ -53,6 +53,7 @@ class TxDisplayTest {
         assertEquals("New coin", coin.title)
         assertEquals("Not linked to your other coins", coin.sub)
         assertEquals("Receive address #14 · first payment to it", coin.addressNote)
+        assertEquals("", coin.addressLabel)
         assertEquals(listOf("Freeze", "Open coin"), coin.actions)
         assertEquals(
             listOf("Paid to a fresh address", "The sender can follow this coin", "Found without asking a server"),
@@ -71,6 +72,15 @@ class TxDisplayTest {
         assertEquals(TxGlyph.Received, screen.list.glyph)
         assertEquals(TxBadge.None, screen.list.badge)
         assertEquals(TxListSubtitle.Noted("17:38", TxListLeadTone.Secondary, "No label"), screen.list.subtitle)
+    }
+
+    @Test
+    fun coin_card_carries_the_address_label() {
+        val input = received()
+        val labeled = input.outputs.first().copy(addressLabel = "Cafe tips")
+        val coin = txScreen(input.copy(outputs = listOf(labeled) + input.outputs.drop(1))).detail.coins.single()
+        assertEquals("Cafe tips", coin.addressLabel)
+        assertEquals(labeled.address, coin.address)
     }
 
     @Test

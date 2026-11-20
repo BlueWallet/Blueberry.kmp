@@ -43,6 +43,8 @@ data class TxDisplayOutput(
     val addressIndex: Int? = null,
     val addressUseCount: Int = 1,
     val label: String = "",
+    /** Label for the output's address, not the coin name. */
+    val addressLabel: String = "",
     val frozen: Boolean = false,
     val spent: Boolean = false,
     val spentTxid: String? = null,
@@ -147,6 +149,7 @@ data class TxCoinCard(
     val subTone: TxTone,
     val amountSats: Long,
     val address: String?,
+    val addressLabel: String,
     val addressNote: String,
     val frozen: Boolean,
     val spent: Boolean,

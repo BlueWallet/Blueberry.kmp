@@ -22,6 +22,7 @@ private fun txCoinCard(
         subTone = if (frozen) TxTone.Blue else TxTone.Neutral,
         amountSats = output.valueSat,
         address = output.address,
+        addressLabel = output.addressLabel.trim(),
         addressNote = addressNote(chain, output),
         frozen = frozen,
         spent = output.spent,

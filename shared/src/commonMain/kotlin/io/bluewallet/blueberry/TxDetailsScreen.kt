@@ -113,6 +113,22 @@ private fun TxDetailsContent(
     }
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
+    val addressLabels =
+        remember {
+            AddressLabelDrafts { address, text ->
+                if (setAddressLabel(db, runtime.wallet, runtime.walletTxsStore, address, text)) {
+                    uploadLabels(scope, db)
+                }
+            }
+        }
+    val latestOnBack by rememberUpdatedState(onBack)
+    DisposableEffect(addressLabels) {
+        onDispose { addressLabels.flush() }
+    }
+    val leave = {
+        addressLabels.flush()
+        latestOnBack()
+    }
     val row = snap.txs.find { it.txid == txid }
     val tip = db.headers.tip()?.height
     val blockStats = rememberBlockStats(db, txid, row?.height)
@@ -161,7 +177,7 @@ private fun TxDetailsContent(
                                 draft = draft,
                                 suggestions = txLabelSuggestions(snap, screen.detail.direction),
                                 privateFacts = privateFacts(db, txid),
-                                onBack = onBack,
+                                onBack = leave,
                                 onCopy = {
                                     clipboard.setText(AnnotatedString(txid))
                                     copied = true
@@ -179,13 +195,20 @@ private fun TxDetailsContent(
                                         setUtxoFrozen(db, wallet, runtime.walletTxsStore, key, frozen)
                                     }
                                 },
-                                onOpenCoin = onOpenCoin,
-                                onOpenTx = onOpenTx,
+                                addressLabels = addressLabels,
+                                onOpenCoin = { key ->
+                                    addressLabels.flush()
+                                    onOpenCoin(key)
+                                },
+                                onOpenTx = { other ->
+                                    addressLabels.flush()
+                                    onOpenTx(other)
+                                },
                                 onExplorer = { explorer = true },
                                 sendActions = {
                                     if (screen.detail.outcome == TxOutcome.None && row.height == 0) {
                                         OpenSendActions(
-                                            OpenSendHost(db, runtime, scope, onForgotten = onBack, onShowPsbt = onShowPsbt),
+                                            OpenSendHost(db, runtime, scope, onForgotten = leave, onShowPsbt = onShowPsbt),
                                             row,
                                             snap,
                                         )
@@ -204,7 +227,7 @@ private fun TxDetailsContent(
                     ?.header
                     ?.subtitle
                     ?.ifEmpty { null },
-            onBack = onBack,
+            onBack = leave,
             showBarTitle = true,
             menu =
                 listOf(

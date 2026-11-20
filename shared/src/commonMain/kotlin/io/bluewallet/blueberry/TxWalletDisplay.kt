@@ -82,6 +82,7 @@ internal class TxFacts(
     val broadcast: Map<String, String>,
     val stored: Map<String, StoredTx>,
     val feeRateSatPerVb: Double?,
+    val addressLabels: Map<String, String>,
 )
 
 private fun txFacts(query: TxQuery): TxFacts {
@@ -117,6 +118,7 @@ private fun txFacts(query: TxQuery): TxFacts {
         broadcast = db.broadcastVia.list().associate { it.txid to it.via },
         stored = stored,
         feeRateSatPerVb = loadSendFeeRate(db),
+        addressLabels = db.addressLabels.list().associate { it.address to it.label },
     )
 }
 

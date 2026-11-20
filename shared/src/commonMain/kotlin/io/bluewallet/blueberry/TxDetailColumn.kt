@@ -38,6 +38,7 @@ internal class TxDetailHost(
     val onEdit: () -> Unit,
     val onDraft: (String) -> Unit,
     val onFreeze: (String, Boolean) -> Unit,
+    val addressLabels: AddressLabelDrafts,
     val onOpenCoin: (String) -> Unit,
     val onOpenTx: (String) -> Unit,
     val onExplorer: () -> Unit,

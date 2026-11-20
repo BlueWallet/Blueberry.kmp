@@ -260,7 +260,13 @@ internal fun TxFlowCard(
             nodes.second,
             detailFlowDescription(flow),
             openCoin = openKey,
-            onCoin = { key -> openKey = if (openKey == key) null else key },
+            onCoin = { key ->
+                val next = if (openKey == key) null else key
+                if (next != openKey) {
+                    host.addressLabels.flush()
+                    openKey = next
+                }
+            },
         )
         val note = flow.note
         if (note != null) Text(note, color = BwColors.InkSecondary, fontFamily = BwFontFamily, fontSize = 12.sp)
@@ -304,6 +310,24 @@ private fun TxCoinBlock(
         val address = coin.address
         if (address != null) AddressGroups(address, Modifier.fillMaxWidth())
         Text(coin.addressNote, color = BwColors.InkSecondary, fontFamily = BwFontFamily, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        if (address != null) {
+            var draft by remember(address) { mutableStateOf(coin.addressLabel) }
+            var baseline by remember(address) { mutableStateOf(coin.addressLabel) }
+            if (coin.addressLabel != baseline) {
+                draft = adoptStoredLabel(draft, baseline, coin.addressLabel)
+                baseline = coin.addressLabel
+            }
+            SheetLabelField(
+                title = "Address label",
+                placeholder = ADDRESS_LABEL_PLACEHOLDER,
+                draft = draft,
+                onDraftChange = { draft = it },
+                saved = coin.addressLabel,
+                stateKey = address,
+                actions = host.addressLabels.actions(address),
+                fill = txCoinActionFill(),
+            )
+        }
         TxCoinActions(coin, enabled, host)
     }
 }
