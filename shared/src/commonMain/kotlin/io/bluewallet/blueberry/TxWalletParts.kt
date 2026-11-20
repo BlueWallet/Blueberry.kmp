@@ -37,6 +37,7 @@ internal fun displayOutputs(
             change = watch?.change == true || held?.isChange == true || graphCoin?.isChange == true,
             address = address,
             addressIndex = watch?.index ?: pathIndex(held?.path),
+            addressLabel = facts.addressLabels[address.orEmpty()].orEmpty().trim(),
             addressUseCount = addressUses(facts, script, key),
             label = facts.names[key].orEmpty(),
             frozen = key in facts.frozen,

@@ -204,6 +204,13 @@ private fun LabelField(
     )
 }
 
+/** True when [draft] still needs a save: it is neither the stored [saved] value nor an outstanding [lastSaved]. */
+internal fun sheetLabelDirty(
+    draft: String,
+    saved: String,
+    lastSaved: String?,
+): Boolean = draft.trim().let { it != saved && it != lastSaved }
+
 /** Inline label input: shows [draft], saves the trimmed value on blur, and reports unsaved text via [actions]. */
 @Suppress("LongParameterList")
 @Composable
@@ -217,8 +224,8 @@ internal fun SheetLabelField(
     actions: CoinLabelActions,
     fill: Color = SheetPalette.card,
 ) {
-    var lastSaved by remember(stateKey) { mutableStateOf<String?>(null) }
-    val dirty = draft.trim().let { it != saved && it != lastSaved }
+    var lastSaved by remember(stateKey, saved) { mutableStateOf<String?>(null) }
+    val dirty = sheetLabelDirty(draft, saved, lastSaved)
     SideEffect { actions.onDraft(if (dirty) draft.trim() else null) }
     val focus = LocalFocusManager.current
     var focused by remember(stateKey) { mutableStateOf(false) }
