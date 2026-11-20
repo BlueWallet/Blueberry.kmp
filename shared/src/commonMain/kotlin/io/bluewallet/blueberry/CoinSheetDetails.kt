@@ -39,11 +39,16 @@ internal fun DetailsCard(
     origin: OriginSheet?,
     onCopy: (String) -> Unit,
     onOpenTx: (String) -> Unit,
+    addressLabel: CoinLabelActions,
 ) {
     if (address == null && origin == null) return
     SheetCard {
         if (address != null) {
-            Accordion("Address", address.collapsed) { AddressBody(address, onCopy) }
+            // Draft lives here so collapsing the accordion does not drop unsaved text.
+            var draft by remember(address.address) { mutableStateOf(address.label) }
+            Accordion("Address", address.collapsed) {
+                AddressBody(address, onCopy, draft, { draft = it }, addressLabel)
+            }
         }
         if (address != null && origin != null) SheetDivider()
         if (origin != null) {
@@ -121,6 +126,9 @@ private fun QuadText(
 private fun AddressBody(
     address: AddressSheet,
     onCopy: (String) -> Unit,
+    labelDraft: String,
+    onLabelDraft: (String) -> Unit,
+    addressLabel: CoinLabelActions,
 ) {
     CopyableArea(label = "Copy address", onCopy = { onCopy(address.address) }) {
         QuadText(address.address)
@@ -143,6 +151,15 @@ private fun AddressBody(
     if (address.rawPath.isNotEmpty()) {
         Text(address.rawPath, color = SheetPalette.secondary, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
     }
+    SheetLabelField(
+        title = "Label",
+        placeholder = ADDRESS_LABEL_PLACEHOLDER,
+        draft = labelDraft,
+        onDraftChange = onLabelDraft,
+        saved = address.label,
+        stateKey = address.address,
+        actions = addressLabel,
+    )
 }
 
 @Composable

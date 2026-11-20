@@ -130,9 +130,29 @@ class CoinSheetModelTest {
         assertNotNull(hint)
         assertEquals("", hint.label)
         assertEquals("Rent", hint.labelPlaceholder)
+        assertEquals("Rent", hint.address?.label)
         assertNotNull(own)
         assertEquals("Mine", own.label)
         assertEquals("Rent", own.labelPlaceholder)
+        assertEquals("Rent", own.address?.label)
+    }
+
+    @Test
+    fun address_section_label_is_the_address_label_not_the_coin_name() {
+        val named = utxo("ff", 40_000, name = "Mine").copy(addressLabel = "Rent")
+        val blank = utxo("ee", 50_000, name = "Mine")
+        val rows = listOf(named, blank)
+        val keys = rows.associate { it.key to it.key }
+        val control = buildCoinControlSnapshot(rows, CoinLinkage(keys, keys), emptySet(), null)
+        val snap = WalletTxsSnapshot(utxos = rows, coinLinkGraph = CoinLinkGraph.Empty)
+        val withLabel = buildCoinSheetModel(CoinSheetRequest(named.key, snap, control, emptyMap(), 0, null, false))
+        val noLabel = buildCoinSheetModel(CoinSheetRequest(blank.key, snap, control, emptyMap(), 0, null, false))
+        assertNotNull(withLabel)
+        assertEquals("Mine", withLabel.label)
+        assertEquals("Rent", withLabel.address?.label)
+        assertNotNull(noLabel)
+        assertEquals("Mine", noLabel.label)
+        assertEquals("", noLabel.address?.label)
     }
 
     @Test

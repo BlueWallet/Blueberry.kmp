@@ -116,6 +116,9 @@ fun showsAddressLabelSheet(
 
 fun canSaveAddressLabel(draft: String): Boolean = draft.isNotBlank()
 
+/** Placeholder for an address label field. Same wording on Receive and the coin sheet. */
+const val ADDRESS_LABEL_PLACEHOLDER = "Savings"
+
 fun showsReceiveTypePicker(db: Database): Boolean =
     runCatching { parseWalletSecret(loadWalletSecret(db)).kind == WalletSecretKind.MNEMONIC }
         .getOrDefault(false)
