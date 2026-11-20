@@ -118,7 +118,8 @@ internal fun PrivateSendDeposit(
         )
         Text(
             text =
-                "This creates a multi-hop transaction routed through third parties, to unlink your source funds from the destination.",
+                "This creates a multi-hop transaction routed through third parties, to break the on-chain link between your source funds " +
+                    "and the destination. RocketX sees both.",
             color = BwColors.InkSecondary,
             fontFamily = BwFontFamily,
             fontSize = BwType.CaptionSize,
