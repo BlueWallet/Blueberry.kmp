@@ -123,6 +123,7 @@ fun showsReceiveTypePicker(db: Database): Boolean =
     runCatching { parseWalletSecret(loadWalletSecret(db)).kind == WalletSecretKind.MNEMONIC }
         .getOrDefault(false)
 
+@Suppress("CyclomaticComplexMethod", "LongMethod")
 @Composable
 fun ReceiveScreen(
     runtime: PeersRuntime,
@@ -252,8 +253,9 @@ fun ReceiveScreen(
                     dismissText = if (editing) "Cancel" else "Back to home",
                     onSave = {
                         val target = address ?: return@ReceiveLabelSheet
-                        setAddressLabel(db, runtime.wallet, runtime.walletTxsStore, target, draft)
-                        uploadLabels(scope, db)
+                        if (setAddressLabel(db, runtime.wallet, runtime.walletTxsStore, target, draft)) {
+                            uploadLabels(scope, db)
+                        }
                         label = db.addressLabels.get(target)
                         editing = false
                     },

@@ -45,7 +45,7 @@ internal fun DetailsCard(
     SheetCard {
         if (address != null) {
             // Draft lives here so collapsing the accordion does not drop unsaved text.
-            var draft by remember(address.address) { mutableStateOf(address.label) }
+            var draft by remember(address.address, address.label) { mutableStateOf(address.label) }
             Accordion("Address", address.collapsed) {
                 AddressBody(address, onCopy, draft, { draft = it }, addressLabel)
             }
@@ -157,7 +157,7 @@ private fun AddressBody(
         draft = labelDraft,
         onDraftChange = onLabelDraft,
         saved = address.label,
-        stateKey = address.address,
+        stateKey = "${address.address}\u0000${address.label}",
         actions = addressLabel,
         fill = SheetPalette.tile,
     )
