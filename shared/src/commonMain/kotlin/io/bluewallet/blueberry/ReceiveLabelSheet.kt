@@ -57,7 +57,7 @@ internal fun ReceiveLabelSheet(
             onValueChange = onDraft,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            placeholder = { Text("Savings") },
+            placeholder = { Text(ADDRESS_LABEL_PLACEHOLDER) },
         )
         PillButton(
             text = "Save",

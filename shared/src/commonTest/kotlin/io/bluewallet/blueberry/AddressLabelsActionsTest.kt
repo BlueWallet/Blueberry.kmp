@@ -11,7 +11,9 @@ import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.addressFromOutputScript
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class AddressLabelsActionsTest {
     @Test
@@ -34,9 +36,38 @@ class AddressLabelsActionsTest {
         assertEquals("1", db.keyValue.get(LABELS_DIRTY_KEY))
         assertEquals("donations", store.labelOfOnlyTx())
 
-        setAddressLabel(db, null, store, address, "   ")
+        assertTrue(setAddressLabel(db, null, store, address, "   "))
         assertNull(db.addressLabels.get(address))
         assertNull(store.labelOfOnlyTx())
+        db.close()
+    }
+
+    @Test
+    fun set_is_noop_when_stored_label_already_matches() {
+        val db = createSqliteDatabase(":memory:")
+        val store = createWalletTxsStore()
+        val address = "bc1qnoop"
+
+        assertFalse(setAddressLabel(db, null, store, address, "   "))
+        assertNull(db.addressLabels.get(address))
+        assertNull(db.keyValue.get(LABELS_DIRTY_KEY))
+
+        assertTrue(setAddressLabel(db, null, store, address, "  donations  "))
+        assertEquals("donations", db.addressLabels.get(address))
+        assertEquals("1", db.keyValue.get(LABELS_DIRTY_KEY))
+
+        db.keyValue.set(LABELS_DIRTY_KEY, "0")
+        assertFalse(setAddressLabel(db, null, store, address, " donations "))
+        assertEquals("donations", db.addressLabels.get(address))
+        assertEquals("0", db.keyValue.get(LABELS_DIRTY_KEY))
+
+        assertTrue(setAddressLabel(db, null, store, address, ""))
+        assertNull(db.addressLabels.get(address))
+        assertEquals("1", db.keyValue.get(LABELS_DIRTY_KEY))
+        db.keyValue.set(LABELS_DIRTY_KEY, "0")
+        assertFalse(setAddressLabel(db, null, store, address, "  "))
+        assertNull(db.addressLabels.get(address))
+        assertEquals("0", db.keyValue.get(LABELS_DIRTY_KEY))
         db.close()
     }
 }

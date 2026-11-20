@@ -54,10 +54,12 @@ import io.bluewallet.blueberry.ui.LocalSheetScrollEnabled
 import io.bluewallet.blueberry.ui.PlatformSheetHeader
 
 /** What the sheet can ask its host to do. */
+@Suppress("LongParameterList")
 class CoinSheetActions(
     val onClose: () -> Unit,
     val onCopy: (String) -> Unit,
     val label: CoinLabelActions,
+    val addressLabel: CoinLabelActions,
     val onFreeze: (Boolean) -> Unit,
     val onSend: () -> Unit,
     val onOpenTx: (String) -> Unit,
@@ -153,7 +155,7 @@ private fun SheetBody(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { SpendCard(model.spendRows) }
         }
         ActionsCard(model, actions.onFreeze, actions.onSend)
-        DetailsCard(model.address, model.origin, actions.onCopy, actions.onOpenTx)
+        DetailsCard(model.address, model.origin, actions.onCopy, actions.onOpenTx, actions.addressLabel)
     }
 }
 
@@ -191,18 +193,42 @@ private fun LabelField(
     actions: CoinLabelActions,
 ) {
     var draft by remember(model.outpoint) { mutableStateOf(model.label) }
-    var lastSaved by remember(model.outpoint) { mutableStateOf<String?>(null) }
-    val dirty = draft.trim().let { it != model.label && it != lastSaved }
+    SheetLabelField(
+        title = "Label",
+        placeholder = model.labelPlaceholder,
+        draft = draft,
+        onDraftChange = { draft = it },
+        saved = model.label,
+        stateKey = model.outpoint,
+        actions = actions,
+    )
+}
+
+/** Inline label input: shows [draft], saves the trimmed value on blur, and reports unsaved text via [actions]. */
+@Suppress("LongParameterList")
+@Composable
+internal fun SheetLabelField(
+    title: String,
+    placeholder: String,
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    saved: String,
+    stateKey: String,
+    actions: CoinLabelActions,
+    fill: Color = SheetPalette.card,
+) {
+    var lastSaved by remember(stateKey) { mutableStateOf<String?>(null) }
+    val dirty = draft.trim().let { it != saved && it != lastSaved }
     SideEffect { actions.onDraft(if (dirty) draft.trim() else null) }
     val focus = LocalFocusManager.current
-    var focused by remember { mutableStateOf(false) }
+    var focused by remember(stateKey) { mutableStateOf(false) }
     val shape = RoundedCornerShape(18.dp)
     val style = TextStyle(color = SheetPalette.text, fontFamily = BwFontFamily, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        SheetText("Label", 13.sp)
+        SheetText(title, 13.sp)
         BasicTextField(
             value = draft,
-            onValueChange = { draft = it },
+            onValueChange = onDraftChange,
             singleLine = true,
             textStyle = style,
             cursorBrush = SolidColor(SheetPalette.accent),
@@ -222,12 +248,12 @@ private fun LabelField(
                         Modifier
                             .fillMaxWidth()
                             .heightIn(min = 54.dp)
-                            .background(SheetPalette.card, shape)
+                            .background(fill, shape)
                             .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.weight(1f)) {
-                        if (draft.isEmpty()) SheetText(model.labelPlaceholder, 16.sp)
+                        if (draft.isEmpty()) SheetText(placeholder, 16.sp)
                         inner()
                     }
                 }

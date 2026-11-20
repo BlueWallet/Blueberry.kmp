@@ -115,7 +115,13 @@ fun addressSheet(
     val chips = derivationChips(row.path) ?: emptyList()
     val name = derivationAddressName(row.path, row.isChange)
     val used = if (useCount == 1) "used once" else "used $useCount times"
-    return AddressSheet(collapsed = "$name · $used", address = address, chips = chips, rawPath = row.path.orEmpty())
+    return AddressSheet(
+        collapsed = "$name · $used",
+        address = address,
+        chips = chips,
+        rawPath = row.path.orEmpty(),
+        label = row.addressLabel?.trim().orEmpty(),
+    )
 }
 
 data class AddressSheet(
@@ -123,6 +129,8 @@ data class AddressSheet(
     val address: String,
     val chips: List<PathChipModel>,
     val rawPath: String,
+    /** Saved address label, independent of the coin's own name. */
+    val label: String,
 )
 
 fun originSheet(

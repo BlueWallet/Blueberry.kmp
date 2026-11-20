@@ -46,12 +46,21 @@ internal fun CoinSheetOverlay(
     key(outpoint) {
         val coin =
             remember {
-                OpenCoin(outpoint, scope) { text ->
-                    runtime.wallet?.let { wallet ->
-                        setUtxoName(db, wallet, runtime.walletTxsStore, outpoint, text)
-                        uploadLabels(scope, db)
-                    }
-                }
+                OpenCoin(
+                    outpoint,
+                    scope,
+                    saveLabel = { text ->
+                        runtime.wallet?.let { wallet ->
+                            setUtxoName(db, wallet, runtime.walletTxsStore, outpoint, text)
+                            uploadLabels(scope, db)
+                        }
+                    },
+                    saveAddressLabel = { address, text ->
+                        if (setAddressLabel(db, runtime.wallet, runtime.walletTxsStore, address, text)) {
+                            uploadLabels(scope, db)
+                        }
+                    },
+                )
             }
         val dismiss = {
             coin.flushLabel()
@@ -71,14 +80,33 @@ private class OpenCoin(
     val outpoint: String,
     val handoff: CoroutineScope,
     val saveLabel: (String) -> Unit,
+    val saveAddressLabel: (String, String) -> Unit,
 ) {
     var unsavedLabel: String? = null
+    var unsavedAddressLabel: Pair<String, String>? = null
 
     fun flushLabel() {
         unsavedLabel?.let(saveLabel)
         unsavedLabel = null
+        unsavedAddressLabel?.let { (address, text) -> saveAddressLabel(address, text) }
+        unsavedAddressLabel = null
     }
 }
+
+private fun addressLabelActions(
+    coin: OpenCoin,
+    address: String?,
+): CoinLabelActions =
+    CoinLabelActions(
+        onSave = { text ->
+            val addr = coin.unsavedAddressLabel?.first ?: address
+            coin.unsavedAddressLabel = null
+            if (addr != null) coin.saveAddressLabel(addr, text)
+        },
+        onDraft = { draft ->
+            coin.unsavedAddressLabel = if (draft != null && address != null) address to draft else null
+        },
+    )
 
 @Composable
 private fun CoinSheetHost(
@@ -114,6 +142,7 @@ private fun CoinSheetHost(
             onClose = { close {} },
             onCopy = { clipboard.setText(AnnotatedString(it)) },
             label = CoinLabelActions(onSave = coin.saveLabel, onDraft = { coin.unsavedLabel = it }),
+            addressLabel = addressLabelActions(coin, model?.address?.address),
             onFreeze = { frozen ->
                 runtime.wallet?.let { wallet ->
                     setUtxoFrozen(db, wallet, runtime.walletTxsStore, outpoint, frozen)
