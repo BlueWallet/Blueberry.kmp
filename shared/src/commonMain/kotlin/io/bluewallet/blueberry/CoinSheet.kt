@@ -54,6 +54,7 @@ import io.bluewallet.blueberry.ui.LocalSheetScrollEnabled
 import io.bluewallet.blueberry.ui.PlatformSheetHeader
 
 /** What the sheet can ask its host to do. */
+@Suppress("LongParameterList")
 class CoinSheetActions(
     val onClose: () -> Unit,
     val onCopy: (String) -> Unit,
@@ -204,6 +205,7 @@ private fun LabelField(
 }
 
 /** Inline label input: shows [draft], saves the trimmed value on blur, and reports unsaved text via [actions]. */
+@Suppress("LongParameterList")
 @Composable
 internal fun SheetLabelField(
     title: String,
@@ -213,6 +215,7 @@ internal fun SheetLabelField(
     saved: String,
     stateKey: String,
     actions: CoinLabelActions,
+    fill: Color = SheetPalette.card,
 ) {
     var lastSaved by remember(stateKey) { mutableStateOf<String?>(null) }
     val dirty = draft.trim().let { it != saved && it != lastSaved }
@@ -245,7 +248,7 @@ internal fun SheetLabelField(
                         Modifier
                             .fillMaxWidth()
                             .heightIn(min = 54.dp)
-                            .background(SheetPalette.card, shape)
+                            .background(fill, shape)
                             .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

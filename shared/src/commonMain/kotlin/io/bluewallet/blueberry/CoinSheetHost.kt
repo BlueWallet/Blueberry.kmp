@@ -56,8 +56,9 @@ internal fun CoinSheetOverlay(
                         }
                     },
                     saveAddressLabel = { address, text ->
-                        setAddressLabel(db, runtime.wallet, runtime.walletTxsStore, address, text)
-                        uploadLabels(scope, db)
+                        if (setAddressLabel(db, runtime.wallet, runtime.walletTxsStore, address, text)) {
+                            uploadLabels(scope, db)
+                        }
                     },
                 )
             }
@@ -91,6 +92,21 @@ private class OpenCoin(
         unsavedAddressLabel = null
     }
 }
+
+private fun addressLabelActions(
+    coin: OpenCoin,
+    address: String?,
+): CoinLabelActions =
+    CoinLabelActions(
+        onSave = { text ->
+            val addr = coin.unsavedAddressLabel?.first ?: address
+            coin.unsavedAddressLabel = null
+            if (addr != null) coin.saveAddressLabel(addr, text)
+        },
+        onDraft = { draft ->
+            coin.unsavedAddressLabel = if (draft != null && address != null) address to draft else null
+        },
+    )
 
 @Composable
 private fun CoinSheetHost(
@@ -126,16 +142,7 @@ private fun CoinSheetHost(
             onClose = { close {} },
             onCopy = { clipboard.setText(AnnotatedString(it)) },
             label = CoinLabelActions(onSave = coin.saveLabel, onDraft = { coin.unsavedLabel = it }),
-            addressLabel =
-                CoinLabelActions(
-                    onSave = { text ->
-                        model?.address?.address?.let { addr -> coin.saveAddressLabel(addr, text) }
-                    },
-                    onDraft = { draft ->
-                        val addr = model?.address?.address
-                        coin.unsavedAddressLabel = if (draft != null && addr != null) addr to draft else null
-                    },
-                ),
+            addressLabel = addressLabelActions(coin, model?.address?.address),
             onFreeze = { frozen ->
                 runtime.wallet?.let { wallet ->
                     setUtxoFrozen(db, wallet, runtime.walletTxsStore, outpoint, frozen)

@@ -159,6 +159,7 @@ private fun AddressBody(
         saved = address.label,
         stateKey = address.address,
         actions = addressLabel,
+        fill = SheetPalette.tile,
     )
 }
 
