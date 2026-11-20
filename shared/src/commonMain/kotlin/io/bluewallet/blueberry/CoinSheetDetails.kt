@@ -45,7 +45,12 @@ internal fun DetailsCard(
     SheetCard {
         if (address != null) {
             // Draft lives here so collapsing the accordion does not drop unsaved text.
-            var draft by remember(address.address, address.label) { mutableStateOf(address.label) }
+            var draft by remember(address.address) { mutableStateOf(address.label) }
+            var baseline by remember(address.address) { mutableStateOf(address.label) }
+            if (address.label != baseline) {
+                draft = adoptStoredLabel(draft, baseline, address.label)
+                baseline = address.label
+            }
             Accordion("Address", address.collapsed) {
                 AddressBody(address, onCopy, draft, { draft = it }, addressLabel)
             }
@@ -157,7 +162,7 @@ private fun AddressBody(
         draft = labelDraft,
         onDraftChange = onLabelDraft,
         saved = address.label,
-        stateKey = "${address.address}\u0000${address.label}",
+        stateKey = address.address,
         actions = addressLabel,
         fill = SheetPalette.tile,
     )
@@ -199,3 +204,10 @@ private fun FactTile(
         SheetText(value, 15.sp, SheetPalette.text, FontWeight.Bold)
     }
 }
+
+/** If [draft] is still the last synced [baseline], take [stored]; otherwise keep the in-progress edit. */
+internal fun adoptStoredLabel(
+    draft: String,
+    baseline: String,
+    stored: String,
+): String = if (draft.trim() == baseline) stored else draft
