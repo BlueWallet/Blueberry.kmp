@@ -157,7 +157,7 @@ private fun AddressBody(
         Text(address.rawPath, color = SheetPalette.secondary, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
     }
     SheetLabelField(
-        title = "Label",
+        title = "Address label",
         placeholder = ADDRESS_LABEL_PLACEHOLDER,
         draft = labelDraft,
         onDraftChange = onLabelDraft,
