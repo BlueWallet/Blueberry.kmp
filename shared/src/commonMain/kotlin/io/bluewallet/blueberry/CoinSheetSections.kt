@@ -127,7 +127,7 @@ internal fun ActionsCard(
     }
 }
 
-/** Accent pill used for Open transaction. */
+/** Accent pill used for the coin sheet’s open-transaction links. */
 @Composable
 internal fun SheetPillAction(
     text: String,

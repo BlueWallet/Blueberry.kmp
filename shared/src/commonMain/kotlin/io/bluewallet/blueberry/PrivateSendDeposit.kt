@@ -91,7 +91,7 @@ internal fun PrivateSendDeposit(
                     if (status.resend) SendAgainButton(finish.onRetry)
                 }
                 BroadcastTone.Failed ->
-                    PillButton(text = "Retry", onClick = finish.onRetry, modifier = Modifier.fillMaxWidth(), pressable = true)
+                    PillButton(text = "Broadcast again", onClick = finish.onRetry, modifier = Modifier.fillMaxWidth(), pressable = true)
                 BroadcastTone.Working -> WorkingBroadcastActions(finish.onStop)
             }
         }
