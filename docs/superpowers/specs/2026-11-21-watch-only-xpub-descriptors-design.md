@@ -88,6 +88,9 @@ Derived `WatchAddress.path` is `<accountPath>/<chain>/<index>`, where `accountPa
 | two lines that differ | `receive and change descriptors must use the same key` |
 | bad checksum | `descriptor checksum does not match` |
 | origin length ≠ depth | `key origin path must be the account path` |
+| malformed origin | `invalid key origin` |
+| descriptor key not depth 3 | `descriptor key must be account-level (depth 3)` |
+| three or more lines | `paste one descriptor, or its /0/* and /1/* pair` |
 
 Messages never echo the key.
 

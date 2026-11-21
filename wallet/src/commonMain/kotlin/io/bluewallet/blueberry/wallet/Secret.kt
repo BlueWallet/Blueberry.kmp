@@ -32,7 +32,7 @@ sealed class WalletSecretInspection {
     ) : WalletSecretInspection()
 }
 
-private fun looksLikeWifCandidate(value: String): Boolean {
+internal fun looksLikeWifCandidate(value: String): Boolean {
     if (value.any { it.isWhitespace() }) return false
     if (value.length !in 51..52) return false
     return value.first() in "5KL9c"
@@ -70,6 +70,10 @@ fun decodeWifPrivateKey(wif: String): ByteArray {
 fun parseWalletSecret(raw: String): ParsedWalletSecret {
     val value = raw.trim()
     if (value.isEmpty()) throw IllegalArgumentException("wallet secret is empty")
+    if (looksLikeDescriptor(value)) {
+        parseDescriptor(value)
+        return ParsedWalletSecret(WalletSecretKind.DESCRIPTOR, descriptorLines(value).joinToString("\n"))
+    }
     WATCH_KEY_KINDS[value.take(4)]?.let { kind ->
         decodeAccountKey(value)
         return ParsedWalletSecret(kind, value)
