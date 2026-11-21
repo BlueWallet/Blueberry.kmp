@@ -134,7 +134,7 @@ class DescriptorChecksumTest {
 
 ### Task 6: PSBT origin, taproot fields and change outputs
 
-**Files:** Modify `BuildSendTx.kt:255-318,540-638`; Test `BuildSendTxTest.kt`
+**Files:** Modify `BuildSendTx.kt:255-318,540-638`; Test `WatchKeySendTest.kt` (new), `EncodePsbtUrTest.kt` (golden PSBT now carries output derivations)
 
 - [ ] Step 1: failing tests:
   - origin descriptor `wpkh([73c5da0a/84'/0'/0']…)` → input derivation fingerprint `0x73c5da0a`, path `[84', 0', 0', 0, 0]`.
