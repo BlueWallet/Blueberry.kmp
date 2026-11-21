@@ -100,6 +100,17 @@ class DescriptorTest {
     private fun x84() = ABANDON_BIP84_XPUB.dropLast(1)
 
     @Test
+    fun origin_path_is_taken_as_given() {
+        // BIP380 allows any origin path, including none; the PSBT path is origin path + chain/index.
+        val bare = parseWatchKey("wpkh([73c5da0a]$ABANDON_BIP84_XPUB)")
+        assertEquals("m", bare.accountPath)
+        assertEquals(ABANDON_FINGERPRINT, bare.bip32Fingerprint())
+        assertEquals("m/1/2", bare.bip32Path(change = true, index = 2).asString('\''))
+        val short = parseWatchKey("wpkh([73c5da0a/84'/0']$ABANDON_BIP84_XPUB)")
+        assertEquals("m/84'/0'/0/0", short.bip32Path(change = false, index = 0).asString('\''))
+    }
+
+    @Test
     fun rejects_unsupported_paths_and_origins() {
         val x = ABANDON_BIP84_XPUB
         rejects("hardened derivation after the xpub is not supported", "wpkh($x/0'/*)")
