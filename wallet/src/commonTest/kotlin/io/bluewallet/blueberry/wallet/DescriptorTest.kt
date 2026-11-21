@@ -106,7 +106,6 @@ class DescriptorTest {
         rejects("hardened derivation after the xpub is not supported", "wpkh($x/<0;1>/*h)")
         rejects("descriptor path must be /<0;1>/* or none", "wpkh($x/*)")
         rejects("descriptor path must be /<0;1>/* or none", "wpkh($x/2/*)")
-        rejects("key origin path must be the account path", "wpkh([73c5da0a/84'/0']$x)")
         rejects("invalid key origin", "wpkh([73c5da0z/84'/0'/0']$x)")
         rejects("invalid key origin", "wpkh([73c5da0a/84'/0'/99999999999999999999']$x)")
     }

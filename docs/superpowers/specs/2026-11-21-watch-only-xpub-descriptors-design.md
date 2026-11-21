@@ -31,7 +31,7 @@ Import a watch-only HD account from any of:
 4. **Descriptor key.** `xpub`, `ypub` or `zpub` are accepted inside a descriptor (only the key bytes matter; the wrapper picks the script).
 5. **Descriptor chains.** Accepted suffixes: none (account key, watches `/0/*` and `/1/*`), `/<0;1>/*`, or a two-line paste of `/0/*` and `/1/*` with the same wrapper, key and origin.
 6. **Checksum.** BIP380 `#checksum` is optional; a wrong one is rejected. Each line of a two-line paste is checked on its own.
-7. **Key origin.** `[fingerprint/path]` is optional. Its path length must equal the key depth (3). Hardened markers `'`, `h`, `H` are accepted.
+7. **Key origin.** `[fingerprint/path]` is optional. Its path is taken as given, even when it is not the key's depth or a standard path (`[97311f91/0/0]`, as BIP380, Bitcoin Core and BlueWallet allow); the wrapper, not the path, picks the script. Hardened markers `'`, `h`, `H` are accepted.
 8. **Taproot.** `tr(KEY)` watches `P2TR(BIP86 tweak of KEY/chain/i)`, the same derivation the mnemonic BIP86 path uses.
 
 ## Data model
@@ -87,7 +87,6 @@ Derived `WatchAddress.path` is `<accountPath>/<chain>/<index>`, where `accountPa
 | lone `/0/*` or `/1/*` | `add the matching /0/* and /1/* descriptors, or use /<0;1>/*` |
 | two lines that differ | `receive and change descriptors must use the same key` |
 | bad checksum | `descriptor checksum does not match` |
-| origin length ≠ depth | `key origin path must be the account path` |
 | malformed origin | `invalid key origin` |
 | descriptor key not depth 3 | `descriptor key must be account-level (depth 3)` |
 | three or more lines | `paste one descriptor, or its /0/* and /1/* pair` |

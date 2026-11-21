@@ -310,6 +310,26 @@ class BlueWalletVectorsTest {
         assertEquals(0xb68af6e4, parseWatchKey(zpubInTr).bip32Fingerprint())
     }
 
+    @Test
+    fun origin_path_that_is_not_the_standard_account_path() {
+        // watch-only-wallet.test.js "can import ... descriptor with custom path": [97311f91/0/0]; the wrapper picks the script
+        val cases =
+            mapOf(
+                "tr([97311f91/0/0]$PASSPORT_XPUB/<0;1>/*)" to (AddressScriptType.P2TR to "bc1p4k8tkyf4va4nczy30lutfqardahsywgfftdnrmqwupnucfmx9yuqjp3dxh"),
+                "wpkh([97311f91/0/0]$PASSPORT_XPUB)" to (AddressScriptType.P2WPKH to "bc1qhwpcrjj8cqvu3rwgny4rgukwm06lwlvdulmv6a"),
+                "pkh([97311f91/0/0]$PASSPORT_XPUB)" to (AddressScriptType.P2PKH to "1J6Uu92MtuzpGqecjDkmVsWHBpWfutjW7K"),
+                "sh(wpkh([97311f91/0/0]$PASSPORT_XPUB))" to (AddressScriptType.P2SH_P2WPKH to "3HAXxTBo88zdnUUpewWfNuWi99PFCSTMNi"),
+            )
+        for ((descriptor, expected) in cases) {
+            val (type, receive0) = expected
+            assertFirst(descriptor, type, listOf(receive0))
+            val key = parseWatchKey(descriptor)
+            assertEquals("m/0/0", key.accountPath)
+            assertEquals(0x97311f91, key.bip32Fingerprint())
+            assertEquals("m/0/0/1/3", key.bip32Path(change = true, index = 3).asString('\''))
+        }
+    }
+
     // --- PSBT origin ---
 
     @Test

@@ -53,7 +53,6 @@ private fun parseDescriptorLine(line: String): DescriptorLine {
     val keyAndPath = if (inner.startsWith("[")) inner.substringAfter(']') else inner
     val keyText = keyAndPath.substringBefore('/')
     val account = parseDescriptorKey(keyText)
-    require(origin == null || origin.path.path.size == account.depth) { "key origin path must be the account path" }
     return DescriptorLine(WatchKey(account, scriptType, origin), parseChain(keyAndPath.drop(keyText.length)))
 }
 
