@@ -317,9 +317,49 @@ class TxDisplayTest {
     fun label_suggestions_and_coin_name_targets() {
         assertEquals(listOf("Rent", "Coffee"), labelSuggestions(listOf("Rent", "Coffee", "Rent", "  ")))
         assertEquals(
-            listOf("a:0", "b:1"),
-            coinNamesToUpdate(mapOf("a:0" to null, "b:1" to "Rent", "c:2" to "Keep"), "Rent"),
+            listOf("a:0", "b:1", "d:3"),
+            coinNamesToUpdate(
+                mapOf("a:0" to null, "b:1" to "Rent", "c:2" to "Keep", "d:3" to "change from: Rent"),
+                "Rent",
+            ),
         )
+    }
+
+    @Test
+    fun clearing_the_note_brings_the_address_label_back() {
+        val base = pendingSend()
+        val send =
+            base.copy(
+                label = "",
+                addressLabel = "savings",
+                outputs =
+                    listOf(
+                        base.outputs[0],
+                        base.outputs[1].copy(label = "change from: groceries"),
+                    ),
+            )
+        val screen = txScreen(send)
+        assertEquals("savings", screen.list.title)
+        assertEquals("savings", screen.detail.label.title)
+        assertFalse(screen.detail.label.hasLabel)
+    }
+
+    @Test
+    fun coin_card_title_matches_the_coin_row_display_name() {
+        val base = received()
+        val receive = base.outputs[0]
+        val other = base.outputs[1]
+
+        fun title(input: TxDisplayInput) =
+            txScreen(input)
+                .detail.coins
+                .single()
+                .title
+
+        assertEquals("rent coin", title(base.copy(label = "rent")))
+        assertEquals("mine coin", title(base.copy(label = "rent", outputs = listOf(receive.copy(label = "mine"), other))))
+        assertEquals("savings coin", title(base.copy(outputs = listOf(receive.copy(addressLabel = "savings"), other))))
+        assertEquals("cafe coin", title(base.copy(outputs = listOf(receive.copy(peerLabel = "cafe"), other))))
     }
 
     @Test
@@ -393,7 +433,7 @@ class TxDisplayTest {
                 change = false,
             )
         val detail = txScreen(moved().copy(outputs = listOf(output))).detail
-        assertEquals("New coin", detail.coins.single().title)
+        assertEquals("send to self coin", detail.coins.single().title)
         assertEquals(
             "You",
             detail.flow.outputs

@@ -45,6 +45,8 @@ data class TxDisplayOutput(
     val label: String = "",
     /** Label for the output's address, not the coin name. */
     val addressLabel: String = "",
+    /** Saved name of another received coin on this address. Display only. */
+    val peerLabel: String = "",
     val frozen: Boolean = false,
     val spent: Boolean = false,
     val spentTxid: String? = null,

@@ -40,6 +40,7 @@ internal fun displayOutputs(
             addressLabel = facts.addressLabels[address.orEmpty()].orEmpty().trim(),
             addressUseCount = addressUses(facts, script, key),
             label = facts.names[key].orEmpty(),
+            peerLabel = held?.peerLabel.orEmpty(),
             frozen = key in facts.frozen,
             spent = spender != null,
             spentTxid = spender?.txid,

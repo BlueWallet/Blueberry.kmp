@@ -128,6 +128,20 @@ class UtxoDefaultLabelTest {
     }
 
     @Test
+    fun a_change_name_on_a_receive_chain_does_not_spread() {
+        val db = createSqliteDatabase(":memory:")
+        val change = peerCoin("cc", height = 3, change = false)
+        val receive = peerCoin("dd", height = 4)
+        db.utxoNames.upsert(change.key, "change from: groceries")
+        val snap = withStoredUtxoMeta(db, WalletTxsSnapshot(utxos = listOf(change, receive), utxosReady = true))
+        val coins = snap.utxos.associateBy { it.key }
+        assertEquals("change from: groceries", coins.getValue(change.key).name)
+        assertNull(coins.getValue(receive.key).label)
+        assertNull(coins.getValue(receive.key).peerLabel)
+        db.close()
+    }
+
+    @Test
     fun a_spent_coins_name_still_labels_a_new_coin_on_that_address() {
         val db = createSqliteDatabase(":memory:")
         val script = byteArrayOf(0x00, 0x14) + ByteArray(20) { 7 }

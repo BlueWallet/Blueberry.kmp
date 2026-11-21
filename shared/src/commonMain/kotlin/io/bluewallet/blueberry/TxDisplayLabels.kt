@@ -1,5 +1,7 @@
 package io.bluewallet.blueberry
 
+import io.bluewallet.blueberry.parse.CHANGE_FROM_PREFIX
+
 private const val LABEL_SUGGESTION_LIMIT = 4
 
 /** Most-used labels first, then alphabetical, at most [limit]. Blank labels are dropped. */
@@ -27,10 +29,11 @@ fun coinNamesToUpdate(
     previousLabel: String,
 ): List<String> {
     val previous = previousLabel.trim()
+    val derived = if (previous.isEmpty()) null else "$CHANGE_FROM_PREFIX$previous"
     return names
         .filter { (_, name) ->
             val current = name?.trim().orEmpty()
-            current.isEmpty() || current == previous
+            current.isEmpty() || current == previous || current == derived
         }.keys
         .sorted()
 }

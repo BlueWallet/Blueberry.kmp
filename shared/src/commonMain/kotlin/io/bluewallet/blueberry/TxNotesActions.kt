@@ -2,6 +2,7 @@ package io.bluewallet.blueberry
 
 import fr.acinq.bitcoin.Transaction
 import io.bluewallet.blueberry.headers.nowMillis
+import io.bluewallet.blueberry.parse.CHANGE_FROM_PREFIX
 import io.bluewallet.blueberry.parse.outpointKey
 import io.bluewallet.blueberry.parse.scriptHex
 import io.bluewallet.blueberry.storage.Database
@@ -22,7 +23,9 @@ fun setTxNote(
             ?.label
             .orEmpty()
     val trimmed = note.trim()
-    val targets = coinNamesToUpdate(walletOutputNames(db, wallet, txid), previous)
+    val names = walletOutputNames(db, wallet, txid)
+    val targets = coinNamesToUpdate(names, previous)
+    val derived = if (previous.isBlank()) null else "$CHANGE_FROM_PREFIX${previous.trim()}"
     editLabels(db) {
         if (trimmed.isEmpty()) {
             db.txPaymentLabels.delete(txid)
@@ -30,7 +33,13 @@ fun setTxNote(
             db.txPaymentLabels.upsert(TxPaymentLabelRow(txid, trimmed))
         }
         targets.forEach { outpoint ->
-            if (trimmed.isEmpty()) db.utxoNames.delete(outpoint) else db.utxoNames.upsert(outpoint, trimmed)
+            if (trimmed.isEmpty()) {
+                db.utxoNames.delete(outpoint)
+            } else {
+                val current = names[outpoint]?.trim().orEmpty()
+                val next = if (current == derived) "$CHANGE_FROM_PREFIX$trimmed" else trimmed
+                db.utxoNames.upsert(outpoint, next)
+            }
         }
     }
     val at = nowMillis()

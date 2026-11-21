@@ -4,6 +4,8 @@ import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.TxPaymentLabelRow
 import io.bluewallet.blueberry.wallet.outpointKey
 
+const val CHANGE_FROM_PREFIX = "change from: "
+
 fun savePaymentLabel(
     db: Database,
     txid: String,
@@ -13,7 +15,7 @@ fun savePaymentLabel(
     val trimmed = label.trim()
     if (trimmed.isEmpty()) throw IllegalArgumentException("payment label is required")
     db.txPaymentLabels.upsert(TxPaymentLabelRow(txid, trimmed))
-    val name = "change from: $trimmed"
+    val name = "$CHANGE_FROM_PREFIX$trimmed"
     for (vout in changeVouts) {
         db.utxoNames.upsert(outpointKey(txid, vout), name)
     }

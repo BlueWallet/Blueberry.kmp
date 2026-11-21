@@ -77,4 +77,40 @@ class TxNotesActionsTest {
         assertEquals("Keep", db.utxoNames.get(keep))
         db.close()
     }
+
+    @Test
+    fun set_note_updates_and_clears_a_derived_change_name() {
+        val db = createSqliteDatabase(":memory:")
+        saveWalletSecret(
+            db,
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        val wallet = createWallet(db)
+        val recv = wallet.snapshot().addresses.first { !it.change && it.index == 1 }
+        val change = wallet.snapshot().addresses.first { it.change && it.index == 0 }
+        val tx =
+            Transaction(
+                2L,
+                listOf(TxIn(OutPoint(TxHash(ByteArray(32) { 1 }), 0L), 0xffffffffL)),
+                listOf(
+                    TxOut(Satoshi(40_000L), recv.scriptPubKey),
+                    TxOut(Satoshi(10_000L), change.scriptPubKey),
+                ),
+                0L,
+            )
+        val txid = tx.txid.toString()
+        db.transactions.upsert(StoredTx(txid, 100, 0, "11".repeat(32), Transaction.write(tx), 50_000L))
+        val changeKey = outpointKey(txid, 1)
+        db.utxoNames.upsert(changeKey, "change from: Rent")
+        db.txPaymentLabels.upsert(
+            io.bluewallet.blueberry.storage
+                .TxPaymentLabelRow(txid, "Rent"),
+        )
+        val store = createWalletTxsStore()
+        setTxNote(db, wallet, store, txid, "Coffee")
+        assertEquals("change from: Coffee", db.utxoNames.get(changeKey))
+        setTxNote(db, wallet, store, txid, "")
+        assertNull(db.utxoNames.get(changeKey))
+        db.close()
+    }
 }

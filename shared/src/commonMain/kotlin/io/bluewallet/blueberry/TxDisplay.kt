@@ -2,6 +2,8 @@
 
 package io.bluewallet.blueberry
 
+import io.bluewallet.blueberry.parse.CHANGE_FROM_PREFIX
+
 private const val TX_LIST_STRIP = 6
 
 fun txScreen(input: TxDisplayInput): TxScreen {
@@ -82,7 +84,10 @@ internal fun txVisibleLabel(input: TxDisplayInput): String = input.label.trim().
 
 /** Display name when the transaction has no note of its own. Not stored. */
 internal fun txDefaultLabel(input: TxDisplayInput): String {
-    val coinName = input.outputs.firstNotNullOfOrNull { output -> output.label.trim().takeIf { it.isNotEmpty() } }
+    val coinName =
+        input.outputs.firstNotNullOfOrNull { output ->
+            output.label.trim().takeIf { it.isNotEmpty() && !it.startsWith(CHANGE_FROM_PREFIX) }
+        }
     val touched = input.addressLabel.trim().takeIf { it.isNotEmpty() }
     val paid = input.outputs.firstNotNullOfOrNull { output -> output.addressLabel.trim().takeIf { it.isNotEmpty() } }
     return coinName ?: touched ?: paid.orEmpty()

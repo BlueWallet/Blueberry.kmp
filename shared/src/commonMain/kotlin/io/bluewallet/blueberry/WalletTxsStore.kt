@@ -3,6 +3,7 @@ package io.bluewallet.blueberry
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.MessageBus
 import io.bluewallet.blueberry.headers.nowMillis
+import io.bluewallet.blueberry.parse.CHANGE_FROM_PREFIX
 import io.bluewallet.blueberry.parse.CoinGraphCoin
 import io.bluewallet.blueberry.parse.CoinHistory
 import io.bluewallet.blueberry.parse.CoinLinkGraph
@@ -84,7 +85,7 @@ data class WalletUtxoRow(
     val peerLabel: String? = null,
 ) {
     /** Explicit [name], else this coin's transaction, else the address, else another coin on that address. */
-    val label: String? get() = name.nonBlank() ?: txLabel.nonBlank() ?: addressLabel.nonBlank() ?: peerLabel.nonBlank()
+    val label: String? get() = coinDisplayLabel(name, txLabel, addressLabel, peerLabel)
 }
 
 data class WalletTxsSnapshot(
@@ -139,7 +140,15 @@ private data class WalletTxsState(
     val speed: ProgressSpeed = ProgressSpeed(),
 )
 
-private fun String?.nonBlank(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
+internal fun String?.nonBlank(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
+
+/** Explicit name, else this coin's transaction, else the address, else another coin on that address. */
+internal fun coinDisplayLabel(
+    name: String?,
+    txLabel: String?,
+    addressLabel: String?,
+    peerLabel: String?,
+): String? = name.nonBlank() ?: txLabel.nonBlank() ?: addressLabel.nonBlank() ?: peerLabel.nonBlank()
 
 private fun parseOutpointKey(key: String): Pair<String, Int> {
     val i = key.lastIndexOf(':')
@@ -715,7 +724,7 @@ private fun peerSources(
 
 private fun receivedSource(row: WalletUtxoRow): PeerSource? {
     val address = row.address?.trim()?.takeIf { it.isNotEmpty() }
-    val name = row.name.nonBlank()
+    val name = row.name.nonBlank()?.takeUnless { it.startsWith(CHANGE_FROM_PREFIX) }
     if (row.isChange || address == null || name == null) return null
     val height = if (row.height == 0) Int.MAX_VALUE else row.height
     return PeerSource(row.key, address, name, height, row.txid, row.vout)
@@ -728,7 +737,7 @@ private fun spentSource(
     seen: Set<String>,
 ): PeerSource? {
     val eligible = coin.spent && !coin.isChange && coin.outpoint !in seen
-    val name = if (eligible) names[coin.outpoint].nonBlank() else null
+    val name = if (eligible) names[coin.outpoint].nonBlank()?.takeUnless { it.startsWith(CHANGE_FROM_PREFIX) } else null
     val address =
         if (name == null) {
             null
