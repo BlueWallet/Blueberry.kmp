@@ -5,13 +5,14 @@ package io.bluewallet.blueberry
 internal fun txCoinCards(
     input: TxDisplayInput,
     txid: String,
-): List<TxCoinCard> = input.outputs.filter { it.mine && (it.inWallet || it.spent) }.map { txCoinCard(it, txid) }
+): List<TxCoinCard> = input.outputs.filter { it.mine && (it.inWallet || it.spent) }.map { txCoinCard(it, txid, input.label) }
 
 private fun txCoinCard(
     output: TxDisplayOutput,
     txid: String,
+    txNote: String,
 ): TxCoinCard {
-    val title = coinTitle(output, output.change)
+    val title = coinTitle(output, output.change, txNote)
     val frozen = output.frozen && !output.spent
     val sub = coinSub(output, output.change, frozen)
     val chain = if (output.change) "Change address" else "Receive address"
@@ -23,6 +24,7 @@ private fun txCoinCard(
         amountSats = output.valueSat,
         address = output.address,
         addressLabel = output.addressLabel.trim(),
+        addressPlaceholder = output.label.trim().ifEmpty { ADDRESS_LABEL_PLACEHOLDER },
         addressNote = addressNote(chain, output),
         frozen = frozen,
         spent = output.spent,
@@ -34,12 +36,12 @@ private fun txCoinCard(
 private fun coinTitle(
     output: TxDisplayOutput,
     change: Boolean,
-): String =
-    when {
-        change -> "Your change"
-        output.label.isNotBlank() -> "${output.label} coin"
-        else -> "New coin"
-    }
+    txNote: String,
+): String {
+    if (change) return "Your change"
+    val shown = coinDisplayLabel(output.label, txNote, output.addressLabel, output.peerLabel)
+    return if (shown == null) "New coin" else "$shown coin"
+}
 
 private fun coinSub(
     output: TxDisplayOutput,

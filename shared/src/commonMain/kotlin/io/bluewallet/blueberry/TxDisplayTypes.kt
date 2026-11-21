@@ -45,6 +45,8 @@ data class TxDisplayOutput(
     val label: String = "",
     /** Label for the output's address, not the coin name. */
     val addressLabel: String = "",
+    /** Saved name of another received coin on this address. Display only. */
+    val peerLabel: String = "",
     val frozen: Boolean = false,
     val spent: Boolean = false,
     val spentTxid: String? = null,
@@ -83,6 +85,10 @@ data class TxDisplayInput(
     val outcome: TxOutcome = TxOutcome.None,
     val replacementTxid: String? = null,
     val ownSend: Boolean = false,
+    /** Address label this transaction pays or spends. A display default, not a saved note. */
+    val addressLabel: String = "",
+    /** True when the wallet has an HD change chain, so `change from:` names are only automatic on change outputs. */
+    val hasChangeChain: Boolean = false,
 )
 
 data class TxAmountParts(
@@ -150,6 +156,8 @@ data class TxCoinCard(
     val amountSats: Long,
     val address: String?,
     val addressLabel: String,
+    /** Shown in the address field when [addressLabel] is empty. The coin's own name, otherwise the generic hint. */
+    val addressPlaceholder: String = ADDRESS_LABEL_PLACEHOLDER,
     val addressNote: String,
     val frozen: Boolean,
     val spent: Boolean,

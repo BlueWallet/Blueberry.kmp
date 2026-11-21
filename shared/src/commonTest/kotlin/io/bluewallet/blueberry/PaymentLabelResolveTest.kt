@@ -105,6 +105,33 @@ class PaymentLabelResolveTest {
         assertEquals("savings", snapshotFromDb(db, 1, 1, wallet = null).txs.single().addressLabel)
         db.close()
     }
+
+    @Test
+    fun spend_of_a_labelled_address_uses_that_label_when_no_output_does() {
+        val db = createSqliteDatabase(":memory:")
+        val parent = txPaying(4, LABELLED_SCRIPT)
+        val child =
+            Transaction(
+                2L,
+                listOf(TxIn(OutPoint(parent.txid, 0L), 0xffffffffL)),
+                listOf(TxOut(Satoshi(500L), byteArrayOf(0x00, 0x14) + ByteArray(20) { 9 })),
+                0L,
+            )
+        db.transactions.upsert(StoredTx(parent.txid.toString(), 1, 0, "11".repeat(32), Transaction.write(parent), 1_000L))
+        db.transactions.upsert(StoredTx(child.txid.toString(), 2, 0, "22".repeat(32), Transaction.write(child), -500L))
+        db.addressLabels.upsert(addressFromOutputScript(LABELLED_SCRIPT)!!, "savings")
+
+        val snap = snapshotFromDb(db, 1, 1, wallet = null)
+        val labels = snap.txs.associate { it.txid to it.addressLabel }
+        assertEquals("savings", labels[parent.txid.toString()])
+        assertEquals("savings", labels[child.txid.toString()])
+        assertEquals(emptyList(), db.txPaymentLabels.list())
+        db.addressLabels.delete(addressFromOutputScript(LABELLED_SCRIPT)!!)
+        val cleared = withStoredUtxoMeta(db, snap).txs.associate { it.txid to it.addressLabel }
+        assertEquals(null, cleared[parent.txid.toString()])
+        assertEquals(null, cleared[child.txid.toString()])
+        db.close()
+    }
 }
 
 private val LABELLED_SCRIPT = byteArrayOf(0x00, 0x14) + ByteArray(20) { 5 }

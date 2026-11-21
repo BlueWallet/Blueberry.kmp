@@ -116,6 +116,17 @@ class CoinSheetModelTest {
     }
 
     @Test
+    fun transaction_label_is_the_placeholder_not_the_saved_name() {
+        val hinted = utxo("ee", 50_000).copy(txLabel = "Rent", addressLabel = "Cafe")
+        val control = buildCoinControlSnapshot(listOf(hinted), CoinLinkage(mapOf(hinted.key to hinted.key), mapOf(hinted.key to hinted.key)), emptySet())
+        val snap = WalletTxsSnapshot(utxos = listOf(hinted), coinLinkGraph = CoinLinkGraph.Empty)
+        val hint = buildCoinSheetModel(CoinSheetRequest(hinted.key, snap, control, emptyMap(), 0, null, false))
+        assertNotNull(hint)
+        assertEquals("", hint.label)
+        assertEquals("Rent", hint.labelPlaceholder)
+    }
+
+    @Test
     fun address_label_is_the_placeholder_not_the_saved_name() {
         val hinted = utxo("ee", 50_000).copy(addressLabel = "Rent")
         val named = utxo("ff", 40_000, name = "Mine").copy(addressLabel = "Rent")
@@ -135,6 +146,38 @@ class CoinSheetModelTest {
         assertEquals("Mine", own.label)
         assertEquals("Rent", own.labelPlaceholder)
         assertEquals("Rent", own.address?.label)
+    }
+
+    @Test
+    fun reused_address_name_is_a_placeholder_not_a_saved_name() {
+        val blank = utxo("bb", 20_000).copy(peerLabel = "Cafe")
+        val control =
+            buildCoinControlSnapshot(
+                listOf(blank),
+                CoinLinkage(mapOf(blank.key to blank.key), mapOf(blank.key to blank.key)),
+                emptySet(),
+            )
+        val snap = WalletTxsSnapshot(utxos = listOf(blank), coinLinkGraph = CoinLinkGraph.Empty)
+        val model = buildCoinSheetModel(CoinSheetRequest(blank.key, snap, control, emptyMap(), 0, null, false))
+        assertNotNull(model)
+        assertEquals("", model.label)
+        assertEquals("Cafe", model.labelPlaceholder)
+    }
+
+    @Test
+    fun coin_name_is_the_default_address_label() {
+        val named = utxo("ee", 50_000, name = "Rent")
+        val control =
+            buildCoinControlSnapshot(
+                listOf(named),
+                CoinLinkage(mapOf(named.key to named.key), mapOf(named.key to named.key)),
+                emptySet(),
+            )
+        val snap = WalletTxsSnapshot(utxos = listOf(named), coinLinkGraph = CoinLinkGraph.Empty)
+        val model = buildCoinSheetModel(CoinSheetRequest(named.key, snap, control, emptyMap(), 0, null, false))
+        assertNotNull(model)
+        assertEquals("", model.address?.label)
+        assertEquals("Rent", model.address?.labelPlaceholder)
     }
 
     @Test

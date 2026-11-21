@@ -75,6 +75,40 @@ class TxDisplayTest {
     }
 
     @Test
+    fun address_label_is_the_default_transaction_name() {
+        val base = received()
+        val labeled =
+            base.copy(
+                outputs = listOf(base.outputs[0].copy(addressLabel = "savings"), base.outputs[1]),
+            )
+        val screen = txScreen(labeled)
+        assertEquals("savings", screen.list.title)
+        assertEquals(TxListSubtitle.DateOnly("17:38"), screen.list.subtitle)
+        assertEquals("savings", screen.detail.label.title)
+        assertFalse(screen.detail.label.hasLabel)
+        assertEquals("Received", screen.detail.header.title)
+
+        val namedCoin =
+            labeled.copy(
+                outputs = listOf(labeled.outputs[0].copy(label = "rent"), labeled.outputs[1]),
+            )
+        assertEquals("rent", txScreen(namedCoin).list.title)
+
+        val noted = txScreen(labeled.copy(label = "payroll"))
+        assertEquals("payroll", noted.list.title)
+        assertTrue(noted.detail.label.hasLabel)
+    }
+
+    @Test
+    fun coin_name_is_the_default_address_label_on_its_card() {
+        val input = received()
+        val named = input.outputs.first().copy(label = "rent")
+        val card = txScreen(input.copy(outputs = listOf(named) + input.outputs.drop(1))).detail.coins.single()
+        assertEquals("", card.addressLabel)
+        assertEquals("rent", card.addressPlaceholder)
+    }
+
+    @Test
     fun coin_card_carries_the_address_label() {
         val input = received()
         val labeled = input.outputs.first().copy(addressLabel = "Cafe tips")
@@ -283,9 +317,85 @@ class TxDisplayTest {
     fun label_suggestions_and_coin_name_targets() {
         assertEquals(listOf("Rent", "Coffee"), labelSuggestions(listOf("Rent", "Coffee", "Rent", "  ")))
         assertEquals(
-            listOf("a:0", "b:1"),
-            coinNamesToUpdate(mapOf("a:0" to null, "b:1" to "Rent", "c:2" to "Keep"), "Rent"),
+            listOf("a:0", "b:1", "d:3"),
+            coinNamesToUpdate(
+                mapOf("a:0" to null, "b:1" to "Rent", "c:2" to "Keep", "d:3" to "change from: Rent"),
+                "Rent",
+            ),
         )
+        assertEquals(
+            listOf("a:0", "b:1", "d:3"),
+            coinNamesToUpdate(
+                mapOf("a:0" to null, "b:1" to "Rent", "c:2" to "change from: Rent", "d:3" to "change from: Rent"),
+                "Rent",
+                changeOutpoints = setOf("d:3"),
+                hasChangeChain = true,
+            ),
+        )
+    }
+
+    @Test
+    fun clearing_the_note_brings_the_address_label_back() {
+        val base = pendingSend()
+        val send =
+            base.copy(
+                label = "",
+                addressLabel = "savings",
+                outputs =
+                    listOf(
+                        base.outputs[0],
+                        base.outputs[1].copy(label = "change from: groceries"),
+                    ),
+            )
+        val screen = txScreen(send)
+        assertEquals("savings", screen.list.title)
+        assertEquals("savings", screen.detail.label.title)
+        assertFalse(screen.detail.label.hasLabel)
+    }
+
+    @Test
+    fun an_hd_receive_coin_named_change_from_titles_its_transaction() {
+        val base = received()
+        val receive = base.outputs[0].copy(label = "change from: Rent")
+        val other = base.outputs[1]
+        val hd =
+            base.copy(
+                label = "",
+                hasChangeChain = true,
+                outputs = listOf(receive, other),
+            )
+        assertEquals("change from: Rent", txScreen(hd).list.title)
+        assertEquals("change from: Rent", txScreen(hd).detail.label.title)
+        val change =
+            pendingSend().copy(
+                label = "",
+                addressLabel = "savings",
+                hasChangeChain = true,
+                outputs =
+                    listOf(
+                        pendingSend().outputs[0],
+                        pendingSend().outputs[1].copy(label = "change from: Rent", change = true),
+                    ),
+            )
+        assertEquals("savings", txScreen(change).list.title)
+    }
+
+    @Test
+    fun coin_card_title_matches_the_coin_row_display_name() {
+        val base = received()
+        val receive = base.outputs[0]
+        val other = base.outputs[1]
+
+        fun title(input: TxDisplayInput) =
+            txScreen(input)
+                .detail.coins
+                .single()
+                .title
+
+        assertEquals("rent coin", title(base.copy(label = "rent")))
+        assertEquals("mine coin", title(base.copy(label = "rent", outputs = listOf(receive.copy(label = "mine"), other))))
+        assertEquals("savings coin", title(base.copy(outputs = listOf(receive.copy(addressLabel = "savings"), other))))
+        assertEquals("cafe coin", title(base.copy(outputs = listOf(receive.copy(peerLabel = "cafe"), other))))
     }
 
     @Test
@@ -359,7 +469,7 @@ class TxDisplayTest {
                 change = false,
             )
         val detail = txScreen(moved().copy(outputs = listOf(output))).detail
-        assertEquals("New coin", detail.coins.single().title)
+        assertEquals("send to self coin", detail.coins.single().title)
         assertEquals(
             "You",
             detail.flow.outputs

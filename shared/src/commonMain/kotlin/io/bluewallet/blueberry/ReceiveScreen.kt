@@ -137,7 +137,7 @@ fun ReceiveScreen(
     var index by remember(chain) { mutableStateOf(chain?.start ?: 0) }
     val address = chain?.addresses?.getOrNull(index)?.address ?: snapshot?.address
     val nav = receiveNav(chain, index) { index = it }
-    var label by remember(address) { mutableStateOf(address?.let { db.addressLabels.get(it) }) }
+    var label by remember(address) { mutableStateOf(address?.let { addressLabel(db, it) }) }
     var editing by remember(address) { mutableStateOf(false) }
     var draft by remember(address) { mutableStateOf("") }
     var menuOpen by remember { mutableStateOf(false) }
@@ -256,7 +256,7 @@ fun ReceiveScreen(
                         if (setAddressLabel(db, runtime.wallet, runtime.walletTxsStore, target, draft)) {
                             uploadLabels(scope, db)
                         }
-                        label = db.addressLabels.get(target)
+                        label = addressLabel(db, target)
                         editing = false
                     },
                     onDismiss = { if (editing) editing = false else onBack() },

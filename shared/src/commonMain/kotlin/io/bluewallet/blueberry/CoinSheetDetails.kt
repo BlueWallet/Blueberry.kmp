@@ -158,7 +158,7 @@ private fun AddressBody(
     }
     SheetLabelField(
         title = "Address label",
-        placeholder = ADDRESS_LABEL_PLACEHOLDER,
+        placeholder = address.labelPlaceholder,
         draft = labelDraft,
         onDraftChange = onLabelDraft,
         saved = address.label,

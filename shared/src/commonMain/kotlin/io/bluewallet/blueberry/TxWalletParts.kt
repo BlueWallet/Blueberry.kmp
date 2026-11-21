@@ -5,6 +5,7 @@ import io.bluewallet.blueberry.parse.outpointKey
 import io.bluewallet.blueberry.parse.prevoutKey
 import io.bluewallet.blueberry.parse.scriptHex
 import io.bluewallet.blueberry.storage.PrivateSendCoin
+import io.bluewallet.blueberry.wallet.canonicalBitcoinAddress
 
 internal fun displayOutputs(
     row: WalletTxRow,
@@ -37,9 +38,10 @@ internal fun displayOutputs(
             change = watch?.change == true || held?.isChange == true || graphCoin?.isChange == true,
             address = address,
             addressIndex = watch?.index ?: pathIndex(held?.path),
-            addressLabel = facts.addressLabels[address.orEmpty()].orEmpty().trim(),
+            addressLabel = facts.addressLabels[canonicalBitcoinAddress(address.orEmpty())].orEmpty().trim(),
             addressUseCount = addressUses(facts, script, key),
             label = facts.names[key].orEmpty(),
+            peerLabel = held?.peerLabel.orEmpty(),
             frozen = key in facts.frozen,
             spent = spender != null,
             spentTxid = spender?.txid,

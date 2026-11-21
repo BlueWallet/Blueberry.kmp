@@ -87,7 +87,7 @@ private fun liveSheet(
         syncing = request.syncing,
         chips = chipsFor(coin, pending, age, group?.title, members.size),
         label = row.name?.trim().orEmpty(),
-        labelPlaceholder = labelPlaceholder(coin.isChange, row.addressLabel),
+        labelPlaceholder = labelPlaceholder(coin.isChange, row.addressLabel, row.txLabel, row.peerLabel),
         linkedTitle = if (others.isEmpty()) "Not linked to any coin" else "Linked to ${others.size} of your coins",
         linkedAside = if (others.isEmpty()) "${request.control.coins.size - 1} others separate" else formatPlusBtc(others.sumOf { it.valueSats }),
         links = links,
@@ -154,12 +154,16 @@ private fun spentSheet(request: CoinSheetRequest): CoinSheetModel? {
     )
 }
 
-/** Address label when the coin has one, so it shows as a hint and is never saved as the coin's name. */
+/** Closest unsaved label. Never written as the coin's name. */
 private fun labelPlaceholder(
     change: Boolean,
     addressLabel: String?,
+    txLabel: String? = null,
+    peerLabel: String? = null,
 ): String =
-    addressLabel?.trim()?.takeIf { it.isNotEmpty() }
+    txLabel?.trim()?.takeIf { it.isNotEmpty() }
+        ?: addressLabel?.trim()?.takeIf { it.isNotEmpty() }
+        ?: peerLabel?.trim()?.takeIf { it.isNotEmpty() }
         ?: if (change) "Name this coin" else "Who sent it?"
 
 private fun chipsFor(

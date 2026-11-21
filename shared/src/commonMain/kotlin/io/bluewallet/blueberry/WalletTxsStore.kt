@@ -3,6 +3,8 @@ package io.bluewallet.blueberry
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.MessageBus
 import io.bluewallet.blueberry.headers.nowMillis
+import io.bluewallet.blueberry.parse.CHANGE_FROM_PREFIX
+import io.bluewallet.blueberry.parse.CoinGraphCoin
 import io.bluewallet.blueberry.parse.CoinHistory
 import io.bluewallet.blueberry.parse.CoinLinkGraph
 import io.bluewallet.blueberry.parse.CoinLinkage
@@ -10,7 +12,6 @@ import io.bluewallet.blueberry.parse.TxFee
 import io.bluewallet.blueberry.parse.TxRow
 import io.bluewallet.blueberry.parse.computeCoinHistory
 import io.bluewallet.blueberry.parse.computeCoinLinkage
-import io.bluewallet.blueberry.parse.firstAddressLabel
 import io.bluewallet.blueberry.parse.firstUtxoLabelByTxid
 import io.bluewallet.blueberry.parse.formatBlockTimeLabel
 import io.bluewallet.blueberry.parse.formatBtc
@@ -24,6 +25,8 @@ import io.bluewallet.blueberry.parse.scriptHex
 import io.bluewallet.blueberry.parse.shortOutpoint
 import io.bluewallet.blueberry.parse.shortTxid
 import io.bluewallet.blueberry.parse.spendingTxs
+import io.bluewallet.blueberry.parse.touchLabel
+import io.bluewallet.blueberry.parse.txTouchAddresses
 import io.bluewallet.blueberry.parse.utxoValueBar
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
@@ -32,6 +35,8 @@ import io.bluewallet.blueberry.storage.ReplacedTxRow
 import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.wallet.Wallet
+import io.bluewallet.blueberry.wallet.addressFromOutputScript
+import io.bluewallet.blueberry.wallet.canonicalBitcoinAddress
 import io.bluewallet.blueberry.wallet.hexToBytes
 import io.bluewallet.blueberry.wallet.unsignedTxid
 import io.bluewallet.headers.decodeBlockHeader
@@ -75,9 +80,13 @@ data class WalletUtxoRow(
     val isFrozen: Boolean = false,
     /** Label of the address this coin pays to; the default when [name] is blank. Never persisted as a name. */
     val addressLabel: String? = null,
+    /** Label of the transaction that created this coin. A display default, not a saved coin name. */
+    val txLabel: String? = null,
+    /** Saved name of another received coin on this address. A display default, not a saved coin name. */
+    val peerLabel: String? = null,
 ) {
-    /** What to show for this coin: the explicit [name], else the [addressLabel]. */
-    val label: String? get() = name.nonBlank() ?: addressLabel.nonBlank()
+    /** Explicit [name], else this coin's transaction, else the address, else another coin on that address. */
+    val label: String? get() = coinDisplayLabel(name, txLabel, addressLabel, peerLabel)
 }
 
 data class WalletTxsSnapshot(
@@ -98,6 +107,11 @@ data class WalletTxsSnapshot(
     val linkageFingerprint: Long = 0L,
     /** Typed links behind [coinGroupIds]. Rebuilt with linkage, never on sheet open. */
     val coinLinkGraph: CoinLinkGraph = CoinLinkGraph.Empty,
+    /**
+     * Addresses each transaction pays, then spends. Null when the snapshot was built with no address
+     * labels, so a later refresh can read the transactions once if labels appear.
+     */
+    val txTouches: Map<String, List<String>>? = null,
 )
 
 interface WalletTxsStore {
@@ -127,7 +141,15 @@ private data class WalletTxsState(
     val speed: ProgressSpeed = ProgressSpeed(),
 )
 
-private fun String?.nonBlank(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
+internal fun String?.nonBlank(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
+
+/** Explicit name, else this coin's transaction, else the address, else another coin on that address. */
+internal fun coinDisplayLabel(
+    name: String?,
+    txLabel: String?,
+    addressLabel: String?,
+    peerLabel: String?,
+): String? = name.nonBlank() ?: txLabel.nonBlank() ?: addressLabel.nonBlank() ?: peerLabel.nonBlank()
 
 private fun parseOutpointKey(key: String): Pair<String, Int> {
     val i = key.lastIndexOf(':')
@@ -180,8 +202,12 @@ private class TxRowLabels(
     val noteByTxid: Map<String, String>,
     val utxoByTxid: Map<String, String>,
     private val byAddress: Map<String, String>,
+    private val touches: Map<String, List<String>>?,
 ) {
-    fun address(tx: ByteArray?): String? = if (tx == null || byAddress.isEmpty()) null else firstAddressLabel(tx, byAddress)
+    fun address(txid: String): String? {
+        if (byAddress.isEmpty() || touches == null) return null
+        return touchLabel(touches[txid].orEmpty(), byAddress)
+    }
 }
 
 private fun pendingSendRows(
@@ -312,7 +338,7 @@ private fun replacedWalletRow(
         netDeltaSats = delta,
         netDeltaLabel = formatNetDelta(delta),
         paymentLabel = labels.noteByTxid[replaced.txid],
-        addressLabel = labels.address(runCatching { hexToBytes(txHex) }.getOrNull()),
+        addressLabel = labels.address(replaced.txid),
         privateSend = privateSend != null,
         createdAtMs = send?.createdAt ?: privateSend?.createdAt ?: 0L,
         replaced = true,
@@ -335,7 +361,7 @@ private fun pendingWalletTxRow(
         netDeltaLabel = formatNetDelta(delta),
         paymentLabel = labels.noteByTxid[row.txid],
         utxoLabel = labels.utxoByTxid[row.txid],
-        addressLabel = labels.address(runCatching { hexToBytes(row.txHex) }.getOrNull()),
+        addressLabel = labels.address(row.txid),
         privateSend = row.privateSend,
         createdAtMs = row.createdAt,
         ownSend = true,
@@ -354,13 +380,18 @@ private class WalletCoins(
     }
 }
 
+private class CoinLabels(
+    val byAddress: Map<String, String>,
+    val byTxid: Map<String, String>,
+)
+
 private class CoinRowCtx(
     val db: Database,
     val nowMs: Long,
     val timeLabels: MutableMap<Int, HeightTimeLabel>,
     val nameByOutpoint: Map<String, String>,
     val frozenOutpoints: Set<String>,
-    val labelByAddress: Map<String, String>,
+    val labels: CoinLabels,
 )
 
 private fun walletCoins(
@@ -413,7 +444,8 @@ private fun walletCoins(
                     name = ctx.nameByOutpoint[key],
                     isChange = changeScripts.any { it.contentEquals(u.scriptPubKey) },
                     isFrozen = key in ctx.frozenOutpoints,
-                    addressLabel = watch?.address?.let { ctx.labelByAddress[it] },
+                    addressLabel = watch?.address?.let { ctx.labels.byAddress[canonicalBitcoinAddress(it)] },
+                    txLabel = ctx.labels.byTxid[txid],
                 )
             }.sortedWith(
                 compareByDescending<WalletUtxoRow> { it.height }
@@ -482,7 +514,7 @@ private fun confirmedTxRow(
         netDeltaLabel = formatNetDelta(tx.netDeltaSats),
         paymentLabel = labels.noteByTxid[tx.txid],
         utxoLabel = labels.utxoByTxid[tx.txid],
-        addressLabel = labels.address(tx.tx),
+        addressLabel = labels.address(tx.txid),
         privateSend = privateSend,
         fee = fee,
         ownSend = ownSend,
@@ -544,22 +576,34 @@ fun snapshotFromDb(
             .toSet()
     val nameByOutpoint = db.utxoNames.list().associate { it.outpoint to it.name }
     val frozenOutpoints = db.utxoFrozen.list().toSet()
-    val labelByAddress = db.addressLabels.list().associate { it.address to it.label }
-    val labels =
-        TxRowLabels(
-            noteByTxid = db.txPaymentLabels.list().associate { it.txid to it.label },
-            utxoByTxid = firstUtxoLabelByTxid(nameByOutpoint),
-            byAddress = labelByAddress,
+    val labelByAddress = db.addressLabels.list().associate { canonicalBitcoinAddress(it.address) to it.label }
+    val noteByTxid = db.txPaymentLabels.list().associate { it.txid to it.label }
+    val coinCtx =
+        CoinRowCtx(
+            db,
+            nowMs,
+            timeLabels,
+            nameByOutpoint,
+            frozenOutpoints,
+            CoinLabels(labelByAddress, noteByTxid),
         )
-
-    val coinCtx = CoinRowCtx(db, nowMs, timeLabels, nameByOutpoint, frozenOutpoints, labelByAddress)
     val coins = wallet?.let { walletCoins(it, stored, coinCtx, cachedLinkage) } ?: WalletCoins.None
-    val utxos = coins.utxos
     val fees = coins.fees
     val linkage = coins.linkage
-
+    // After coin linkage, so a payment saved during that work is included.
+    val txTouches = if (labelByAddress.isEmpty()) null else txTouchMap(db, stored)
+    val labels =
+        TxRowLabels(
+            noteByTxid = noteByTxid,
+            utxoByTxid = firstUtxoLabelByTxid(nameByOutpoint),
+            byAddress = labelByAddress,
+            touches = txTouches,
+        )
     val txs =
         listedWalletTxs(db, stored, wallet, labels, fees, timeLabels, nowMs, privateSendTxids)
+    val txIndex = stored.associate { it.txid to it.txIndex }
+    val utxos =
+        withPeerLabels(coins.utxos, coins.graph, nameByOutpoint, txs.associate { it.txid to it.height }, txIndex)
     return WalletTxsSnapshot(
         at = at,
         balanceSats = balanceSats,
@@ -574,6 +618,7 @@ fun snapshotFromDb(
         coinCertainGroupIds = linkage.certain,
         linkageFingerprint = coins.fingerprint,
         coinLinkGraph = coins.graph,
+        txTouches = txTouches,
     )
 }
 
@@ -589,18 +634,173 @@ internal fun withStoredUtxoMeta(
     val frozen = db.utxoFrozen.list().toSet()
     val utxoLabelByTxid = firstUtxoLabelByTxid(nameByOutpoint)
     val noteByTxid = db.txPaymentLabels.list().associate { it.txid to it.label }
-    val labelByAddress = db.addressLabels.list().associate { it.address to it.label }
+    val labelByAddress = db.addressLabels.list().associate { canonicalBitcoinAddress(it.address) to it.label }
+    val known = snap.txTouches
+    val touches =
+        when {
+            labelByAddress.isEmpty() -> emptyMap()
+            known != null && snap.txs.all { it.txid in known } -> known
+            else -> txTouchMap(db)
+        }
+    val refreshed =
+        snap.utxos.map {
+            it.copy(
+                name = nameByOutpoint[it.key],
+                isFrozen = it.key in frozen,
+                addressLabel = it.address?.let { a -> labelByAddress[canonicalBitcoinAddress(a)] },
+                txLabel = noteByTxid[it.txid],
+            )
+        }
     return snap.copy(
         utxos =
-            snap.utxos.map {
+            withPeerLabels(
+                refreshed,
+                snap.coinLinkGraph,
+                nameByOutpoint,
+                snap.txs.associate { it.txid to it.height },
+                db.transactions.list().associate { it.txid to it.txIndex },
+            ),
+        txs =
+            snap.txs.map {
                 it.copy(
-                    name = nameByOutpoint[it.key],
-                    isFrozen = it.key in frozen,
-                    addressLabel = it.address?.let { a -> labelByAddress[a] },
+                    utxoLabel = utxoLabelByTxid[it.txid],
+                    paymentLabel = noteByTxid[it.txid],
+                    addressLabel = touchLabel(touches[it.txid].orEmpty(), labelByAddress),
                 )
             },
-        txs = snap.txs.map { it.copy(utxoLabel = utxoLabelByTxid[it.txid], paymentLabel = noteByTxid[it.txid]) },
+        txTouches = if (labelByAddress.isEmpty()) null else touches,
     )
+}
+
+/** Saved name of the newest other received coin on the same address. Spent coins still count. Change names do not. */
+private fun withPeerLabels(
+    rows: List<WalletUtxoRow>,
+    graph: CoinLinkGraph,
+    names: Map<String, String>,
+    txHeight: Map<String, Int>,
+    txIndex: Map<String, Int>,
+): List<WalletUtxoRow> {
+    val peers = peerLabelByKey(rows, graph, names, txHeight, txIndex)
+    return rows.map { it.copy(peerLabel = peers[it.key]) }
+}
+
+private class PeerSource(
+    val key: String,
+    val address: String,
+    val name: String,
+    val height: Int,
+    val txIndex: Int,
+    val vout: Int,
+)
+
+private fun peerLabelByKey(
+    rows: List<WalletUtxoRow>,
+    graph: CoinLinkGraph,
+    names: Map<String, String>,
+    txHeight: Map<String, Int>,
+    txIndex: Map<String, Int>,
+): Map<String, String> {
+    val byAddress = peerSources(rows, graph, names, txHeight, txIndex).groupBy { it.address }
+    val result = mutableMapOf<String, String>()
+    for (row in rows) {
+        val address =
+            row.address
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let(::canonicalBitcoinAddress)
+        val donor = address?.let { byAddress[it].orEmpty().firstOrNull { source -> source.key != row.key } }
+        if (donor != null) result[row.key] = donor.name
+    }
+    return result
+}
+
+private fun peerSources(
+    rows: List<WalletUtxoRow>,
+    graph: CoinLinkGraph,
+    names: Map<String, String>,
+    txHeight: Map<String, Int>,
+    txIndex: Map<String, Int>,
+): List<PeerSource> {
+    val fromRows = rows.mapNotNull { receivedSource(it, txIndex) }
+    val seen = fromRows.map { it.key }.toSet()
+    val fromSpent = graph.coins.values.mapNotNull { spentSource(it, names, txHeight, txIndex, seen) }
+    return (fromRows + fromSpent).sortedWith(
+        compareByDescending<PeerSource> { it.height }
+            .thenByDescending { it.txIndex }
+            .thenByDescending { it.vout },
+    )
+}
+
+private fun receivedSource(
+    row: WalletUtxoRow,
+    txIndex: Map<String, Int>,
+): PeerSource? {
+    val address =
+        row.address
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let(::canonicalBitcoinAddress)
+    val name = row.name.nonBlank()?.takeUnless { it.startsWith(CHANGE_FROM_PREFIX) }
+    if (row.isChange || address == null || name == null) return null
+    val height = if (row.height == 0) Int.MAX_VALUE else row.height
+    return PeerSource(row.key, address, name, height, txIndex[row.txid] ?: 0, row.vout)
+}
+
+private fun spentSource(
+    coin: CoinGraphCoin,
+    names: Map<String, String>,
+    txHeight: Map<String, Int>,
+    txIndex: Map<String, Int>,
+    seen: Set<String>,
+): PeerSource? {
+    val eligible = coin.spent && !coin.isChange && coin.outpoint !in seen
+    val name = if (eligible) names[coin.outpoint].nonBlank()?.takeUnless { it.startsWith(CHANGE_FROM_PREFIX) } else null
+    val address =
+        if (name == null) {
+            null
+        } else {
+            addressFromOutputScript(hexToBytes(coin.scriptHex))
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let(::canonicalBitcoinAddress)
+        }
+    val height =
+        when (txHeight[coin.txid]) {
+            null -> Int.MIN_VALUE
+            0 -> Int.MAX_VALUE
+            else -> txHeight.getValue(coin.txid)
+        }
+    return if (name == null || address == null) {
+        null
+    } else {
+        PeerSource(
+            coin.outpoint,
+            address,
+            name,
+            height,
+            txIndex[coin.txid] ?: 0,
+            coin.outpoint.substringAfterLast(':').toIntOrNull() ?: 0,
+        )
+    }
+}
+
+/** Confirmed transactions plus pending sends, so a spend of a stored coin can see that coin's address. */
+private fun txTouchMap(
+    db: Database,
+    stored: List<StoredTx> = db.transactions.list(),
+): Map<String, List<String>> {
+    val bytes = ArrayList<Pair<String, ByteArray>>(stored.size)
+    stored.forEach { bytes.add(it.txid to it.tx) }
+
+    fun addHex(
+        txid: String,
+        hex: String,
+    ) {
+        runCatching { hexToBytes(hex) }.getOrNull()?.let { bytes.add(txid to it) }
+    }
+    db.sends.list().forEach { addHex(it.txid, it.txHex) }
+    db.privateSends.list().forEach { addHex(it.txid, it.txHex) }
+    return txTouchAddresses(bytes)
 }
 
 /** Install a freshly built [snapshot] with the latest stored UTXO metadata. */

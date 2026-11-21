@@ -14,6 +14,7 @@ import io.bluewallet.blueberry.labels.storedWalletLabels
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.TxPaymentLabelRow
 import io.bluewallet.blueberry.wallet.WalletSecretKind
+import io.bluewallet.blueberry.wallet.canonicalBitcoinAddress
 import io.bluewallet.blueberry.wallet.loadWalletSecret
 import io.bluewallet.blueberry.wallet.parseWalletSecret
 import kotlinx.coroutines.CoroutineScope
@@ -149,7 +150,7 @@ private suspend fun pullLabelsIfRemoteAhead(
                     labels.paymentLabels.forEach { row ->
                         db.txPaymentLabels.upsert(TxPaymentLabelRow(row.txid, row.label))
                     }
-                    labels.addressLabels.forEach { db.addressLabels.upsert(it.address, it.label) }
+                    labels.addressLabels.forEach { db.addressLabels.upsert(canonicalBitcoinAddress(it.address), it.label) }
                     db.keyValue.set(LABELS_REMOTE_SEQ_KEY, remoteSeq.toString())
                 }
                 replaced = true

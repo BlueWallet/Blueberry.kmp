@@ -60,13 +60,7 @@ internal fun TxLabelCard(
 ) {
     val failed = detail.outcome != TxOutcome.None
     val typed =
-        if (host.editing) {
-            host.draft.trim()
-        } else if (detail.label.hasLabel) {
-            detail.label.title
-        } else {
-            ""
-        }
+        labelCardTyped(detail.label.title, detail.label.hasLabel, host.editing, host.draft)
     val turn by animateFloatAsState(if (host.editing) 90f else 0f, label = "label-chevron")
     Column(
         modifier =
@@ -94,7 +88,11 @@ internal fun TxLabelCard(
                         letterSpacing = (-0.45).sp,
                     )
                     Text(
-                        if (typed.isEmpty()) detail.label.subtitle else "On this transaction and its coin",
+                        if (detail.label.hasLabel && typed.isNotEmpty()) {
+                            "On this transaction and its coin"
+                        } else {
+                            detail.label.subtitle
+                        },
                         color = BwColors.InkSecondary,
                         fontFamily = BwFontFamily,
                         fontSize = 13.sp,
@@ -319,7 +317,7 @@ private fun TxCoinBlock(
             }
             SheetLabelField(
                 title = "Address label",
-                placeholder = ADDRESS_LABEL_PLACEHOLDER,
+                placeholder = coin.addressPlaceholder,
                 draft = draft,
                 onDraftChange = { draft = it },
                 saved = coin.addressLabel,
