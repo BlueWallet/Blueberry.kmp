@@ -3,6 +3,7 @@ package io.bluewallet.blueberry
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.bus.MessageBus
 import io.bluewallet.blueberry.headers.nowMillis
+import io.bluewallet.blueberry.parse.CoinGraphCoin
 import io.bluewallet.blueberry.parse.CoinHistory
 import io.bluewallet.blueberry.parse.CoinLinkGraph
 import io.bluewallet.blueberry.parse.CoinLinkage
@@ -33,6 +34,7 @@ import io.bluewallet.blueberry.storage.ReplacedTxRow
 import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.wallet.Wallet
+import io.bluewallet.blueberry.wallet.addressFromOutputScript
 import io.bluewallet.blueberry.wallet.hexToBytes
 import io.bluewallet.blueberry.wallet.unsignedTxid
 import io.bluewallet.headers.decodeBlockHeader
@@ -576,7 +578,6 @@ fun snapshotFromDb(
             CoinLabels(labelByAddress, noteByTxid),
         )
     val coins = wallet?.let { walletCoins(it, stored, coinCtx, cachedLinkage) } ?: WalletCoins.None
-    val utxos = withPeerLabels(coins.utxos)
     val fees = coins.fees
     val linkage = coins.linkage
     // After coin linkage, so a payment saved during that work is included.
@@ -591,6 +592,8 @@ fun snapshotFromDb(
 
     val txs =
         listedWalletTxs(db, stored, wallet, labels, fees, timeLabels, nowMs, privateSendTxids)
+    val utxos =
+        withPeerLabels(coins.utxos, coins.graph, nameByOutpoint, txs.associate { it.txid to it.height })
     return WalletTxsSnapshot(
         at = at,
         balanceSats = balanceSats,
@@ -639,7 +642,13 @@ internal fun withStoredUtxoMeta(
             )
         }
     return snap.copy(
-        utxos = withPeerLabels(refreshed),
+        utxos =
+            withPeerLabels(
+                refreshed,
+                snap.coinLinkGraph,
+                nameByOutpoint,
+                snap.txs.associate { it.txid to it.height },
+            ),
         txs =
             snap.txs.map {
                 it.copy(
@@ -652,41 +661,98 @@ internal fun withStoredUtxoMeta(
     )
 }
 
-/** Saved name of the newest other received coin on the same address. Change names do not spread. */
-private fun withPeerLabels(rows: List<WalletUtxoRow>): List<WalletUtxoRow> {
-    val peers = peerLabelByKey(rows)
+/** Saved name of the newest other received coin on the same address. Spent coins still count. Change names do not. */
+private fun withPeerLabels(
+    rows: List<WalletUtxoRow>,
+    graph: CoinLinkGraph,
+    names: Map<String, String>,
+    txHeight: Map<String, Int>,
+): List<WalletUtxoRow> {
+    val peers = peerLabelByKey(rows, graph, names, txHeight)
     return rows.map { it.copy(peerLabel = peers[it.key]) }
 }
 
-private fun peerLabelByKey(rows: List<WalletUtxoRow>): Map<String, String> {
+private class PeerSource(
+    val key: String,
+    val address: String,
+    val name: String,
+    val height: Int,
+    val txid: String,
+    val vout: Int,
+)
+
+private fun peerLabelByKey(
+    rows: List<WalletUtxoRow>,
+    graph: CoinLinkGraph,
+    names: Map<String, String>,
+    txHeight: Map<String, Int>,
+): Map<String, String> {
+    val byAddress = peerSources(rows, graph, names, txHeight).groupBy { it.address }
     val result = mutableMapOf<String, String>()
-    val groups = rows.groupBy { it.address?.trim()?.takeIf { address -> address.isNotEmpty() } }
-    for ((address, group) in groups) {
-        if (address != null) result.putAll(peerLabelsIn(group))
+    for (row in rows) {
+        val address = row.address?.trim()?.takeIf { it.isNotEmpty() }
+        val donor = address?.let { byAddress[it].orEmpty().firstOrNull { source -> source.key != row.key } }
+        if (donor != null) result[row.key] = donor.name
     }
     return result
 }
 
-private fun peerLabelsIn(group: List<WalletUtxoRow>): Map<String, String> {
-    val newestFirst =
-        compareByDescending<WalletUtxoRow> { it.height == 0 }
-            .thenByDescending { it.height }
+private fun peerSources(
+    rows: List<WalletUtxoRow>,
+    graph: CoinLinkGraph,
+    names: Map<String, String>,
+    txHeight: Map<String, Int>,
+): List<PeerSource> {
+    val fromRows = rows.mapNotNull { receivedSource(it) }
+    val seen = fromRows.map { it.key }.toSet()
+    val fromSpent = graph.coins.values.mapNotNull { spentSource(it, names, txHeight, seen) }
+    return (fromRows + fromSpent).sortedWith(
+        compareByDescending<PeerSource> { it.height }
             .thenByDescending { it.txid }
-            .thenByDescending { it.vout }
-    val named =
-        group
-            .filter { coin -> !coin.isChange && coin.name.nonBlank() != null }
-            .sortedWith(newestFirst)
-    val latest = named.firstOrNull()
-    val latestName = latest?.name.nonBlank()
-    if (latest == null || latestName == null) return emptyMap()
-    val previous = named.getOrNull(1)?.name.nonBlank()
-    val pairs = mutableMapOf<String, String>()
-    for (coin in group) {
-        val inferred = if (coin.key == latest.key) previous else latestName
-        if (inferred != null) pairs[coin.key] = inferred
+            .thenByDescending { it.vout },
+    )
+}
+
+private fun receivedSource(row: WalletUtxoRow): PeerSource? {
+    val address = row.address?.trim()?.takeIf { it.isNotEmpty() }
+    val name = row.name.nonBlank()
+    if (row.isChange || address == null || name == null) return null
+    val height = if (row.height == 0) Int.MAX_VALUE else row.height
+    return PeerSource(row.key, address, name, height, row.txid, row.vout)
+}
+
+private fun spentSource(
+    coin: CoinGraphCoin,
+    names: Map<String, String>,
+    txHeight: Map<String, Int>,
+    seen: Set<String>,
+): PeerSource? {
+    val eligible = coin.spent && !coin.isChange && coin.outpoint !in seen
+    val name = if (eligible) names[coin.outpoint].nonBlank() else null
+    val address =
+        if (name == null) {
+            null
+        } else {
+            addressFromOutputScript(hexToBytes(coin.scriptHex))?.trim()?.takeIf { it.isNotEmpty() }
+        }
+    val height =
+        when (txHeight[coin.txid]) {
+            null -> Int.MIN_VALUE
+            0 -> Int.MAX_VALUE
+            else -> txHeight.getValue(coin.txid)
+        }
+    return if (name == null || address == null) {
+        null
+    } else {
+        PeerSource(
+            coin.outpoint,
+            address,
+            name,
+            height,
+            coin.txid,
+            coin.outpoint.substringAfterLast(':').toIntOrNull() ?: 0,
+        )
     }
-    return pairs
 }
 
 /** Confirmed transactions plus pending sends, so a spend of a stored coin can see that coin's address. */

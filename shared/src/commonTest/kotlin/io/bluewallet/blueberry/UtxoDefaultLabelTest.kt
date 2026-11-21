@@ -11,11 +11,15 @@ import io.bluewallet.blueberry.labels.AddressLabel
 import io.bluewallet.blueberry.labels.WalletLabels
 import io.bluewallet.blueberry.labels.decryptWalletLabels
 import io.bluewallet.blueberry.labels.labelingAccountKey
+import io.bluewallet.blueberry.parse.CoinGraphCoin
+import io.bluewallet.blueberry.parse.CoinLinkGraph
 import io.bluewallet.blueberry.parse.CoinLinkage
+import io.bluewallet.blueberry.parse.scriptHex
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.storage.TxPaymentLabelRow
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.AddressScriptType
+import io.bluewallet.blueberry.wallet.addressFromOutputScript
 import io.bluewallet.blueberry.wallet.createWallet
 import io.bluewallet.blueberry.wallet.deriveWatchWallet
 import io.bluewallet.blueberry.wallet.saveWalletSecret
@@ -120,6 +124,38 @@ class UtxoDefaultLabelTest {
         val blank = peerCoin("ff", height = 2)
         val labeled = withStoredUtxoMeta(db, WalletTxsSnapshot(utxos = listOf(named, blank), utxosReady = true))
         assertEquals("savings", labeled.utxos.single { it.key == blank.key }.label)
+        db.close()
+    }
+
+    @Test
+    fun a_spent_coins_name_still_labels_a_new_coin_on_that_address() {
+        val db = createSqliteDatabase(":memory:")
+        val script = byteArrayOf(0x00, 0x14) + ByteArray(20) { 7 }
+        val addr = addressFromOutputScript(script)!!
+        val spentTxid = "aa".repeat(32)
+        val spentKey = "$spentTxid:0"
+        val fresh = peerCoin("bb", height = 5).copy(address = addr, scriptPubKey = script)
+        db.utxoNames.upsert(spentKey, "cafe")
+        val graph =
+            CoinLinkGraph(
+                coins =
+                    mapOf(
+                        spentKey to CoinGraphCoin(spentKey, spentTxid, 1_000L, scriptHex(script), false, true),
+                    ),
+                txs = emptyMap(),
+                neighbors = emptyMap(),
+            )
+        val snap =
+            WalletTxsSnapshot(
+                txs = listOf(WalletTxRow(spentTxid, "aa", 1, "", 0, "")),
+                utxos = listOf(fresh),
+                utxosReady = true,
+                coinLinkGraph = graph,
+            )
+        val coin = withStoredUtxoMeta(db, snap).utxos.single()
+        assertEquals("cafe", coin.label)
+        assertNull(coin.name)
+        assertEquals(listOf(spentKey), db.utxoNames.list().map { it.outpoint })
         db.close()
     }
 
