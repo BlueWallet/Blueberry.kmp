@@ -7,10 +7,12 @@ import fr.acinq.bitcoin.TxHash
 import fr.acinq.bitcoin.TxIn
 import fr.acinq.bitcoin.TxOut
 import io.bluewallet.blueberry.headers.nowMillis
+import io.bluewallet.blueberry.parse.outpointKey
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
 import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.storage.StoredTx
+import io.bluewallet.blueberry.storage.TxPaymentLabelRow
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.AddressScriptType
 import io.bluewallet.blueberry.wallet.Wallet
@@ -33,6 +35,24 @@ class TxWalletDisplayTest {
 
     @AfterTest
     fun close() = db.close()
+
+    @Test
+    fun coin_name_is_the_default_title_of_the_transaction_that_created_it() {
+        val fund = storeFunding(9_664L)
+        val txid = fund.txid.toString()
+        db.utxoNames.upsert(outpointKey(txid, 0), "rent")
+        val named = screenOf(txid)
+        assertEquals("rent", named.list.title)
+        assertFalse(named.detail.label.hasLabel)
+
+        storeSend(fund)
+        assertEquals("rent", screenOf(txid).list.title)
+
+        db.txPaymentLabels.upsert(TxPaymentLabelRow(txid, "payroll"))
+        val noted = screenOf(txid)
+        assertEquals("payroll", noted.list.title)
+        assertTrue(noted.detail.label.hasLabel)
+    }
 
     @Test
     fun home_sections_put_the_pending_send_first_in_today() {
@@ -83,6 +103,12 @@ class TxWalletDisplayTest {
     private fun query(): TxQuery {
         val now = nowMillis()
         return TxQuery(db, wallet, snapshotFromDb(db, now, now, wallet), tipHeight = FUND_HEIGHT, nowEpochS = now / 1000)
+    }
+
+    private fun screenOf(txid: String): TxScreen {
+        val q = query()
+        val row = q.snap.txs.single { it.txid == txid }
+        return txDetailOf(q, row, null)!!
     }
 
     private fun revealTitles(txid: String): List<String> {
