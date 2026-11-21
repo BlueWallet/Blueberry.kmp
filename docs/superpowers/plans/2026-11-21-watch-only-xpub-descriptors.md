@@ -170,3 +170,16 @@ class DescriptorChecksumTest {
 
 - [ ] Run the full check command from Global Constraints; all green.
 - [ ] Review the diff (correctness, performance, robustness), fix valid findings, repeat until clean.
+
+## Ported BlueWallet vectors
+
+Source: BlueWallet `origin/master` (71c72092), read with `git show` only. Tests live in `wallet/src/commonTest/.../BlueWalletVectorsTest.kt`; each vector names its BlueWallet file. Expected values are BlueWallet's own assertions, cross-checked with embit. Product differences become notes, not behaviour changes.
+
+### Task 10: Port BlueWallet vectors
+
+- [ ] Step 1: account keys → receive/change addresses at indexes 0 and 1 (`hd-legacy-wallet`, `hd-segwit-p2sh-wallet`, `hd-segwit-bech32-wallet`, `hd-taproot-wallet`, `watch-only-wallet`), including passphrase and account-1 keys, ypub change 45/46, and the Coldcard Mk4/Q exports' first addresses.
+- [ ] Step 2: descriptors: abandon `pkh`/`sh(wpkh)`/`wpkh`/`tr` with origin vs mnemonic addresses 0-2 (`wallet-descriptor`); Coldcard Mk4 `descriptor.txt` and Sparrow export (checksummed multipath); `tr` with a zpub inside; `[dafedf1c/84h/0h/0h]` inside `wpkh`; checksum `addr(...)#pl83f4nc` (`storage`).
+- [ ] Step 3: PSBT origins: Electrum skeleton key under `[168dd603/84'/0'/1']` gives that fingerprint and full path on input and change; ypub change 46 pubkey.
+- [ ] Step 4: rejections: truncated xpub/ypub, bad origin fingerprint, tpub/vpub descriptors, Breadwallet `m/0'` key (depth 1), Coldcard Q descriptors as stored (missing `*`, checksum mismatch). Address validation lists (`isValidBech32Address`, `watch-only-wallet`).
+- [ ] Step 5: origin length ≠ key depth (`[97311f91/0/0]`, `watch-only-wallet`): failing test first; BIP380 and Bitcoin Core allow it, so drop the length check and keep origin path + chain/index as the PSBT path.
+- [ ] Step 6: run wallet tests, review loop, full check command, commit.
