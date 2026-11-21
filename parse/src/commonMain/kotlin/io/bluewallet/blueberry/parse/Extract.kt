@@ -111,6 +111,31 @@ private fun pushPayload(written: ByteArray): ByteArray? {
 }
 
 /**
+ * ScriptPubKey this input spends, when it can be recovered without the parent output.
+ * Distinguishes native p2wpkh, nested p2sh-p2wpkh, and p2pkh. Taproot key-path returns null.
+ */
+internal fun spentScriptFromInput(input: TxIn): ByteArray? {
+    val scriptSig = input.signatureScript.toByteArray()
+    val wit = input.witness.stack
+    val witnessPubkey = wit.lastOrNull()?.toByteArray()?.takeIf { wit.size >= 2 && it.size == 33 }
+    return when {
+        witnessPubkey != null && isP2wpkhRedeemPush(scriptSig) -> p2shP2wpkhScriptFromPubkey(witnessPubkey)
+        witnessPubkey != null && scriptSig.isEmpty() -> p2wpkhScriptFromPubkey(witnessPubkey)
+        else -> pubkeyFromScriptSig(scriptSig)?.let(::p2pkhScriptFromPubkey)
+    }
+}
+
+/** scriptSig of a nested p2sh-p2wpkh input is a single push of the p2wpkh redeem script. */
+private fun isP2wpkhRedeemPush(scriptSig: ByteArray): Boolean {
+    val payload =
+        runCatching { Script.parse(scriptSig) }
+            .getOrNull()
+            ?.takeIf { it.size == 1 }
+            ?.let { pushPayload(Script.write(it)) }
+    return payload != null && payload.size == 22 && payload[0] == 0x00.toByte() && payload[1] == 0x14.toByte()
+}
+
+/**
  * Watched scriptPubKeys implied by an input's unlocking data, independent of
  * whether the spent outpoint is already in the UTXO map.
  */

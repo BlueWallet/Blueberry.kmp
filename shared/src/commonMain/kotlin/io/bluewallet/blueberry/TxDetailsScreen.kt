@@ -380,9 +380,10 @@ private fun AutosaveLabel(
     val latestEditing by rememberUpdatedState(editing)
     val latestSaved by rememberUpdatedState(saved)
     LaunchedEffect(draft, editing) {
-        if (editing && saved != null && draft.trim() != saved.trim()) {
+        val next = autosaveLabelDraft(draft, saved)
+        if (editing && next != null) {
             delay(LABEL_SAVE_PAUSE_MS)
-            save(draft)
+            save(next)
         }
     }
     DisposableEffect(txid) {

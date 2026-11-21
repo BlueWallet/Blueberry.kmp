@@ -1,7 +1,10 @@
 package io.bluewallet.blueberry.parse
 
+import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.OutPoint
 import fr.acinq.bitcoin.Satoshi
+import fr.acinq.bitcoin.Script
+import fr.acinq.bitcoin.ScriptWitness
 import fr.acinq.bitcoin.Transaction
 import fr.acinq.bitcoin.TxHash
 import fr.acinq.bitcoin.TxIn
@@ -10,7 +13,9 @@ import io.bluewallet.blueberry.wallet.addressFromOutputScript
 import io.bluewallet.blueberry.wallet.outpointKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class PaymentLabelResolveTest {
     @Test
@@ -44,6 +49,44 @@ class PaymentLabelResolveTest {
         assertEquals("b", firstAddressLabel(tx, labels))
         assertNull(firstAddressLabel(tx, mapOf(address(p2wpkh(9)) to "other")))
         assertNull(firstAddressLabel(byteArrayOf(0x00, 0x01), labels))
+    }
+
+    @Test
+    fun spend_without_a_stored_parent_uses_the_native_p2wpkh_input() {
+        val pubkey = watchKey0()
+        val spend = witnessSpend(pubkey.value.toByteArray())
+        val labels = mapOf(addressFromOutputScript(p2wpkhScript(pubkey))!! to "savings")
+        val raw = Transaction.write(spend)
+        assertEquals("savings", firstAddressLabel(raw, labels))
+        val touches = txTouchAddresses(listOf(spend.txid.toString() to raw))
+        assertEquals("savings", touchLabel(touches.getValue(spend.txid.toString()), labels))
+    }
+
+    @Test
+    fun nested_p2sh_p2wpkh_spend_does_not_use_the_native_address() {
+        val pubkey = watchKey0()
+        val spend =
+            Transaction(
+                2L,
+                listOf(
+                    TxIn(
+                        OutPoint(TxHash(ByteArray(32) { 1 }), 0L),
+                        ByteVector(compilePushes(Script.write(Script.pay2wpkh(pubkey)))),
+                        0xffffffffL,
+                        ScriptWitness(listOf(ByteVector(ByteArray(64)), ByteVector(pubkey.value.toByteArray()))),
+                    ),
+                ),
+                listOf(TxOut(Satoshi(900), unrelatedScript())),
+                0L,
+            )
+        val p2sh = addressFromOutputScript(p2shP2wpkhScript(pubkey))!!
+        val native = addressFromOutputScript(p2wpkhScript(pubkey))!!
+        val touches = txTouchAddresses(listOf(spend.txid.toString() to Transaction.write(spend)))
+        val addrs = touches.getValue(spend.txid.toString())
+        assertTrue(p2sh in addrs)
+        assertFalse(native in addrs)
+        assertEquals("savings", touchLabel(addrs, mapOf(p2sh to "savings", native to "payroll")))
+        assertNull(firstAddressLabel(Transaction.write(witnessSpend(pubkey.value.toByteArray())), mapOf(p2sh to "savings")))
     }
 }
 

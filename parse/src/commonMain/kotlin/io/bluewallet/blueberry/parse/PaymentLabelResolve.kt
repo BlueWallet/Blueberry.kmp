@@ -57,8 +57,13 @@ private fun touchAddresses(
     addressByOutpoint: Map<String, String>,
 ): List<String> {
     val paid = tx.txOut.mapNotNull { addressFromOutputScript(it.publicKeyScript.toByteArray()) }
-    if (addressByOutpoint.isEmpty()) return paid
-    return paid + tx.txIn.mapNotNull { addressByOutpoint[prevoutKey(it)] }
+    if (tx.isCoinbase()) return paid
+    val spent =
+        tx.txIn.mapNotNull { input ->
+            addressByOutpoint[prevoutKey(input)]
+                ?: spentScriptFromInput(input)?.let { addressFromOutputScript(it) }
+        }
+    return paid + spent
 }
 
 private fun labelled(

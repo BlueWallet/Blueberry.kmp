@@ -10,6 +10,16 @@ import io.bluewallet.blueberry.storage.TxPaymentLabelRow
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.hexToBytes
 
+/** A paused draft is written only while it still has text. An empty draft waits for a finished clear. */
+internal fun autosaveLabelDraft(
+    draft: String,
+    saved: String?,
+): String? {
+    val trimmed = draft.trim()
+    if (saved == null || trimmed.isEmpty() || trimmed == saved.trim()) return null
+    return draft
+}
+
 fun setTxNote(
     db: Database,
     wallet: Wallet?,
