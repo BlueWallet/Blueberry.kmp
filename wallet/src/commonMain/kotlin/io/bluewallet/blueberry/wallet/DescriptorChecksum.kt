@@ -38,5 +38,5 @@ fun descriptorChecksum(descriptor: String): String? {
     if (clsCount > 0) c = polymod(c, cls)
     repeat(8) { c = polymod(c, 0) }
     c = c xor 1L
-    return String(CharArray(8) { j -> CHECKSUM_CHARSET[((c ushr (5 * (7 - j))) and 31L).toInt()] })
+    return CharArray(8) { j -> CHECKSUM_CHARSET[((c ushr (5 * (7 - j))) and 31L).toInt()] }.concatToString()
 }
