@@ -206,6 +206,7 @@ private fun displayInput(
         outcome = if (row.replaced) TxOutcome.Replaced else TxOutcome.None,
         replacementTxid = row.replacementTxid,
         ownSend = row.ownSend,
+        addressLabel = row.addressLabel?.trim().orEmpty(),
     )
 }
 

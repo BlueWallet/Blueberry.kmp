@@ -83,6 +83,8 @@ data class TxDisplayInput(
     val outcome: TxOutcome = TxOutcome.None,
     val replacementTxid: String? = null,
     val ownSend: Boolean = false,
+    /** Address label this transaction pays or spends. A display default, not a saved note. */
+    val addressLabel: String = "",
 )
 
 data class TxAmountParts(

@@ -75,6 +75,31 @@ class TxDisplayTest {
     }
 
     @Test
+    fun address_label_is_the_default_transaction_name() {
+        val base = received()
+        val labeled =
+            base.copy(
+                outputs = listOf(base.outputs[0].copy(addressLabel = "savings"), base.outputs[1]),
+            )
+        val screen = txScreen(labeled)
+        assertEquals("savings", screen.list.title)
+        assertEquals(TxListSubtitle.DateOnly("17:38"), screen.list.subtitle)
+        assertEquals("savings", screen.detail.label.title)
+        assertFalse(screen.detail.label.hasLabel)
+        assertEquals("Received", screen.detail.header.title)
+
+        val namedCoin =
+            labeled.copy(
+                outputs = listOf(labeled.outputs[0].copy(label = "rent"), labeled.outputs[1]),
+            )
+        assertEquals("rent", txScreen(namedCoin).list.title)
+
+        val noted = txScreen(labeled.copy(label = "payroll"))
+        assertEquals("payroll", noted.list.title)
+        assertTrue(noted.detail.label.hasLabel)
+    }
+
+    @Test
     fun coin_card_carries_the_address_label() {
         val input = received()
         val labeled = input.outputs.first().copy(addressLabel = "Cafe tips")

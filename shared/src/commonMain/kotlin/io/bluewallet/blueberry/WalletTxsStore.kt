@@ -8,6 +8,7 @@ import io.bluewallet.blueberry.parse.CoinLinkGraph
 import io.bluewallet.blueberry.parse.CoinLinkage
 import io.bluewallet.blueberry.parse.TxFee
 import io.bluewallet.blueberry.parse.TxRow
+import io.bluewallet.blueberry.parse.addressByOutpoint
 import io.bluewallet.blueberry.parse.computeCoinHistory
 import io.bluewallet.blueberry.parse.computeCoinLinkage
 import io.bluewallet.blueberry.parse.firstAddressLabel
@@ -180,8 +181,14 @@ private class TxRowLabels(
     val noteByTxid: Map<String, String>,
     val utxoByTxid: Map<String, String>,
     private val byAddress: Map<String, String>,
+    private val addressByOutpoint: Map<String, String>,
 ) {
-    fun address(tx: ByteArray?): String? = if (tx == null || byAddress.isEmpty()) null else firstAddressLabel(tx, byAddress)
+    fun address(tx: ByteArray?): String? =
+        if (tx == null || byAddress.isEmpty()) {
+            null
+        } else {
+            firstAddressLabel(tx, byAddress, addressByOutpoint)
+        }
 }
 
 private fun pendingSendRows(
@@ -550,6 +557,7 @@ fun snapshotFromDb(
             noteByTxid = db.txPaymentLabels.list().associate { it.txid to it.label },
             utxoByTxid = firstUtxoLabelByTxid(nameByOutpoint),
             byAddress = labelByAddress,
+            addressByOutpoint = addressByOutpoint(stored.map { it.txid to it.tx }),
         )
 
     val coinCtx = CoinRowCtx(db, nowMs, timeLabels, nameByOutpoint, frozenOutpoints, labelByAddress)

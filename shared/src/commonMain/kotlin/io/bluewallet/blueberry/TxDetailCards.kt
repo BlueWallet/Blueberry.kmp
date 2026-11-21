@@ -62,10 +62,10 @@ internal fun TxLabelCard(
     val typed =
         if (host.editing) {
             host.draft.trim()
-        } else if (detail.label.hasLabel) {
-            detail.label.title
         } else {
-            ""
+            detail.label.title
+                .takeUnless { it == "Add a label" }
+                .orEmpty()
         }
     val turn by animateFloatAsState(if (host.editing) 90f else 0f, label = "label-chevron")
     Column(
@@ -94,7 +94,11 @@ internal fun TxLabelCard(
                         letterSpacing = (-0.45).sp,
                     )
                     Text(
-                        if (typed.isEmpty()) detail.label.subtitle else "On this transaction and its coin",
+                        if (detail.label.hasLabel && typed.isNotEmpty()) {
+                            "On this transaction and its coin"
+                        } else {
+                            detail.label.subtitle
+                        },
                         color = BwColors.InkSecondary,
                         fontFamily = BwFontFamily,
                         fontSize = 13.sp,

@@ -60,20 +60,32 @@ private fun txViewDirection(input: TxDisplayInput): String =
 
 private fun txLabelCard(input: TxDisplayInput): TxLabelCard {
     val received = input.direction == TxDirection.In
-    val hasLabel = input.label.isNotBlank()
-    val placeholder = if (received) "Who is it from?" else "What was it for?"
+    val explicit = input.label.trim()
+    val shown = txVisibleLabel(input)
+    val question = if (received) "Who is it from?" else "What was it for?"
     val subtitle =
         when {
-            hasLabel -> "On this transaction and its coin"
+            explicit.isNotEmpty() -> "On this transaction and its coin"
             received -> "Who sent it? Coin control uses labels to keep coins apart."
             else -> "What was it for?"
         }
     return TxLabelCard(
-        title = if (hasLabel) input.label else "Add a label",
+        title = shown.ifBlank { "Add a label" },
         subtitle = subtitle,
-        placeholder = placeholder,
-        hasLabel = hasLabel,
+        placeholder = txDefaultLabel(input).ifBlank { question },
+        hasLabel = explicit.isNotEmpty(),
     )
+}
+
+/** Note, else a coin name on this transaction, else the address label it touches. */
+internal fun txVisibleLabel(input: TxDisplayInput): String = input.label.trim().ifEmpty { txDefaultLabel(input) }
+
+/** Display name when the transaction has no note of its own. Not stored. */
+internal fun txDefaultLabel(input: TxDisplayInput): String {
+    val coinName = input.outputs.firstNotNullOfOrNull { output -> output.label.trim().takeIf { it.isNotEmpty() } }
+    val touched = input.addressLabel.trim().takeIf { it.isNotEmpty() }
+    val paid = input.outputs.firstNotNullOfOrNull { output -> output.addressLabel.trim().takeIf { it.isNotEmpty() } }
+    return coinName ?: touched ?: paid.orEmpty()
 }
 
 private fun txDetailsModel(
@@ -125,11 +137,12 @@ internal fun txListRow(
         }
     val whenTime = input.block?.mined ?: input.broadcastAt
     val date = txListDate(whenTime, input.now)
+    val shown = txVisibleLabel(input)
     return TxListRow(
         glyph = listGlyph(input, failed),
         pendingGlyph = pending,
         badge = badge,
-        title = input.label.ifBlank { plainTitle(input) },
+        title = shown.ifBlank { plainTitle(input) },
         titleMuted = failed,
         subtitle = listSubtitle(input, pending, frozen, amber, date),
         amount = detail.hero.amount,
@@ -172,7 +185,7 @@ private fun listSubtitle(
     if (frozen) return TxListSubtitle.Noted("Frozen", TxListLeadTone.Frozen, date)
     val flag = privacyFlag(amber)
     if (flag != null) return TxListSubtitle.Noted(flag, TxListLeadTone.Amber, date)
-    if (input.label.isBlank()) return TxListSubtitle.Noted(date, TxListLeadTone.Secondary, "No label")
+    if (txVisibleLabel(input).isBlank()) return TxListSubtitle.Noted(date, TxListLeadTone.Secondary, "No label")
     return TxListSubtitle.DateOnly(date)
 }
 
