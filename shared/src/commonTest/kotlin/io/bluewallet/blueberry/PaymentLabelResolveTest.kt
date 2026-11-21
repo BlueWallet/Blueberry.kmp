@@ -121,10 +121,15 @@ class PaymentLabelResolveTest {
         db.transactions.upsert(StoredTx(child.txid.toString(), 2, 0, "22".repeat(32), Transaction.write(child), -500L))
         db.addressLabels.upsert(addressFromOutputScript(LABELLED_SCRIPT)!!, "savings")
 
-        val labels = snapshotFromDb(db, 1, 1, wallet = null).txs.associate { it.txid to it.addressLabel }
+        val snap = snapshotFromDb(db, 1, 1, wallet = null)
+        val labels = snap.txs.associate { it.txid to it.addressLabel }
         assertEquals("savings", labels[parent.txid.toString()])
         assertEquals("savings", labels[child.txid.toString()])
         assertEquals(emptyList(), db.txPaymentLabels.list())
+        db.addressLabels.delete(addressFromOutputScript(LABELLED_SCRIPT)!!)
+        val cleared = withStoredUtxoMeta(db, snap).txs.associate { it.txid to it.addressLabel }
+        assertEquals(null, cleared[parent.txid.toString()])
+        assertEquals(null, cleared[child.txid.toString()])
         db.close()
     }
 }

@@ -29,41 +29,36 @@ fun firstAddressLabel(
     addressByOutpoint: Map<String, String> = emptyMap(),
 ): String? {
     val parsed = runCatching { Transaction.read(tx) }.getOrNull() ?: return null
-    return paidLabel(parsed, labelByAddress) ?: spentLabel(parsed, labelByAddress, addressByOutpoint)
+    return touchLabel(touchAddresses(parsed, addressByOutpoint), labelByAddress)
 }
 
-private fun paidLabel(
-    tx: Transaction,
-    labelByAddress: Map<String, String>,
-): String? =
-    tx.txOut.firstNotNullOfOrNull { out ->
-        labelled(addressFromOutputScript(out.publicKeyScript.toByteArray()), labelByAddress)
-    }
-
-private fun spentLabel(
-    tx: Transaction,
-    labelByAddress: Map<String, String>,
-    addressByOutpoint: Map<String, String>,
-): String? =
-    if (addressByOutpoint.isEmpty()) {
-        null
-    } else {
-        tx.txIn.firstNotNullOfOrNull { input ->
-            labelled(addressByOutpoint[prevoutKey(input)], labelByAddress)
-        }
-    }
-
-/** Address paid by each output of [txs], keyed by outpoint. */
-fun addressByOutpoint(txs: List<Pair<String, ByteArray>>): Map<String, String> {
-    val map = LinkedHashMap<String, String>()
+/** Addresses each transaction pays, then addresses its inputs spend. One read of each transaction. */
+fun txTouchAddresses(txs: List<Pair<String, ByteArray>>): Map<String, List<String>> {
+    val parsed = ArrayList<Pair<String, Transaction>>(txs.size)
+    val addressByOutpoint = LinkedHashMap<String, String>()
     for ((txid, raw) in txs) {
         val tx = runCatching { Transaction.read(raw) }.getOrNull() ?: continue
+        parsed.add(txid to tx)
         tx.txOut.forEachIndexed { index, output ->
             val address = addressFromOutputScript(output.publicKeyScript.toByteArray()) ?: return@forEachIndexed
-            map[outpointKey(txid, index)] = address
+            addressByOutpoint[outpointKey(txid, index)] = address
         }
     }
-    return map
+    return parsed.associate { (txid, tx) -> txid to touchAddresses(tx, addressByOutpoint) }
+}
+
+fun touchLabel(
+    addresses: List<String>,
+    labelByAddress: Map<String, String>,
+): String? = addresses.firstNotNullOfOrNull { labelled(it, labelByAddress) }
+
+private fun touchAddresses(
+    tx: Transaction,
+    addressByOutpoint: Map<String, String>,
+): List<String> {
+    val paid = tx.txOut.mapNotNull { addressFromOutputScript(it.publicKeyScript.toByteArray()) }
+    if (addressByOutpoint.isEmpty()) return paid
+    return paid + tx.txIn.mapNotNull { addressByOutpoint[prevoutKey(it)] }
 }
 
 private fun labelled(

@@ -55,6 +55,21 @@ class TxWalletDisplayTest {
     }
 
     @Test
+    fun cleared_address_label_drops_from_a_snapshot_that_already_showed_it() {
+        val fund = storeFunding(9_664L)
+        val address = addressFromOutputScript(receiveScript)!!
+        db.addressLabels.upsert(address, "savings")
+        val snap = query().snap
+        val txid = fund.txid.toString()
+        assertEquals("savings", screenOf(txid).list.title)
+        db.addressLabels.delete(address)
+        val refreshed = withStoredUtxoMeta(db, snap)
+        val row = refreshed.txs.single { it.txid == txid }
+        val q = TxQuery(db, wallet, refreshed, tipHeight = FUND_HEIGHT, nowEpochS = query().nowEpochS)
+        assertEquals("Received", txDetailOf(q, row, null)!!.list.title)
+    }
+
+    @Test
     fun home_sections_put_the_pending_send_first_in_today() {
         val fund = storeFunding(9_664L)
         val send = storeSend(fund)
