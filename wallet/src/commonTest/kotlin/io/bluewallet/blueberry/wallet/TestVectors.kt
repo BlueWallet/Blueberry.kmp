@@ -64,3 +64,25 @@ fun testFundingTx(
         )
     return TestFundingTx(tx.txid.toString(), Transaction.write(tx))
 }
+
+// Account keys of ABANDON (master fingerprint 73c5da0a). Descriptor checksums and addresses from embit.
+const val ABANDON_FINGERPRINT = 0x73c5da0aL
+const val ABANDON_BIP44_XPUB =
+    "xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj"
+const val ABANDON_BIP49_YPUB =
+    "ypub6Ww3ibxVfGzLrAH1PNcjyAWenMTbbAosGNB6VvmSEgytSER9azLDWCxoJwW7Ke7icmizBMXrzBx9979FfaHxHcrArf3zbeJJJUZPf663zsP"
+const val ABANDON_BIP84_XPUB =
+    "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V"
+const val ABANDON_BIP86_XPUB =
+    "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ"
+const val BIP44_ABANDON_INT_0 = "1J3J6EvPrv8q6AC3VCjWV45Uf3nssNMRtH"
+const val BIP49_ABANDON_EXT_0 = "37VucYSaXLCAsxYyAPfbSi9eh4iEcbShgf"
+const val BIP49_ABANDON_INT_0 = "34K56kSjgUCUSD8GTtuF7c9Zzwokbs6uZ7"
+const val TR_ABANDON_DESCRIPTOR = "tr([73c5da0a/86'/0'/0']$ABANDON_BIP86_XPUB/<0;1>/*)#kjk9q86c"
+const val PKH_ABANDON_DESCRIPTOR = "pkh([73c5da0a/44'/0'/0']$ABANDON_BIP44_XPUB/<0;1>/*)#x4nu8kpc"
+const val WPKH_BARE_DESCRIPTOR = "wpkh($ABANDON_BIP84_XPUB)#fnl05fl6"
+const val TR_BARE_DESCRIPTOR = "tr($ABANDON_BIP86_XPUB)#9uqpxtcg"
+const val TR_ABANDON_RECEIVE_DESCRIPTOR = "tr([73c5da0a/86'/0'/0']$ABANDON_BIP86_XPUB/0/*)#rg247h69"
+const val TR_ABANDON_CHANGE_DESCRIPTOR = "tr([73c5da0a/86'/0'/0']$ABANDON_BIP86_XPUB/1/*)#ju05rz2a"
+const val WPKH_ABANDON_RECEIVE_DESCRIPTOR = "wpkh([73c5da0a/84h/0h/0h]$ABANDON_BIP84_XPUB/0/*)#afwvtk2s"
+const val WPKH_ABANDON_CHANGE_DESCRIPTOR = "wpkh([73c5da0a/84h/0h/0h]$ABANDON_BIP84_XPUB/1/*)#vatdkr6g"
