@@ -5,6 +5,7 @@ import fr.acinq.bitcoin.Block
 import fr.acinq.bitcoin.DeterministicWallet
 import fr.acinq.bitcoin.MnemonicCode
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -47,5 +48,12 @@ class IsAddressValidTest {
         assertTrue(addressFromOutputScript(p2sh)!!.startsWith("3"))
         assertNull(addressFromOutputScript(byteArrayOf(0x6a, 0x01, 0x00)))
         assertNull(addressFromOutputScript(ByteArray(0)))
+    }
+
+    @Test
+    fun canonical_address_lowercases_bech32_and_leaves_base58() {
+        assertEquals(ADDR_BECH32, canonicalBitcoinAddress(ADDR_BECH32.uppercase()))
+        assertEquals(ADDR_BECH32, canonicalBitcoinAddress("  $ADDR_BECH32  "))
+        assertEquals(GENESIS_P2PKH, canonicalBitcoinAddress(GENESIS_P2PKH))
     }
 }

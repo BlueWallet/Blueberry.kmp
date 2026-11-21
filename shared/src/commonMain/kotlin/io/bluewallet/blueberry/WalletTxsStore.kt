@@ -36,6 +36,7 @@ import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.addressFromOutputScript
+import io.bluewallet.blueberry.wallet.canonicalBitcoinAddress
 import io.bluewallet.blueberry.wallet.hexToBytes
 import io.bluewallet.blueberry.wallet.unsignedTxid
 import io.bluewallet.headers.decodeBlockHeader
@@ -443,7 +444,7 @@ private fun walletCoins(
                     name = ctx.nameByOutpoint[key],
                     isChange = changeScripts.any { it.contentEquals(u.scriptPubKey) },
                     isFrozen = key in ctx.frozenOutpoints,
-                    addressLabel = watch?.address?.let { ctx.labels.byAddress[it] },
+                    addressLabel = watch?.address?.let { ctx.labels.byAddress[canonicalBitcoinAddress(it)] },
                     txLabel = ctx.labels.byTxid[txid],
                 )
             }.sortedWith(
@@ -575,7 +576,7 @@ fun snapshotFromDb(
             .toSet()
     val nameByOutpoint = db.utxoNames.list().associate { it.outpoint to it.name }
     val frozenOutpoints = db.utxoFrozen.list().toSet()
-    val labelByAddress = db.addressLabels.list().associate { it.address to it.label }
+    val labelByAddress = db.addressLabels.list().associate { canonicalBitcoinAddress(it.address) to it.label }
     val noteByTxid = db.txPaymentLabels.list().associate { it.txid to it.label }
     val coinCtx =
         CoinRowCtx(
@@ -598,11 +599,11 @@ fun snapshotFromDb(
             byAddress = labelByAddress,
             touches = txTouches,
         )
-
     val txs =
         listedWalletTxs(db, stored, wallet, labels, fees, timeLabels, nowMs, privateSendTxids)
+    val txIndex = stored.associate { it.txid to it.txIndex }
     val utxos =
-        withPeerLabels(coins.utxos, coins.graph, nameByOutpoint, txs.associate { it.txid to it.height })
+        withPeerLabels(coins.utxos, coins.graph, nameByOutpoint, txs.associate { it.txid to it.height }, txIndex)
     return WalletTxsSnapshot(
         at = at,
         balanceSats = balanceSats,
@@ -633,7 +634,7 @@ internal fun withStoredUtxoMeta(
     val frozen = db.utxoFrozen.list().toSet()
     val utxoLabelByTxid = firstUtxoLabelByTxid(nameByOutpoint)
     val noteByTxid = db.txPaymentLabels.list().associate { it.txid to it.label }
-    val labelByAddress = db.addressLabels.list().associate { it.address to it.label }
+    val labelByAddress = db.addressLabels.list().associate { canonicalBitcoinAddress(it.address) to it.label }
     val known = snap.txTouches
     val touches =
         when {
@@ -646,7 +647,7 @@ internal fun withStoredUtxoMeta(
             it.copy(
                 name = nameByOutpoint[it.key],
                 isFrozen = it.key in frozen,
-                addressLabel = it.address?.let { a -> labelByAddress[a] },
+                addressLabel = it.address?.let { a -> labelByAddress[canonicalBitcoinAddress(a)] },
                 txLabel = noteByTxid[it.txid],
             )
         }
@@ -657,6 +658,7 @@ internal fun withStoredUtxoMeta(
                 snap.coinLinkGraph,
                 nameByOutpoint,
                 snap.txs.associate { it.txid to it.height },
+                db.transactions.list().associate { it.txid to it.txIndex },
             ),
         txs =
             snap.txs.map {
@@ -676,8 +678,9 @@ private fun withPeerLabels(
     graph: CoinLinkGraph,
     names: Map<String, String>,
     txHeight: Map<String, Int>,
+    txIndex: Map<String, Int>,
 ): List<WalletUtxoRow> {
-    val peers = peerLabelByKey(rows, graph, names, txHeight)
+    val peers = peerLabelByKey(rows, graph, names, txHeight, txIndex)
     return rows.map { it.copy(peerLabel = peers[it.key]) }
 }
 
@@ -686,7 +689,7 @@ private class PeerSource(
     val address: String,
     val name: String,
     val height: Int,
-    val txid: String,
+    val txIndex: Int,
     val vout: Int,
 )
 
@@ -695,11 +698,16 @@ private fun peerLabelByKey(
     graph: CoinLinkGraph,
     names: Map<String, String>,
     txHeight: Map<String, Int>,
+    txIndex: Map<String, Int>,
 ): Map<String, String> {
-    val byAddress = peerSources(rows, graph, names, txHeight).groupBy { it.address }
+    val byAddress = peerSources(rows, graph, names, txHeight, txIndex).groupBy { it.address }
     val result = mutableMapOf<String, String>()
     for (row in rows) {
-        val address = row.address?.trim()?.takeIf { it.isNotEmpty() }
+        val address =
+            row.address
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let(::canonicalBitcoinAddress)
         val donor = address?.let { byAddress[it].orEmpty().firstOrNull { source -> source.key != row.key } }
         if (donor != null) result[row.key] = donor.name
     }
@@ -711,29 +719,38 @@ private fun peerSources(
     graph: CoinLinkGraph,
     names: Map<String, String>,
     txHeight: Map<String, Int>,
+    txIndex: Map<String, Int>,
 ): List<PeerSource> {
-    val fromRows = rows.mapNotNull { receivedSource(it) }
+    val fromRows = rows.mapNotNull { receivedSource(it, txIndex) }
     val seen = fromRows.map { it.key }.toSet()
-    val fromSpent = graph.coins.values.mapNotNull { spentSource(it, names, txHeight, seen) }
+    val fromSpent = graph.coins.values.mapNotNull { spentSource(it, names, txHeight, txIndex, seen) }
     return (fromRows + fromSpent).sortedWith(
         compareByDescending<PeerSource> { it.height }
-            .thenByDescending { it.txid }
+            .thenByDescending { it.txIndex }
             .thenByDescending { it.vout },
     )
 }
 
-private fun receivedSource(row: WalletUtxoRow): PeerSource? {
-    val address = row.address?.trim()?.takeIf { it.isNotEmpty() }
+private fun receivedSource(
+    row: WalletUtxoRow,
+    txIndex: Map<String, Int>,
+): PeerSource? {
+    val address =
+        row.address
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let(::canonicalBitcoinAddress)
     val name = row.name.nonBlank()?.takeUnless { it.startsWith(CHANGE_FROM_PREFIX) }
     if (row.isChange || address == null || name == null) return null
     val height = if (row.height == 0) Int.MAX_VALUE else row.height
-    return PeerSource(row.key, address, name, height, row.txid, row.vout)
+    return PeerSource(row.key, address, name, height, txIndex[row.txid] ?: 0, row.vout)
 }
 
 private fun spentSource(
     coin: CoinGraphCoin,
     names: Map<String, String>,
     txHeight: Map<String, Int>,
+    txIndex: Map<String, Int>,
     seen: Set<String>,
 ): PeerSource? {
     val eligible = coin.spent && !coin.isChange && coin.outpoint !in seen
@@ -742,7 +759,10 @@ private fun spentSource(
         if (name == null) {
             null
         } else {
-            addressFromOutputScript(hexToBytes(coin.scriptHex))?.trim()?.takeIf { it.isNotEmpty() }
+            addressFromOutputScript(hexToBytes(coin.scriptHex))
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let(::canonicalBitcoinAddress)
         }
     val height =
         when (txHeight[coin.txid]) {
@@ -758,7 +778,7 @@ private fun spentSource(
             address,
             name,
             height,
-            coin.txid,
+            txIndex[coin.txid] ?: 0,
             coin.outpoint.substringAfterLast(':').toIntOrNull() ?: 0,
         )
     }

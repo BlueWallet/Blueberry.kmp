@@ -112,12 +112,16 @@ private fun pushPayload(written: ByteArray): ByteArray? {
 
 /**
  * ScriptPubKey this input spends, when it can be recovered without the parent output.
- * Distinguishes native p2wpkh, nested p2sh-p2wpkh, and p2pkh. Taproot key-path returns null.
+ * Distinguishes native p2wpkh, nested p2sh-p2wpkh, and p2pkh. Taproot key-path and
+ * script-path control blocks return null.
  */
 internal fun spentScriptFromInput(input: TxIn): ByteArray? {
     val scriptSig = input.signatureScript.toByteArray()
     val wit = input.witness.stack
-    val witnessPubkey = wit.lastOrNull()?.toByteArray()?.takeIf { wit.size >= 2 && it.size == 33 }
+    val witnessPubkey =
+        wit.lastOrNull()?.toByteArray()?.takeIf { bytes ->
+            wit.size == 2 && bytes.size == 33 && (bytes[0] == 0x02.toByte() || bytes[0] == 0x03.toByte())
+        }
     return when {
         witnessPubkey != null && isP2wpkhRedeemPush(scriptSig) -> p2shP2wpkhScriptFromPubkey(witnessPubkey)
         witnessPubkey != null && scriptSig.isEmpty() -> p2wpkhScriptFromPubkey(witnessPubkey)

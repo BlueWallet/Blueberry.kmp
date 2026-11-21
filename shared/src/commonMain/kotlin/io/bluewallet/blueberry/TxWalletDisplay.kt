@@ -13,6 +13,7 @@ import io.bluewallet.blueberry.storage.PrivateSendCoin
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.wallet.Wallet
 import io.bluewallet.blueberry.wallet.WatchAddress
+import io.bluewallet.blueberry.wallet.canonicalBitcoinAddress
 import io.bluewallet.blueberry.wallet.hexToBytes
 
 class TxQuery(
@@ -118,7 +119,7 @@ private fun txFacts(query: TxQuery): TxFacts {
         broadcast = db.broadcastVia.list().associate { it.txid to it.via },
         stored = stored,
         feeRateSatPerVb = loadSendFeeRate(db),
-        addressLabels = db.addressLabels.list().associate { it.address to it.label },
+        addressLabels = db.addressLabels.list().associate { canonicalBitcoinAddress(it.address) to it.label },
     )
 }
 

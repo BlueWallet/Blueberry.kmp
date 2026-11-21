@@ -2,6 +2,7 @@ package io.bluewallet.blueberry.parse
 
 import fr.acinq.bitcoin.Transaction
 import io.bluewallet.blueberry.wallet.addressFromOutputScript
+import io.bluewallet.blueberry.wallet.canonicalBitcoinAddress
 import io.bluewallet.blueberry.wallet.outpointKey
 
 fun firstUtxoLabelByTxid(nameByOutpoint: Map<String, String>): Map<String, String> {
@@ -35,22 +36,31 @@ fun firstAddressLabel(
 /** Addresses each transaction pays, then addresses its inputs spend. One read of each transaction. */
 fun txTouchAddresses(txs: List<Pair<String, ByteArray>>): Map<String, List<String>> {
     val parsed = ArrayList<Pair<String, Transaction>>(txs.size)
+    val unreadable = ArrayList<String>()
     val addressByOutpoint = LinkedHashMap<String, String>()
     for ((txid, raw) in txs) {
-        val tx = runCatching { Transaction.read(raw) }.getOrNull() ?: continue
+        val tx = runCatching { Transaction.read(raw) }.getOrNull()
+        if (tx == null) {
+            unreadable.add(txid)
+            continue
+        }
         parsed.add(txid to tx)
         tx.txOut.forEachIndexed { index, output ->
             val address = addressFromOutputScript(output.publicKeyScript.toByteArray()) ?: return@forEachIndexed
             addressByOutpoint[outpointKey(txid, index)] = address
         }
     }
-    return parsed.associate { (txid, tx) -> txid to touchAddresses(tx, addressByOutpoint) }
+    return parsed.associate { (txid, tx) -> txid to touchAddresses(tx, addressByOutpoint) } +
+        unreadable.associateWith { emptyList() }
 }
 
 fun touchLabel(
     addresses: List<String>,
     labelByAddress: Map<String, String>,
-): String? = addresses.firstNotNullOfOrNull { labelled(it, labelByAddress) }
+): String? {
+    val labels = labelByAddress.mapKeys { canonicalBitcoinAddress(it.key) }
+    return addresses.firstNotNullOfOrNull { labelled(it, labels) }
+}
 
 private fun touchAddresses(
     tx: Transaction,
@@ -69,4 +79,4 @@ private fun touchAddresses(
 private fun labelled(
     address: String?,
     labelByAddress: Map<String, String>,
-): String? = address?.let { labelByAddress[it]?.trim() }?.takeIf { it.isNotEmpty() }
+): String? = address?.let { labelByAddress[canonicalBitcoinAddress(it)]?.trim() }?.takeIf { it.isNotEmpty() }

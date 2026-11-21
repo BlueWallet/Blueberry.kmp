@@ -174,6 +174,61 @@ class UtxoDefaultLabelTest {
     }
 
     @Test
+    fun an_uppercase_pasted_address_still_picks_up_a_spent_coins_name() {
+        val db = createSqliteDatabase(":memory:")
+        val script = byteArrayOf(0x00, 0x14) + ByteArray(20) { 7 }
+        val addr = addressFromOutputScript(script)!!
+        val spentTxid = "aa".repeat(32)
+        val spentKey = "$spentTxid:0"
+        val fresh = peerCoin("bb", height = 5).copy(address = addr.uppercase(), scriptPubKey = script)
+        db.utxoNames.upsert(spentKey, "cafe")
+        db.addressLabels.upsert(addr.uppercase(), "savings")
+        val graph =
+            CoinLinkGraph(
+                coins =
+                    mapOf(
+                        spentKey to CoinGraphCoin(spentKey, spentTxid, 1_000L, scriptHex(script), false, true),
+                    ),
+                txs = emptyMap(),
+                neighbors = emptyMap(),
+            )
+        val snap =
+            WalletTxsSnapshot(
+                txs = listOf(WalletTxRow(spentTxid, "aa", 1, "", 0, "")),
+                utxos = listOf(fresh),
+                utxosReady = true,
+                coinLinkGraph = graph,
+            )
+        val coin = withStoredUtxoMeta(db, snap).utxos.single()
+        assertEquals("cafe", coin.peerLabel)
+        assertEquals("savings", coin.addressLabel)
+        db.close()
+    }
+
+    @Test
+    fun two_named_coins_at_the_same_height_use_the_later_transaction_index() {
+        val db = createSqliteDatabase(":memory:")
+        val addr = "bc1qsamepeer"
+        val older = peerCoin("ff", height = 10).copy(address = addr)
+        val newer = peerCoin("aa", height = 10).copy(address = addr)
+        val blank = peerCoin("cc", height = 10).copy(address = addr)
+        db.utxoNames.upsert(older.key, "first")
+        db.utxoNames.upsert(newer.key, "second")
+        db.transactions.upsert(StoredTx(older.txid, 10, 1, "11".repeat(32), byteArrayOf(0x00), 0))
+        db.transactions.upsert(StoredTx(newer.txid, 10, 4, "11".repeat(32), byteArrayOf(0x00), 0))
+        val snap =
+            WalletTxsSnapshot(
+                utxos = listOf(older, newer, blank),
+                utxosReady = true,
+            )
+        val coins = withStoredUtxoMeta(db, snap).utxos.associateBy { it.key }
+        assertEquals("second", coins.getValue(blank.key).peerLabel)
+        assertEquals("second", coins.getValue(older.key).peerLabel)
+        assertEquals("first", coins.getValue(newer.key).peerLabel)
+        db.close()
+    }
+
+    @Test
     fun blank_coin_name_falls_back_to_the_address_label() {
         assertEquals("savings", coin(name = "  ", addressLabel = "savings").label)
         assertNull(coin(name = " ", addressLabel = " ").label)

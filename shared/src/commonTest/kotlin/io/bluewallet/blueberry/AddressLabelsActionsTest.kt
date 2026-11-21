@@ -9,6 +9,7 @@ import fr.acinq.bitcoin.TxOut
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.addressFromOutputScript
+import io.bluewallet.blueberry.wallet.canonicalBitcoinAddress
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -68,6 +69,23 @@ class AddressLabelsActionsTest {
         assertFalse(setAddressLabel(db, null, store, address, "  "))
         assertNull(db.addressLabels.get(address))
         assertEquals("0", db.keyValue.get(LABELS_DIRTY_KEY))
+        db.close()
+    }
+
+    @Test
+    fun uppercase_bech32_label_is_stored_and_read_under_the_canonical_key() {
+        val db = createSqliteDatabase(":memory:")
+        val store = createWalletTxsStore()
+        val script = byteArrayOf(0x00, 0x14) + ByteArray(20) { 9 }
+        val address = addressFromOutputScript(script)!!
+        val upper = address.uppercase()
+        db.addressLabels.upsert(upper, "savings")
+        assertEquals("savings", addressLabel(db, upper))
+        assertEquals("savings", addressLabel(db, address))
+        assertTrue(setAddressLabel(db, null, store, upper, "donations"))
+        assertEquals("donations", db.addressLabels.get(canonicalBitcoinAddress(address)))
+        assertNull(db.addressLabels.get(upper))
+        assertEquals("donations", addressLabel(db, upper))
         db.close()
     }
 }

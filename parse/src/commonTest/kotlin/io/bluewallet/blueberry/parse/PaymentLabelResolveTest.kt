@@ -88,6 +88,56 @@ class PaymentLabelResolveTest {
         assertEquals("savings", touchLabel(addrs, mapOf(p2sh to "savings", native to "payroll")))
         assertNull(firstAddressLabel(Transaction.write(witnessSpend(pubkey.value.toByteArray())), mapOf(p2sh to "savings")))
     }
+
+    @Test
+    fun first_address_label_matches_an_uppercase_bech32_key() {
+        val pubkey = watchKey0()
+        val spend = witnessSpend(pubkey.value.toByteArray())
+        val addr = addressFromOutputScript(p2wpkhScript(pubkey))!!
+        assertEquals("savings", firstAddressLabel(Transaction.write(spend), mapOf(addr.uppercase() to "savings")))
+    }
+
+    @Test
+    fun unreadable_transactions_still_have_a_touch_cache_key() {
+        val pubkey = watchKey0()
+        val spend = witnessSpend(pubkey.value.toByteArray())
+        val raw = Transaction.write(spend)
+        val bad = byteArrayOf(0x00, 0x01)
+        val touches = txTouchAddresses(listOf(spend.txid.toString() to raw, "dead" to bad))
+        assertEquals("savings", touchLabel(touches.getValue(spend.txid.toString()), mapOf(addressFromOutputScript(p2wpkhScript(pubkey))!! to "savings")))
+        assertEquals(emptyList(), touches.getValue("dead"))
+        assertNull(firstAddressLabel(bad, mapOf(addressFromOutputScript(p2wpkhScript(pubkey))!! to "savings")))
+    }
+
+    @Test
+    fun taproot_script_path_control_block_is_not_treated_as_a_p2wpkh_spend() {
+        val control = byteArrayOf(0xc0.toByte()) + ByteArray(32) { 1 }
+        val two =
+            TxIn(
+                OutPoint(TxHash(ByteArray(32) { 1 }), 0L),
+                ByteVector.empty,
+                0xffffffffL,
+                ScriptWitness(listOf(ByteVector(ByteArray(64)), ByteVector(control))),
+            )
+        val three =
+            TxIn(
+                OutPoint(TxHash(ByteArray(32) { 2 }), 0L),
+                ByteVector.empty,
+                0xffffffffL,
+                ScriptWitness(listOf(ByteVector(ByteArray(64)), ByteVector(byteArrayOf(0x51)), ByteVector(control))),
+            )
+        assertNull(spentScriptFromInput(two))
+        assertNull(spentScriptFromInput(three))
+        val pubkey = watchKey0().value.toByteArray()
+        val native =
+            TxIn(
+                OutPoint(TxHash(ByteArray(32) { 1 }), 0L),
+                ByteVector.empty,
+                0xffffffffL,
+                ScriptWitness(listOf(ByteVector(ByteArray(64)), ByteVector(pubkey))),
+            )
+        assertEquals(p2wpkhScriptFromPubkey(pubkey).toList(), spentScriptFromInput(native)?.toList())
+    }
 }
 
 private fun p2wpkh(seed: Int): ByteArray = byteArrayOf(0x00, 0x14) + ByteArray(20) { seed.toByte() }
