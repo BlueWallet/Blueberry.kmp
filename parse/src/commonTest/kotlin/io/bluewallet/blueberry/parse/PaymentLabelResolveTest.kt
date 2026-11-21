@@ -103,26 +103,16 @@ class PaymentLabelResolveTest {
         val spend = witnessSpend(pubkey.value.toByteArray())
         val raw = Transaction.write(spend)
         val bad = byteArrayOf(0x00, 0x01)
-        val touches = txTouchAddresses(listOf(spend.txid.toString() to raw, "dead" to bad))
-        assertEquals("savings", touchLabel(touches.getValue(spend.txid.toString()), mapOf(addressFromOutputScript(p2wpkhScript(pubkey))!! to "savings")))
-        assertEquals(emptyList(), touches.getValue("dead"))
-        assertNull(firstAddressLabel(bad, mapOf(addressFromOutputScript(p2wpkhScript(pubkey))!! to "savings")))
-    }
-
-    @Test
-    fun a_readable_copy_wins_over_an_unreadable_duplicate_txid() {
-        val pubkey = watchKey0()
-        val spend = witnessSpend(pubkey.value.toByteArray())
         val txid = spend.txid.toString()
-        val raw = Transaction.write(spend)
-        val bad = byteArrayOf(0x00, 0x01)
         val labels = mapOf(addressFromOutputScript(p2wpkhScript(pubkey))!! to "savings")
+        val touches = txTouchAddresses(listOf(txid to raw, "dead" to bad))
+        assertEquals("savings", touchLabel(touches.getValue(txid), labels))
+        assertEquals(emptyList(), touches.getValue("dead"))
+        assertNull(firstAddressLabel(bad, labels))
         val readableFirst = txTouchAddresses(listOf(txid to raw, txid to bad))
         val unreadableFirst = txTouchAddresses(listOf(txid to bad, txid to raw))
         assertEquals("savings", touchLabel(readableFirst.getValue(txid), labels))
         assertEquals("savings", touchLabel(unreadableFirst.getValue(txid), labels))
-        assertTrue(readableFirst.getValue(txid).isNotEmpty())
-        assertTrue(unreadableFirst.getValue(txid).isNotEmpty())
     }
 
     @Test

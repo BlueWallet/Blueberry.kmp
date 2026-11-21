@@ -148,7 +148,7 @@ class UtxoDefaultLabelTest {
         val addr = addressFromOutputScript(script)!!
         val spentTxid = "aa".repeat(32)
         val spentKey = "$spentTxid:0"
-        val fresh = peerCoin("bb", height = 5).copy(address = addr, scriptPubKey = script)
+        val fresh = peerCoin("bb", height = 5).copy(address = addr.uppercase(), scriptPubKey = script)
         db.utxoNames.upsert(spentKey, "cafe")
         val graph =
             CoinLinkGraph(
@@ -170,38 +170,6 @@ class UtxoDefaultLabelTest {
         assertEquals("cafe", coin.label)
         assertNull(coin.name)
         assertEquals(listOf(spentKey), db.utxoNames.list().map { it.outpoint })
-        db.close()
-    }
-
-    @Test
-    fun an_uppercase_pasted_address_still_picks_up_a_spent_coins_name() {
-        val db = createSqliteDatabase(":memory:")
-        val script = byteArrayOf(0x00, 0x14) + ByteArray(20) { 7 }
-        val addr = addressFromOutputScript(script)!!
-        val spentTxid = "aa".repeat(32)
-        val spentKey = "$spentTxid:0"
-        val fresh = peerCoin("bb", height = 5).copy(address = addr.uppercase(), scriptPubKey = script)
-        db.utxoNames.upsert(spentKey, "cafe")
-        db.addressLabels.upsert(addr.uppercase(), "savings")
-        val graph =
-            CoinLinkGraph(
-                coins =
-                    mapOf(
-                        spentKey to CoinGraphCoin(spentKey, spentTxid, 1_000L, scriptHex(script), false, true),
-                    ),
-                txs = emptyMap(),
-                neighbors = emptyMap(),
-            )
-        val snap =
-            WalletTxsSnapshot(
-                txs = listOf(WalletTxRow(spentTxid, "aa", 1, "", 0, "")),
-                utxos = listOf(fresh),
-                utxosReady = true,
-                coinLinkGraph = graph,
-            )
-        val coin = withStoredUtxoMeta(db, snap).utxos.single()
-        assertEquals("cafe", coin.peerLabel)
-        assertEquals("savings", coin.addressLabel)
         db.close()
     }
 

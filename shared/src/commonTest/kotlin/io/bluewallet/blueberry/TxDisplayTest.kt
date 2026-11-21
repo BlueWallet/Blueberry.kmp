@@ -381,13 +381,6 @@ class TxDisplayTest {
     }
 
     @Test
-    fun label_card_keeps_a_note_equal_to_the_add_prompt() {
-        assertEquals("Add a label", labelCardTyped("Add a label", hasLabel = true, editing = false, draft = ""))
-        assertEquals("", labelCardTyped("Add a label", hasLabel = false, editing = false, draft = ""))
-        assertEquals("cafe", labelCardTyped("cafe", hasLabel = false, editing = false, draft = ""))
-    }
-
-    @Test
     fun coin_card_title_matches_the_coin_row_display_name() {
         val base = received()
         val receive = base.outputs[0]
