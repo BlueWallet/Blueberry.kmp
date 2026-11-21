@@ -126,46 +126,41 @@ private fun deriveHdAddresses(
     return addresses
 }
 
-private fun deriveHdWatchWallet(
-    secret: String,
-    kind: WalletSecretKind,
+private fun deriveMnemonicWatchWallet(
+    mnemonic: String,
     gaps: HdWatchGaps,
 ): WatchWallet {
-    val seed = if (kind == WalletSecretKind.MNEMONIC) MnemonicCode.toSeed(secret, "") else null
-    val master = seed?.let { DeterministicWallet.generate(it) }
-    val types =
-        if (kind == WalletSecretKind.ZPUB) {
-            listOf(AddressScriptType.P2WPKH)
-        } else {
-            HD_SCRIPT_TYPES
+    val master = DeterministicWallet.generate(MnemonicCode.toSeed(mnemonic, ""))
+    val addresses =
+        HD_SCRIPT_TYPES.flatMap { scriptType ->
+            val accountPath = scriptType.accountPath()
+            val account = master.derivePrivateKey(accountPath)
+            deriveHdAddresses(scriptType, accountPath, gaps[scriptType]) { path -> account.derivePrivateKey(path).publicKey }
         }
-    val addresses = mutableListOf<WatchAddress>()
-    for (scriptType in types) {
-        val accountPath = scriptType.accountPath()
-        val typeGaps = if (kind == WalletSecretKind.ZPUB) gaps.p2wpkh else gaps[scriptType]
-        val derivePublicKey: (String) -> PublicKey =
-            when (kind) {
-                WalletSecretKind.MNEMONIC -> {
-                    val account = master!!.derivePrivateKey(accountPath)
-                    val derive: (String) -> PublicKey = { path -> account.derivePrivateKey(path).publicKey }
-                    derive
-                }
-                WalletSecretKind.ZPUB -> {
-                    val account = DeterministicWallet.ExtendedPublicKey.decode(secret).second
-                    val derive: (String) -> PublicKey = { path -> account.derivePublicKey(path).publicKey }
-                    derive
-                }
-                else -> error("unsupported HD secret kind")
-            }
-        addresses.addAll(deriveHdAddresses(scriptType, accountPath, typeGaps, derivePublicKey))
-    }
-    return WatchWallet(
-        kind = WatchWalletKind.BIP84,
-        secret = secret,
-        addresses = addresses,
-        scripts = addresses.map { it.scriptPubKey },
-    )
+    return hdWatchWallet(mnemonic, addresses)
 }
+
+private fun deriveWatchKeyWallet(
+    secret: String,
+    key: WatchKey,
+    gaps: HdWatchGaps,
+): WatchWallet {
+    val addresses =
+        deriveHdAddresses(key.scriptType, key.accountPath, gaps[key.scriptType]) { path ->
+            key.account.derivePublicKey(path).publicKey
+        }
+    return hdWatchWallet(secret, addresses)
+}
+
+private fun hdWatchWallet(
+    secret: String,
+    addresses: List<WatchAddress>,
+) = WatchWallet(
+    kind = WatchWalletKind.BIP84,
+    secret = secret,
+    addresses = addresses,
+    scripts = addresses.map { it.scriptPubKey },
+)
 
 fun deriveWatchWallet(
     secret: String,
@@ -175,8 +170,9 @@ fun deriveWatchWallet(
     return when (parsed.kind) {
         WalletSecretKind.WIF -> deriveWifWatchWallet(parsed.value)
         WalletSecretKind.ADDRESS -> deriveAddressWatchWallet(parsed.value)
-        WalletSecretKind.MNEMONIC, WalletSecretKind.ZPUB ->
-            deriveHdWatchWallet(parsed.value, parsed.kind, normalizeHdGaps(gaps))
+        WalletSecretKind.MNEMONIC -> deriveMnemonicWatchWallet(parsed.value, normalizeHdGaps(gaps))
+        WalletSecretKind.XPUB, WalletSecretKind.YPUB, WalletSecretKind.ZPUB, WalletSecretKind.DESCRIPTOR ->
+            deriveWatchKeyWallet(parsed.value, parseWatchKey(parsed.value), normalizeHdGaps(gaps))
     }
 }
 

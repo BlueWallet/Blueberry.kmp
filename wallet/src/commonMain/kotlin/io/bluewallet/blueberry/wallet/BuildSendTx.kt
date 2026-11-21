@@ -253,17 +253,17 @@ private fun signLegacyLowR(
     )
 
 /**
- * The key material a wallet secret gives us. Mnemonics and WIFs can sign; zpub and single-address
- * watches can only describe their inputs, so they stop at an unsigned PSBT. Mnemonics and zpubs
- * also supply PSBT origin metadata (account fingerprint + derivation path).
+ * The key material a wallet secret gives us. Mnemonics and WIFs can sign; watch keys (xpub, ypub,
+ * zpub, descriptor) and single-address watches can only describe their inputs, so they stop at an
+ * unsigned PSBT. Mnemonics and watch keys also supply PSBT origin metadata (fingerprint + path).
  */
 private sealed class SendAccount {
     data class Mnemonic(
         val master: DeterministicWallet.ExtendedPrivateKey,
     ) : SendAccount()
 
-    data class Zpub(
-        val account: DeterministicWallet.ExtendedPublicKey,
+    data class Watch(
+        val key: WatchKey,
     ) : SendAccount()
 
     data class Wif(
@@ -277,8 +277,8 @@ private fun sendAccountFor(parsed: ParsedWalletSecret): SendAccount =
     when (parsed.kind) {
         WalletSecretKind.MNEMONIC ->
             SendAccount.Mnemonic(DeterministicWallet.generate(MnemonicCode.toSeed(parsed.value, "")))
-        WalletSecretKind.ZPUB ->
-            SendAccount.Zpub(DeterministicWallet.ExtendedPublicKey.decode(parsed.value).second)
+        WalletSecretKind.XPUB, WalletSecretKind.YPUB, WalletSecretKind.ZPUB, WalletSecretKind.DESCRIPTOR ->
+            SendAccount.Watch(parseWatchKey(parsed.value))
         WalletSecretKind.WIF ->
             SendAccount.Wif(PrivateKey(decodeWifPrivateKey(parsed.value)))
         WalletSecretKind.ADDRESS -> SendAccount.AddressWatch
@@ -287,17 +287,14 @@ private fun sendAccountFor(parsed: ParsedWalletSecret): SendAccount =
 private fun SendAccount.fingerprint(): Long? =
     when (this) {
         is SendAccount.Mnemonic -> master.fingerprint()
-        is SendAccount.Zpub -> account.fingerprint()
+        is SendAccount.Watch -> key.bip32Fingerprint()
         is SendAccount.Wif, SendAccount.AddressWatch -> null
     }
-
-/** zpub watches use a chain/index path relative to the account; mnemonics use the full BIP84 path. */
-private fun relativePathNums(addr: WatchAddress): List<Long> = listOf(if (addr.change) 1L else 0L, addr.index.toLong())
 
 private fun SendAccount.publicKeyAt(addr: WatchAddress): PublicKey? =
     when (this) {
         is SendAccount.Mnemonic -> master.derivePrivateKey(addr.path).publicKey
-        is SendAccount.Zpub -> account.derivePublicKey(relativePathNums(addr)).publicKey
+        is SendAccount.Watch -> key.publicKeyAt(addr.change, addr.index)
         is SendAccount.Wif -> privateKey.publicKey()
         SendAccount.AddressWatch -> null
     }
@@ -305,7 +302,7 @@ private fun SendAccount.publicKeyAt(addr: WatchAddress): PublicKey? =
 private fun SendAccount.bip32PathNums(addr: WatchAddress): List<Long>? =
     when (this) {
         is SendAccount.Mnemonic -> KeyPath.computePath(addr.path)
-        is SendAccount.Zpub -> relativePathNums(addr)
+        is SendAccount.Watch -> key.bip32Path(addr.change, addr.index).path
         is SendAccount.Wif, SendAccount.AddressWatch -> null
     }
 
@@ -313,7 +310,7 @@ private fun SendAccount.privateKeyFor(signPath: String): PrivateKey =
     when (this) {
         is SendAccount.Mnemonic -> master.derivePrivateKey(signPath).privateKey
         is SendAccount.Wif -> privateKey
-        is SendAccount.Zpub, SendAccount.AddressWatch ->
+        is SendAccount.Watch, SendAccount.AddressWatch ->
             throw IllegalArgumentException(SIGNING_SECRET_REQUIRED)
     }
 

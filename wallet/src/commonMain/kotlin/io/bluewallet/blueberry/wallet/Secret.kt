@@ -6,7 +6,9 @@ import fr.acinq.bitcoin.DeterministicWallet
 import fr.acinq.bitcoin.MnemonicCode
 import io.bluewallet.blueberry.storage.Database
 
-enum class WalletSecretKind { MNEMONIC, ZPUB, WIF, ADDRESS }
+enum class WalletSecretKind { MNEMONIC, XPUB, YPUB, ZPUB, DESCRIPTOR, WIF, ADDRESS }
+
+private val WATCH_KEY_KINDS = mapOf("xpub" to WalletSecretKind.XPUB, "ypub" to WalletSecretKind.YPUB, "zpub" to WalletSecretKind.ZPUB)
 
 data class ParsedWalletSecret(
     val kind: WalletSecretKind,
@@ -68,20 +70,12 @@ fun decodeWifPrivateKey(wif: String): ByteArray {
 fun parseWalletSecret(raw: String): ParsedWalletSecret {
     val value = raw.trim()
     if (value.isEmpty()) throw IllegalArgumentException("wallet secret is empty")
-    if (value.startsWith("zpub")) {
-        val decoded =
-            try {
-                DeterministicWallet.ExtendedPublicKey.decode(value)
-            } catch (_: Exception) {
-                throw IllegalArgumentException("invalid zpub")
-            }
-        if (decoded.second.depth != 3) {
-            throw IllegalArgumentException("zpub must be account-level (m/84'/0'/0')")
-        }
-        return ParsedWalletSecret(WalletSecretKind.ZPUB, value)
+    WATCH_KEY_KINDS[value.take(4)]?.let { kind ->
+        decodeAccountKey(value)
+        return ParsedWalletSecret(kind, value)
     }
-    if (Regex("^[xyzvt]p(?:ub|rv)").containsMatchIn(value)) {
-        throw IllegalArgumentException("only mainnet account zpub is supported")
+    if (Regex("^[xyzuvt]p(?:ub|rv)").containsMatchIn(value)) {
+        throw IllegalArgumentException("only mainnet account xpub, ypub or zpub is supported")
     }
     if (looksLikeWifCandidate(value)) {
         decodeWifPrivateKey(value)
@@ -102,6 +96,17 @@ fun parseWalletSecret(raw: String): ParsedWalletSecret {
     }
     return ParsedWalletSecret(WalletSecretKind.MNEMONIC, mnemonic)
 }
+
+/** The watch key of an xpub, ypub, zpub or descriptor secret; null for other kinds. */
+fun ParsedWalletSecret.watchKey(): WatchKey? =
+    when (kind) {
+        WalletSecretKind.XPUB, WalletSecretKind.YPUB, WalletSecretKind.ZPUB, WalletSecretKind.DESCRIPTOR -> parseWatchKey(value)
+        WalletSecretKind.MNEMONIC, WalletSecretKind.WIF, WalletSecretKind.ADDRESS -> null
+    }
+
+/** HD script types this secret watches: all four for a mnemonic, the key's one for a watch key, none otherwise. */
+fun ParsedWalletSecret.hdScriptTypes(): List<AddressScriptType> =
+    if (kind == WalletSecretKind.MNEMONIC) HD_SCRIPT_TYPES else listOfNotNull(watchKey()?.scriptType)
 
 fun hasWalletSecret(db: Database): Boolean {
     val v = db.keyValue.get(WALLET_SECRET_KEY)

@@ -21,7 +21,7 @@ class SecretTest {
     }
 
     @Test
-    fun rejects_invalid_mnemonic_empty_xpub_vpub_master_zpub_french() {
+    fun rejects_invalid_mnemonic_empty_vpub_private_master_key_french() {
         assertFailsWith<IllegalArgumentException> { parseWalletSecret("not a real mnemonic phrase at all") }
         assertFailsWith<IllegalArgumentException> { parseWalletSecret("") }.also {
             assertTrue(it.message!!.contains("empty"))
@@ -31,27 +31,38 @@ class SecretTest {
         }
         val seed = MnemonicCode.toSeed(ABANDON, "")
         val account = DeterministicWallet.generate(seed).derivePrivateKey(BIP84_ACCOUNT_PATH)
-        val xpub = account.extendedPublicKey.encode(DeterministicWallet.xpub)
-        assertFailsWith<IllegalArgumentException> { parseWalletSecret(xpub) }.also {
-            assertTrue(it.message!!.contains("zpub"))
-        }
         assertFailsWith<IllegalArgumentException> { parseWalletSecret("zprv" + "1".repeat(107)) }.also {
-            assertTrue(it.message!!.contains("mainnet account zpub"))
+            assertEquals("only mainnet account xpub, ypub or zpub is supported", it.message)
         }
         val vpub = account.extendedPublicKey.encode(DeterministicWallet.vpub)
         assertTrue(vpub.startsWith("vpub"))
         assertFailsWith<IllegalArgumentException> { parseWalletSecret(vpub) }.also {
-            assertTrue(it.message!!.contains("mainnet account zpub"))
+            assertEquals("only mainnet account xpub, ypub or zpub is supported", it.message)
         }
-        val master = DeterministicWallet.generate(seed).extendedPublicKey.encode(DeterministicWallet.zpub)
-        assertFailsWith<IllegalArgumentException> { parseWalletSecret(master) }.also {
-            assertTrue(it.message!!.contains("account-level"))
+        val master = DeterministicWallet.generate(seed).extendedPublicKey
+        assertFailsWith<IllegalArgumentException> { parseWalletSecret(master.encode(DeterministicWallet.zpub)) }.also {
+            assertEquals("zpub must be account-level (m/84'/0'/0')", it.message)
+        }
+        assertFailsWith<IllegalArgumentException> { parseWalletSecret(master.encode(DeterministicWallet.xpub)) }.also {
+            assertEquals("xpub must be account-level (m/44'/0'/0')", it.message)
+        }
+        assertFailsWith<IllegalArgumentException> { parseWalletSecret(master.encode(DeterministicWallet.ypub)) }.also {
+            assertEquals("ypub must be account-level (m/49'/0'/0')", it.message)
+        }
+        assertFailsWith<IllegalArgumentException> { parseWalletSecret(ABANDON_BIP44_XPUB.dropLast(1) + "x") }.also {
+            assertEquals("invalid xpub", it.message)
         }
         assertFailsWith<IllegalArgumentException> {
             parseWalletSecret(
                 "abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abeille",
             )
         }.also { assertTrue(it.message!!.contains("mnemonic")) }
+    }
+
+    @Test
+    fun accepts_account_xpub_and_ypub() {
+        assertEquals(ParsedWalletSecret(WalletSecretKind.XPUB, ABANDON_BIP44_XPUB), parseWalletSecret(" $ABANDON_BIP44_XPUB "))
+        assertEquals(ParsedWalletSecret(WalletSecretKind.YPUB, ABANDON_BIP49_YPUB), parseWalletSecret(ABANDON_BIP49_YPUB))
     }
 
     @Test

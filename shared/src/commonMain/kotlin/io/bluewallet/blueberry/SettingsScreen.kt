@@ -313,7 +313,10 @@ private fun secretKindLabel(secret: String?): String {
     if (secret == null) return "Missing"
     return when (runCatching { parseWalletSecret(secret).kind }.getOrNull()) {
         WalletSecretKind.MNEMONIC -> "Mnemonic"
+        WalletSecretKind.XPUB -> "xpub"
+        WalletSecretKind.YPUB -> "ypub"
         WalletSecretKind.ZPUB -> "zpub"
+        WalletSecretKind.DESCRIPTOR -> "Descriptor"
         WalletSecretKind.WIF -> "WIF"
         WalletSecretKind.ADDRESS -> "Address"
         null -> "Stored"
