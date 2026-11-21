@@ -70,6 +70,10 @@ class DescriptorTest {
     fun checksum_is_optional_but_must_match() {
         assertEquals(WalletSecretKind.DESCRIPTOR, parseWalletSecret(TR_ABANDON_DESCRIPTOR.substringBefore('#')).kind)
         rejects("descriptor checksum does not match", TR_ABANDON_DESCRIPTOR.dropLast(1) + "q")
+        rejects(
+            "descriptor has characters a checksum cannot cover",
+            "wpkh([73c5da0a/84\u2019/0\u2019/0\u2019]$ABANDON_BIP84_XPUB)#abcdefgh",
+        )
         rejects("descriptor checksum does not match", TR_ABANDON_DESCRIPTOR.replace("/<0;1>/*", "/<1;0>/*"))
     }
 
@@ -117,6 +121,8 @@ class DescriptorTest {
         rejects("hardened derivation after the xpub is not supported", "wpkh($x/<0;1>/*h)")
         rejects("descriptor path must be /<0;1>/* or none", "wpkh($x/*)")
         rejects("descriptor path must be /<0;1>/* or none", "wpkh($x/2/*)")
+        rejects("descriptor path must be /<0;1>/* or none", "wpkh($x/hash/*)")
+        rejects("descriptor path must be /<0;1>/* or none", "wpkh($x/<0;1>/*hello)")
         rejects("invalid key origin", "wpkh([73c5da0z/84'/0'/0']$x)")
         rejects("invalid key origin", "wpkh([73c5da0a/84'/0'/99999999999999999999']$x)")
     }
@@ -126,7 +132,10 @@ class DescriptorTest {
         val pair = "add the matching /0/* and /1/* descriptors, or use /<0;1>/*"
         rejects(pair, WPKH_ABANDON_RECEIVE_DESCRIPTOR)
         rejects(pair, "$WPKH_ABANDON_RECEIVE_DESCRIPTOR\n$WPKH_ABANDON_RECEIVE_DESCRIPTOR")
-        rejects(pair, "$TR_ABANDON_DESCRIPTOR\n$TR_ABANDON_CHANGE_DESCRIPTOR")
+        // Lines that already cover both chains are a different mistake than a missing pair.
+        val lines = "paste one descriptor, or its /0/* and /1/* pair"
+        rejects(lines, "$TR_ABANDON_DESCRIPTOR\n$TR_ABANDON_CHANGE_DESCRIPTOR")
+        rejects(lines, "$TR_ABANDON_DESCRIPTOR\n$TR_ABANDON_DESCRIPTOR")
         rejects("receive and change descriptors must use the same key", "$TR_ABANDON_RECEIVE_DESCRIPTOR\n$WPKH_ABANDON_CHANGE_DESCRIPTOR")
         rejects(
             "paste one descriptor, or its /0/* and /1/* pair",

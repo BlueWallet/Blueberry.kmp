@@ -27,4 +27,15 @@ class WatchKeyTest {
         assertEquals(listOf(AddressScriptType.P2SH_P2WPKH), parseWalletSecret(ABANDON_BIP49_YPUB).hdScriptTypes())
         assertEquals(emptyList(), parseWalletSecret(WIF_BECH32).hdScriptTypes())
     }
+
+    @Test
+    fun bare_key_path_keeps_its_account_number() {
+        // Account 1 keys from BlueWallet hd-legacy-wallet / hd-segwit-p2sh-wallet tests.
+        val xpub1 = "xpub6BosfCnifzxcJJ1wYuntGJfF2zPJkDeG9ELNHcKNjezuea4tumswN9sH1psMdSVqCMoJC21Bv8usSeqSP4Sp1tLzW7aY59fGn9GCYzx5UTo"
+        val ypub1 = "ypub6Ww3ibxVfGzLtJR4F9SRBicspAfvmvw54yern9Q6qZWFC9T6FYA34K57La5Sgs8pXuyvpDfEHX5KNZRiZRukUWaVPyL4NxA69sEAqdoV8ve"
+        assertEquals("m/44'/0'/1'", parseWatchKey(xpub1).accountPath)
+        assertEquals("m/49'/0'/1'", parseWatchKey(ypub1).accountPath)
+        assertEquals("m/44'/0'/1'/0/0", deriveWatchWallet(xpub1, WatchGaps(1, 1)).hd(AddressScriptType.P2PKH, 0).path)
+        assertEquals("m/86'/0'/0'", parseWatchKey(TR_BARE_DESCRIPTOR).accountPath)
+    }
 }

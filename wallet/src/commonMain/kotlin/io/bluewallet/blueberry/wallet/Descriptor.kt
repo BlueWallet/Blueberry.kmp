@@ -19,9 +19,9 @@ private const val UNSUPPORTED_SCRIPT = "only pkh, sh(wpkh), wpkh and tr descript
  */
 fun parseDescriptor(text: String): WatchKey {
     val lines = descriptorLines(text).map(::parseDescriptorLine)
-    require(lines.size in 1..2) { "paste one descriptor, or its /0/* and /1/* pair" }
     val chains = lines.map { it.chain }
-    require(chains == listOf(null) || chains.toSet() == setOf(0, 1)) { PAIR_REQUIRED }
+    require(chains.toSet() != setOf(0) && chains.toSet() != setOf(1)) { PAIR_REQUIRED }
+    require(chains == listOf(null) || chains.sortedBy { it } == listOf(0, 1)) { "paste one descriptor, or its /0/* and /1/* pair" }
     require(lines.all { it.key == lines[0].key }) { "receive and change descriptors must use the same key" }
     return lines[0].key
 }
@@ -33,6 +33,7 @@ private data class DescriptorLine(
 )
 
 private val DESCRIPTOR_START = Regex("^[a-z_]+\\(", RegexOption.IGNORE_CASE)
+private val HARDENED_STEP = Regex("^([0-9]+|\\*|<[0-9]+;[0-9]+>)['hH]$")
 private val ORIGIN = Regex("^([0-9a-fA-F]{8})((?:/[0-9]+['hH]?)*)$")
 private val WRAPPERS =
     listOf(
@@ -47,7 +48,10 @@ private val TESTNET_KEY_PREFIXES = listOf("tpub", "upub", "vpub")
 
 private fun parseDescriptorLine(line: String): DescriptorLine {
     val body = line.substringBefore('#')
-    require('#' !in line || descriptorChecksum(body) == line.substringAfter('#')) { "descriptor checksum does not match" }
+    if ('#' in line) {
+        val checksum = requireNotNull(descriptorChecksum(body)) { "descriptor has characters a checksum cannot cover" }
+        require(checksum == line.substringAfter('#')) { "descriptor checksum does not match" }
+    }
     val (scriptType, inner) = unwrapScript(body)
     val origin = if (inner.startsWith("[")) parseOrigin(inner.substringBefore(']').drop(1)) else null
     val keyAndPath = if (inner.startsWith("[")) inner.substringAfter(']') else inner
@@ -96,6 +100,6 @@ private fun parseChain(path: String): Int? =
         path.isEmpty() || path == "/<0;1>/*" -> null
         path == "/0/*" -> 0
         path == "/1/*" -> 1
-        path.any { it in "'hH" } -> throw IllegalArgumentException("hardened derivation after the xpub is not supported")
+        path.split('/').any { HARDENED_STEP.matches(it) } -> throw IllegalArgumentException("hardened derivation after the xpub is not supported")
         else -> throw IllegalArgumentException("descriptor path must be /<0;1>/* or none")
     }

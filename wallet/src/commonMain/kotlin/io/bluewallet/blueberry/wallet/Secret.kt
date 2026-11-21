@@ -7,6 +7,9 @@ import io.bluewallet.blueberry.storage.Database
 
 enum class WalletSecretKind { MNEMONIC, XPUB, YPUB, ZPUB, DESCRIPTOR, WIF, ADDRESS }
 
+/** Text that names an extended key or a key origin but is none of the accepted forms; never a mnemonic. */
+private val EXTENDED_KEY_SHAPE = Regex("[xyz]pub|^\\[[0-9a-f]{8}", RegexOption.IGNORE_CASE)
+
 private val WATCH_KEY_KINDS = mapOf("xpub" to WalletSecretKind.XPUB, "ypub" to WalletSecretKind.YPUB, "zpub" to WalletSecretKind.ZPUB)
 
 data class ParsedWalletSecret(
@@ -89,6 +92,7 @@ fun parseWalletSecret(raw: String): ParsedWalletSecret {
     if (looksLikeAddressCandidate(value)) {
         throw IllegalArgumentException("invalid mainnet address")
     }
+    require(!EXTENDED_KEY_SHAPE.containsMatchIn(value)) { "unsupported descriptor or extended key" }
     val mnemonic = value.replace(Regex("\\s+"), " ").lowercase()
     try {
         MnemonicCode.validate(mnemonic)

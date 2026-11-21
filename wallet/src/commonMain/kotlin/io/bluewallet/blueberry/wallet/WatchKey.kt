@@ -18,8 +18,15 @@ data class WatchKey(
     val scriptType: AddressScriptType,
     val origin: KeyOrigin? = null,
 ) {
-    /** Path shown for this account's addresses: the origin path when known, else the script's standard path. */
-    val accountPath: String get() = origin?.path?.asString('\'') ?: scriptType.accountPath()
+    /**
+     * Path shown for this account's addresses: the origin path when known, else the script's standard
+     * purpose and coin with the key's own account number (an account-1 xpub shows m/44'/0'/1').
+     */
+    val accountPath: String
+        get() {
+            val standard = KeyPath(scriptType.accountPath()).path.dropLast(1) + account.path.lastChildNumber
+            return (origin?.path ?: KeyPath(standard)).asString('\'')
+        }
 
     /** PSBT master fingerprint: the origin's, else the account key's own (paths are then account-relative). */
     fun bip32Fingerprint(): Long = origin?.fingerprint ?: account.fingerprint()

@@ -119,6 +119,15 @@ class SecretTest {
         assertEquals(WalletSecretInspection.Missing, inspectWalletSecret(empty))
         empty.close()
     }
+
+    @Test
+    fun extended_key_shapes_are_not_called_a_bad_mnemonic() {
+        val message = "unsupported descriptor or extended key"
+        for (input in listOf("[73c5da0a/84'/0'/0']$ABANDON_BIP84_XPUB", "X${ABANDON_BIP84_XPUB.drop(1)}", "key: $BLUE_ZPUB")) {
+            val error = assertFailsWith<IllegalArgumentException> { parseWalletSecret(input) }
+            assertEquals(message, error.message, input)
+        }
+    }
 }
 
 internal fun p2wshOpTrueAddress(): String {

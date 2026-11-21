@@ -52,7 +52,7 @@ fun ParsedWalletSecret.hdScriptTypes(): List<AddressScriptType>   // mnemonic: a
 
 `WatchWalletKind` stays `BIP84` for all HD wallets (it already means "HD", including mnemonic).
 
-Derived `WatchAddress.path` is `<accountPath>/<chain>/<index>`, where `accountPath` is the origin path when present (`m/86'/0'/0'`), else the script's standard BIP44/49/84/86 path.
+Derived `WatchAddress.path` is `<accountPath>/<chain>/<index>`, where `accountPath` is the origin path when present (`m/86'/0'/0'`), else the script's standard BIP44/49/84/86 purpose and coin with the key's own account number (an account-1 xpub shows `m/44'/0'/1'`).
 
 ## Persistence compatibility
 
@@ -87,9 +87,11 @@ Derived `WatchAddress.path` is `<accountPath>/<chain>/<index>`, where `accountPa
 | lone `/0/*` or `/1/*` | `add the matching /0/* and /1/* descriptors, or use /<0;1>/*` |
 | two lines that differ | `receive and change descriptors must use the same key` |
 | bad checksum | `descriptor checksum does not match` |
+| `#checksum` on text with characters outside the BIP380 set | `descriptor has characters a checksum cannot cover` |
+| other text naming an extended key or origin (`[fp/path]xpub`, `Xpub…`) | `unsupported descriptor or extended key` |
 | malformed origin | `invalid key origin` |
 | descriptor key not depth 3 | `descriptor key must be account-level (depth 3)` |
-| three or more lines | `paste one descriptor, or its /0/* and /1/* pair` |
+| three or more lines, or lines that already cover both chains | `paste one descriptor, or its /0/* and /1/* pair` |
 
 Messages never echo the key.
 
