@@ -43,7 +43,7 @@ data class BuildSendTxParams(
     val feeRateSatPerVb: Double,
     val changeAddress: String,
 ) {
-    /** Redacts [secret] (mnemonic/WIF/zpub/address) so it never lands in logs or crash reports. */
+    /** Redacts [secret] (mnemonic/WIF/watch key/address) so it never lands in logs or crash reports. */
     override fun toString(): String =
         "BuildSendTxParams(secret=[redacted], wallet=$wallet, utxos=$utxos, toAddress=$toAddress, " +
             "amountSats=$amountSats, feeRateSatPerVb=$feeRateSatPerVb, changeAddress=$changeAddress)"
@@ -686,7 +686,7 @@ private fun describeOwnOutputs(
 }
 
 /**
- * Mnemonic/WIF secrets sign; zpub/address watches produce an unsigned PSBT. When sending a
+ * Mnemonic/WIF secrets sign; watch-key/address watches produce an unsigned PSBT. When sending a
  * non-max amount from an address watch, change is forced back to the single watched address.
  */
 fun buildSend(params: BuildSendTxParams): BuildSendResult {

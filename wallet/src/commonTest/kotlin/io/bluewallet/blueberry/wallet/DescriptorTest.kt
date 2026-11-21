@@ -83,6 +83,7 @@ class DescriptorTest {
         rejects("only pkh, sh(wpkh), wpkh and tr descriptors are supported", "combo($x)")
         rejects("only pkh, sh(wpkh), wpkh and tr descriptors are supported", "addr($BLUE_EXTERNAL_0)")
         rejects("taproot script trees are not supported", "tr($ABANDON_BIP86_XPUB,{pk($x)})")
+        rejects("only pkh, sh(wpkh), wpkh and tr descriptors are supported", "WPKH($x)")
     }
 
     @Test

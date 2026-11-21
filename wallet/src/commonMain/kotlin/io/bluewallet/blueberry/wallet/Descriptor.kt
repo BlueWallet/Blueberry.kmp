@@ -32,7 +32,7 @@ private data class DescriptorLine(
     val chain: Int?,
 )
 
-private val DESCRIPTOR_START = Regex("^[a-z_]+\\(")
+private val DESCRIPTOR_START = Regex("^[a-z_]+\\(", RegexOption.IGNORE_CASE)
 private val ORIGIN = Regex("^([0-9a-fA-F]{8})((?:/[0-9]+['hH]?)*)$")
 private val WRAPPERS =
     listOf(

@@ -13,7 +13,7 @@ data class ParsedWalletSecret(
     val kind: WalletSecretKind,
     val value: String,
 ) {
-    /** Redacts [value] (mnemonic/WIF/zpub/address) so it never lands in logs or crash reports. */
+    /** Redacts [value] (mnemonic/WIF/watch key/address) so it never lands in logs or crash reports. */
     override fun toString(): String = "ParsedWalletSecret(kind=$kind, value=[redacted])"
 }
 
