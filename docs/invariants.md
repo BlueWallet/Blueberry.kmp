@@ -37,3 +37,9 @@ Check: `shared/src/commonTest/kotlin/io/bluewallet/blueberry/TxWalletDisplayTest
 A coin can have a name. The address of that coin uses the coin's name as its default label. You see that name in the address label field on the coin and on the coin's transaction, when the address has no label of its own. A label saved on the address replaces the coin name. Clearing the address label brings the coin name back. Clearing the coin name clears the default. Two coins paid to one address each use their own name. The default is only a display hint. Saving the address without typing a new label does not store the coin name as the address label, and a label backup does not export it as an address label.
 
 Check: `shared/src/commonTest/kotlin/io/bluewallet/blueberry/CoinSheetModelTest.kt` — `coin_name_is_the_default_address_label`; `shared/src/commonTest/kotlin/io/bluewallet/blueberry/TxDisplayTest.kt` — `coin_name_is_the_default_address_label_on_its_card`
+
+## INV-6
+
+When you create a payment and set its label, each change coin that payment creates is named `change from: {label}`. The label is trimmed first, so spaces around it are not part of the name. A payment that sends the whole coin creates no change, so it stores the payment label and no change name. A blank label is not saved. This name is the coin's own saved name.
+
+Check: `parse/src/commonTest/kotlin/io/bluewallet/blueberry/parse/PaymentLabelTest.kt` — `trims_label_and_names_change_outpoints`, `send_max_stores_label_without_utxo_name`
