@@ -39,8 +39,7 @@ class WatchKeySendTest {
         return wallet to psbt
     }
 
-    private fun Psbt.changeOutputIndex(wallet: WatchWallet): Int =
-        global.tx.txOut.indexOfFirst { out -> wallet.addresses.any { it.change && it.scriptPubKey.contentEquals(out.publicKeyScript.toByteArray()) } }
+    private fun Psbt.changeOutputIndex(wallet: WatchWallet): Int = global.tx.txOut.indexOfFirst { out -> wallet.addresses.any { it.change && it.scriptPubKey.contentEquals(out.publicKeyScript.toByteArray()) } }
 
     private fun path(vararg steps: Long) = KeyPath(steps.toList())
 
@@ -54,7 +53,10 @@ class WatchKeySendTest {
     @Test
     fun origin_descriptor_uses_master_fingerprint_and_full_path() {
         val (_, psbt) = send("$WPKH_ABANDON_RECEIVE_DESCRIPTOR\n$WPKH_ABANDON_CHANGE_DESCRIPTOR", AddressScriptType.P2WPKH)
-        val origin = psbt.inputs[0].derivationPaths.values.single()
+        val origin =
+            psbt.inputs[0]
+                .derivationPaths.values
+                .single()
         assertEquals(ABANDON_FINGERPRINT, origin.masterKeyFingerprint)
         assertEquals(path(hardened(84), h0, h0, 0, 0), origin.keyPath)
     }
@@ -62,10 +64,16 @@ class WatchKeySendTest {
     @Test
     fun bare_xpub_uses_account_fingerprint_and_relative_path() {
         val (wallet, psbt) = send(ABANDON_BIP44_XPUB, AddressScriptType.P2PKH)
-        val origin = psbt.inputs[0].derivationPaths.values.single()
+        val origin =
+            psbt.inputs[0]
+                .derivationPaths.values
+                .single()
         assertEquals(parseWatchKey(ABANDON_BIP44_XPUB).account.fingerprint(), origin.masterKeyFingerprint)
         assertEquals(path(0, 0), origin.keyPath)
-        val change = psbt.outputs[psbt.changeOutputIndex(wallet)].derivationPaths.values.single()
+        val change =
+            psbt.outputs[psbt.changeOutputIndex(wallet)]
+                .derivationPaths.values
+                .single()
         assertEquals(path(1, 0), change.keyPath)
     }
 
@@ -76,7 +84,12 @@ class WatchKeySendTest {
         assertEquals(Script.pay2wpkh(key.publicKeyAt(false, 0)), psbt.inputs[0].redeemScript)
         val change = psbt.outputs[psbt.changeOutputIndex(wallet)]
         assertEquals(Script.pay2wpkh(key.publicKeyAt(true, 0)), change.redeemScript)
-        assertEquals(path(1, 0), change.derivationPaths.values.single().keyPath)
+        assertEquals(
+            path(1, 0),
+            change.derivationPaths.values
+                .single()
+                .keyPath,
+        )
     }
 
     @Test

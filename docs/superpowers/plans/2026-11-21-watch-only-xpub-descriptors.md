@@ -32,7 +32,8 @@ Spec: `docs/superpowers/specs/2026-11-21-watch-only-xpub-descriptors-design.md`
 ## File map
 
 - Create `wallet/.../DescriptorChecksum.kt`: BIP380 checksum.
-- Create `wallet/.../WatchKey.kt`: `KeyOrigin`, `WatchKey`, `parseExtendedKey`, `parseDescriptor`, `parseWatchKey`.
+- Create `wallet/.../WatchKey.kt`: `KeyOrigin`, `WatchKey`, account key decoding, `parseWatchKey`.
+- Create `wallet/.../Descriptor.kt`: `parseDescriptor` and its helpers.
 - Modify `wallet/.../Secret.kt`: new kinds, dispatch, `hdScriptTypes()`.
 - Modify `wallet/.../Derive.kt`: derive from `WatchKey`.
 - Modify `wallet/.../MnemonicChange.kt`: types from `hdScriptTypes()`.

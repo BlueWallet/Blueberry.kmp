@@ -680,7 +680,7 @@ private fun describeOwnOutputs(
                         taprootDerivationPaths = origin.taproot(),
                     )
             }
-        psbt = updated.right ?: throw IllegalStateException("failed to update PSBT output $index: ${updated.left}")
+        psbt = updated.right ?: error("failed to update PSBT output $index: ${updated.left}")
     }
     return psbt
 }

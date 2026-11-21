@@ -2,7 +2,6 @@ package io.bluewallet.blueberry.wallet
 
 import fr.acinq.bitcoin.Base58
 import fr.acinq.bitcoin.Base58Check
-import fr.acinq.bitcoin.DeterministicWallet
 import fr.acinq.bitcoin.MnemonicCode
 import io.bluewallet.blueberry.storage.Database
 
@@ -32,7 +31,7 @@ sealed class WalletSecretInspection {
     ) : WalletSecretInspection()
 }
 
-internal fun looksLikeWifCandidate(value: String): Boolean {
+private fun looksLikeWifCandidate(value: String): Boolean {
     if (value.any { it.isWhitespace() }) return false
     if (value.length !in 51..52) return false
     return value.first() in "5KL9c"
@@ -78,9 +77,7 @@ fun parseWalletSecret(raw: String): ParsedWalletSecret {
         decodeAccountKey(value)
         return ParsedWalletSecret(kind, value)
     }
-    if (Regex("^[xyzuvt]p(?:ub|rv)").containsMatchIn(value)) {
-        throw IllegalArgumentException("only mainnet account xpub, ypub or zpub is supported")
-    }
+    require(!Regex("^[xyzuvt]p(?:ub|rv)").containsMatchIn(value)) { "only mainnet account xpub, ypub or zpub is supported" }
     if (looksLikeWifCandidate(value)) {
         decodeWifPrivateKey(value)
         return ParsedWalletSecret(WalletSecretKind.WIF, value)
@@ -109,8 +106,7 @@ fun ParsedWalletSecret.watchKey(): WatchKey? =
     }
 
 /** HD script types this secret watches: all four for a mnemonic, the key's one for a watch key, none otherwise. */
-fun ParsedWalletSecret.hdScriptTypes(): List<AddressScriptType> =
-    if (kind == WalletSecretKind.MNEMONIC) HD_SCRIPT_TYPES else listOfNotNull(watchKey()?.scriptType)
+fun ParsedWalletSecret.hdScriptTypes(): List<AddressScriptType> = if (kind == WalletSecretKind.MNEMONIC) HD_SCRIPT_TYPES else listOfNotNull(watchKey()?.scriptType)
 
 fun hasWalletSecret(db: Database): Boolean {
     val v = db.keyValue.get(WALLET_SECRET_KEY)
