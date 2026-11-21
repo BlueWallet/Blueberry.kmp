@@ -121,6 +121,7 @@ fun addressSheet(
         chips = chips,
         rawPath = row.path.orEmpty(),
         label = row.addressLabel?.trim().orEmpty(),
+        labelPlaceholder = row.name?.trim()?.takeIf { it.isNotEmpty() } ?: ADDRESS_LABEL_PLACEHOLDER,
     )
 }
 
@@ -131,6 +132,8 @@ data class AddressSheet(
     val rawPath: String,
     /** Saved address label, independent of the coin's own name. */
     val label: String,
+    /** Shown when [label] is empty. The coin's own name, otherwise the generic hint. */
+    val labelPlaceholder: String = ADDRESS_LABEL_PLACEHOLDER,
 )
 
 fun originSheet(

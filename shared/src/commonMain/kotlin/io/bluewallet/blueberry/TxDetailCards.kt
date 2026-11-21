@@ -323,7 +323,7 @@ private fun TxCoinBlock(
             }
             SheetLabelField(
                 title = "Address label",
-                placeholder = ADDRESS_LABEL_PLACEHOLDER,
+                placeholder = coin.addressPlaceholder,
                 draft = draft,
                 onDraftChange = { draft = it },
                 saved = coin.addressLabel,

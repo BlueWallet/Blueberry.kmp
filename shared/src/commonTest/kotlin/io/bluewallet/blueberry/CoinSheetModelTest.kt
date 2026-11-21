@@ -149,6 +149,22 @@ class CoinSheetModelTest {
     }
 
     @Test
+    fun coin_name_is_the_default_address_label() {
+        val named = utxo("ee", 50_000, name = "Rent")
+        val control =
+            buildCoinControlSnapshot(
+                listOf(named),
+                CoinLinkage(mapOf(named.key to named.key), mapOf(named.key to named.key)),
+                emptySet(),
+            )
+        val snap = WalletTxsSnapshot(utxos = listOf(named), coinLinkGraph = CoinLinkGraph.Empty)
+        val model = buildCoinSheetModel(CoinSheetRequest(named.key, snap, control, emptyMap(), 0, null, false))
+        assertNotNull(model)
+        assertEquals("", model.address?.label)
+        assertEquals("Rent", model.address?.labelPlaceholder)
+    }
+
+    @Test
     fun address_section_label_is_the_address_label_not_the_coin_name() {
         val named = utxo("ff", 40_000, name = "Mine").copy(addressLabel = "Rent")
         val blank = utxo("ee", 50_000, name = "Mine")

@@ -23,6 +23,7 @@ private fun txCoinCard(
         amountSats = output.valueSat,
         address = output.address,
         addressLabel = output.addressLabel.trim(),
+        addressPlaceholder = output.label.trim().ifEmpty { ADDRESS_LABEL_PLACEHOLDER },
         addressNote = addressNote(chain, output),
         frozen = frozen,
         spent = output.spent,

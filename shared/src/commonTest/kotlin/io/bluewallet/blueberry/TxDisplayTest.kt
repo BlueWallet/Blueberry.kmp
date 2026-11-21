@@ -100,6 +100,15 @@ class TxDisplayTest {
     }
 
     @Test
+    fun coin_name_is_the_default_address_label_on_its_card() {
+        val input = received()
+        val named = input.outputs.first().copy(label = "rent")
+        val card = txScreen(input.copy(outputs = listOf(named) + input.outputs.drop(1))).detail.coins.single()
+        assertEquals("", card.addressLabel)
+        assertEquals("rent", card.addressPlaceholder)
+    }
+
+    @Test
     fun coin_card_carries_the_address_label() {
         val input = received()
         val labeled = input.outputs.first().copy(addressLabel = "Cafe tips")

@@ -152,6 +152,8 @@ data class TxCoinCard(
     val amountSats: Long,
     val address: String?,
     val addressLabel: String,
+    /** Shown in the address field when [addressLabel] is empty. The coin's own name, otherwise the generic hint. */
+    val addressPlaceholder: String = ADDRESS_LABEL_PLACEHOLDER,
     val addressNote: String,
     val frozen: Boolean,
     val spent: Boolean,
