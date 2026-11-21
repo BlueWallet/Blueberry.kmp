@@ -110,6 +110,22 @@ class PaymentLabelResolveTest {
     }
 
     @Test
+    fun a_readable_copy_wins_over_an_unreadable_duplicate_txid() {
+        val pubkey = watchKey0()
+        val spend = witnessSpend(pubkey.value.toByteArray())
+        val txid = spend.txid.toString()
+        val raw = Transaction.write(spend)
+        val bad = byteArrayOf(0x00, 0x01)
+        val labels = mapOf(addressFromOutputScript(p2wpkhScript(pubkey))!! to "savings")
+        val readableFirst = txTouchAddresses(listOf(txid to raw, txid to bad))
+        val unreadableFirst = txTouchAddresses(listOf(txid to bad, txid to raw))
+        assertEquals("savings", touchLabel(readableFirst.getValue(txid), labels))
+        assertEquals("savings", touchLabel(unreadableFirst.getValue(txid), labels))
+        assertTrue(readableFirst.getValue(txid).isNotEmpty())
+        assertTrue(unreadableFirst.getValue(txid).isNotEmpty())
+    }
+
+    @Test
     fun taproot_script_path_control_block_is_not_treated_as_a_p2wpkh_spend() {
         val control = byteArrayOf(0xc0.toByte()) + ByteArray(32) { 1 }
         val two =

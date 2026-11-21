@@ -60,13 +60,7 @@ internal fun TxLabelCard(
 ) {
     val failed = detail.outcome != TxOutcome.None
     val typed =
-        if (host.editing) {
-            host.draft.trim()
-        } else {
-            detail.label.title
-                .takeUnless { it == "Add a label" }
-                .orEmpty()
-        }
+        labelCardTyped(detail.label.title, detail.label.hasLabel, host.editing, host.draft)
     val turn by animateFloatAsState(if (host.editing) 90f else 0f, label = "label-chevron")
     Column(
         modifier =

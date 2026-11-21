@@ -323,6 +323,15 @@ class TxDisplayTest {
                 "Rent",
             ),
         )
+        assertEquals(
+            listOf("a:0", "b:1", "d:3"),
+            coinNamesToUpdate(
+                mapOf("a:0" to null, "b:1" to "Rent", "c:2" to "change from: Rent", "d:3" to "change from: Rent"),
+                "Rent",
+                changeOutpoints = setOf("d:3"),
+                hasChangeChain = true,
+            ),
+        )
     }
 
     @Test
@@ -342,6 +351,40 @@ class TxDisplayTest {
         assertEquals("savings", screen.list.title)
         assertEquals("savings", screen.detail.label.title)
         assertFalse(screen.detail.label.hasLabel)
+    }
+
+    @Test
+    fun an_hd_receive_coin_named_change_from_titles_its_transaction() {
+        val base = received()
+        val receive = base.outputs[0].copy(label = "change from: Rent")
+        val other = base.outputs[1]
+        val hd =
+            base.copy(
+                label = "",
+                hasChangeChain = true,
+                outputs = listOf(receive, other),
+            )
+        assertEquals("change from: Rent", txScreen(hd).list.title)
+        assertEquals("change from: Rent", txScreen(hd).detail.label.title)
+        val change =
+            pendingSend().copy(
+                label = "",
+                addressLabel = "savings",
+                hasChangeChain = true,
+                outputs =
+                    listOf(
+                        pendingSend().outputs[0],
+                        pendingSend().outputs[1].copy(label = "change from: Rent", change = true),
+                    ),
+            )
+        assertEquals("savings", txScreen(change).list.title)
+    }
+
+    @Test
+    fun label_card_keeps_a_note_equal_to_the_add_prompt() {
+        assertEquals("Add a label", labelCardTyped("Add a label", hasLabel = true, editing = false, draft = ""))
+        assertEquals("", labelCardTyped("Add a label", hasLabel = false, editing = false, draft = ""))
+        assertEquals("cafe", labelCardTyped("cafe", hasLabel = false, editing = false, draft = ""))
     }
 
     @Test

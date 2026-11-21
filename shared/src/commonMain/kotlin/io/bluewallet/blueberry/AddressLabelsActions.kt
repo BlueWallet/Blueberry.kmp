@@ -7,8 +7,9 @@ import io.bluewallet.blueberry.wallet.canonicalBitcoinAddress
 
 /**
  * Persist a label for one of our addresses. Trim; empty clears. Marks labels dirty for sync and
- * refreshes the tx list. Returns false and does nothing if the stored label already matches.
- * Bech32 keys are stored in lowercase so a pasted uppercase address still matches.
+ * refreshes the tx list. Returns false and does nothing if the stored label already matches
+ * and the key is already canonical. Bech32 keys are stored in lowercase so a pasted uppercase
+ * address still matches. Unchanged text still collapses aliases onto that key.
  */
 fun setAddressLabel(
     db: Database,
@@ -21,13 +22,16 @@ fun setAddressLabel(
     val trimmed = label.trim()
     val aliases = addressLabelAliases(db, key)
     val current = db.addressLabels.get(key) ?: aliases.firstOrNull()?.label
-    if (current == trimmed.ifEmpty { null }) return false
+    val needsCollapse = aliases.any { it.address != key }
+    if (current == trimmed.ifEmpty { null } && !needsCollapse) return false
     editLabels(db) {
-        aliases.forEach { db.addressLabels.delete(it.address) }
-        if (trimmed.isEmpty()) {
-            db.addressLabels.delete(key)
-        } else {
-            db.addressLabels.upsert(key, trimmed)
+        db.transaction {
+            aliases.forEach { db.addressLabels.delete(it.address) }
+            if (trimmed.isEmpty()) {
+                db.addressLabels.delete(key)
+            } else {
+                db.addressLabels.upsert(key, trimmed)
+            }
         }
     }
     val at = nowMillis()

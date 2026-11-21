@@ -21,19 +21,24 @@ fun labelSuggestions(
 }
 
 /**
- * Outpoints whose name should take [nextLabel]: empty, or still equal to the previous transaction label.
- * [names] maps outpoint to the current coin name.
+ * Outpoints whose name should take the next transaction label: empty, still equal to the previous
+ * note, or still equal to the automatic `change from: {note}` name. When [hasChangeChain] is true,
+ * that automatic name is only rewritten on [changeOutpoints].
  */
 fun coinNamesToUpdate(
     names: Map<String, String?>,
     previousLabel: String,
+    changeOutpoints: Set<String> = emptySet(),
+    hasChangeChain: Boolean = false,
 ): List<String> {
     val previous = previousLabel.trim()
     val derived = if (previous.isEmpty()) null else "$CHANGE_FROM_PREFIX$previous"
     return names
-        .filter { (_, name) ->
+        .filter { (outpoint, name) ->
             val current = name?.trim().orEmpty()
-            current.isEmpty() || current == previous || current == derived
+            current.isEmpty() ||
+                current == previous ||
+                (current == derived && (!hasChangeChain || outpoint in changeOutpoints))
         }.keys
         .sorted()
 }

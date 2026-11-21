@@ -50,8 +50,8 @@ fun txTouchAddresses(txs: List<Pair<String, ByteArray>>): Map<String, List<Strin
             addressByOutpoint[outpointKey(txid, index)] = address
         }
     }
-    return parsed.associate { (txid, tx) -> txid to touchAddresses(tx, addressByOutpoint) } +
-        unreadable.associateWith { emptyList() }
+    return unreadable.associateWith { emptyList<String>() } +
+        parsed.associate { (txid, tx) -> txid to touchAddresses(tx, addressByOutpoint) }
 }
 
 fun touchLabel(

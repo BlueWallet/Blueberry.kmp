@@ -87,6 +87,8 @@ data class TxDisplayInput(
     val ownSend: Boolean = false,
     /** Address label this transaction pays or spends. A display default, not a saved note. */
     val addressLabel: String = "",
+    /** True when the wallet has an HD change chain, so `change from:` names are only automatic on change outputs. */
+    val hasChangeChain: Boolean = false,
 )
 
 data class TxAmountParts(

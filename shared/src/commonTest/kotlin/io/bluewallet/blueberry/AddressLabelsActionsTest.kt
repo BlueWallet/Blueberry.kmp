@@ -88,6 +88,21 @@ class AddressLabelsActionsTest {
         assertEquals("donations", addressLabel(db, upper))
         db.close()
     }
+
+    @Test
+    fun unchanged_text_still_collapses_aliases_onto_the_canonical_key() {
+        val db = createSqliteDatabase(":memory:")
+        val store = createWalletTxsStore()
+        val script = byteArrayOf(0x00, 0x14) + ByteArray(20) { 9 }
+        val address = addressFromOutputScript(script)!!
+        val upper = address.uppercase()
+        db.addressLabels.upsert(upper, "savings")
+        assertTrue(setAddressLabel(db, null, store, upper, "savings"))
+        assertEquals("savings", db.addressLabels.get(canonicalBitcoinAddress(address)))
+        assertNull(db.addressLabels.get(upper))
+        assertFalse(setAddressLabel(db, null, store, address, "savings"))
+        db.close()
+    }
 }
 
 private fun WalletTxsStore.labelOfOnlyTx(): String? = get().txs.single().addressLabel

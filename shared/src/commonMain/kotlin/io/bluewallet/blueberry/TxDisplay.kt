@@ -82,16 +82,37 @@ private fun txLabelCard(input: TxDisplayInput): TxLabelCard {
 /** Note, else a coin name on this transaction, else the address label it touches. */
 internal fun txVisibleLabel(input: TxDisplayInput): String = input.label.trim().ifEmpty { txDefaultLabel(input) }
 
+/** Visible label-card text before the empty-state prompt is filled in. */
+internal fun labelCardTyped(
+    title: String,
+    hasLabel: Boolean,
+    editing: Boolean,
+    draft: String,
+): String =
+    if (editing) {
+        draft.trim()
+    } else {
+        title.takeUnless { !hasLabel && it == "Add a label" }.orEmpty()
+    }
+
 /** Display name when the transaction has no note of its own. Not stored. */
 internal fun txDefaultLabel(input: TxDisplayInput): String {
     val coinName =
         input.outputs.firstNotNullOfOrNull { output ->
-            output.label.trim().takeIf { it.isNotEmpty() && !it.startsWith(CHANGE_FROM_PREFIX) }
+            val name = output.label.trim()
+            name.takeIf { it.isNotEmpty() && !isAutomaticChangeName(it, output.change, input.hasChangeChain) }
         }
     val touched = input.addressLabel.trim().takeIf { it.isNotEmpty() }
     val paid = input.outputs.firstNotNullOfOrNull { output -> output.addressLabel.trim().takeIf { it.isNotEmpty() } }
     return coinName ?: touched ?: paid.orEmpty()
 }
+
+/** Automatic `change from:` names on change outputs, or on any output when the wallet has no change chain. */
+private fun isAutomaticChangeName(
+    name: String,
+    change: Boolean,
+    hasChangeChain: Boolean,
+): Boolean = name.startsWith(CHANGE_FROM_PREFIX) && (!hasChangeChain || change)
 
 private fun txDetailsModel(
     input: TxDisplayInput,

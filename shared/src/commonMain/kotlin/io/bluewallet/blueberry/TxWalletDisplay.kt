@@ -208,6 +208,7 @@ private fun displayInput(
         replacementTxid = row.replacementTxid,
         ownSend = row.ownSend,
         addressLabel = row.addressLabel?.trim().orEmpty(),
+        hasChangeChain = facts.watchByScript.values.any { it.change },
     )
 }
 

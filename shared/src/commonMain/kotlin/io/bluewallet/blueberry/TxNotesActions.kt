@@ -33,8 +33,10 @@ fun setTxNote(
             ?.label
             .orEmpty()
     val trimmed = note.trim()
-    val names = walletOutputNames(db, wallet, txid)
-    val targets = coinNamesToUpdate(names, previous)
+    val outputs = walletOutputs(db, wallet, txid)
+    val names = outputs.names
+    val hasChangeChain = wallet?.snapshot()?.addresses?.any { it.change } == true
+    val targets = coinNamesToUpdate(names, previous, outputs.changeOutpoints, hasChangeChain)
     val derived = if (previous.isBlank()) null else "$CHANGE_FROM_PREFIX${previous.trim()}"
     editLabels(db) {
         if (trimmed.isEmpty()) {
@@ -56,18 +58,20 @@ fun setTxNote(
     walletTxsStore.applyFromDb(db, snapshotFromDb(db, at, at, wallet, walletTxsStore.get().linkageCache()))
 }
 
-private fun walletOutputNames(
+private class WalletOutputs(
+    val names: Map<String, String?>,
+    val changeOutpoints: Set<String>,
+)
+
+private fun walletOutputs(
     db: Database,
     wallet: Wallet?,
     txid: String,
-): Map<String, String?> {
-    val scripts =
-        wallet
-            ?.snapshot()
-            ?.addresses
-            ?.map { scriptHex(it.scriptPubKey) }
-            ?.toSet()
-            .orEmpty()
+): WalletOutputs {
+    val empty = WalletOutputs(emptyMap(), emptySet())
+    val addresses = wallet?.snapshot()?.addresses.orEmpty()
+    val scripts = addresses.map { scriptHex(it.scriptPubKey) }.toSet()
+    val changeScripts = addresses.filter { it.change }.map { scriptHex(it.scriptPubKey) }.toSet()
     val bytes =
         db.transactions.get(txid)?.tx
             ?: db.sends
@@ -80,10 +84,19 @@ private fun walletOutputNames(
                 ?.let(::hexToBytes)
     val tx = bytes?.let { runCatching { Transaction.read(it) }.getOrNull() }
     val names = db.utxoNames.list().associate { it.outpoint to it.name }
-    if (tx == null || scripts.isEmpty()) return emptyMap()
-    return tx.txOut
-        .mapIndexedNotNull { vout, output ->
-            val key = outpointKey(txid, vout)
-            if (scriptHex(output.publicKeyScript.toByteArray()) in scripts) key to names[key] else null
-        }.toMap()
+    if (tx == null || scripts.isEmpty()) return empty
+    val ours =
+        tx.txOut.mapIndexedNotNull { vout, output ->
+            val script = scriptHex(output.publicKeyScript.toByteArray())
+            if (script !in scripts) {
+                null
+            } else {
+                val key = outpointKey(txid, vout)
+                Triple(key, names[key], script in changeScripts)
+            }
+        }
+    return WalletOutputs(
+        names = ours.associate { it.first to it.second },
+        changeOutpoints = ours.mapNotNull { if (it.third) it.first else null }.toSet(),
+    )
 }
