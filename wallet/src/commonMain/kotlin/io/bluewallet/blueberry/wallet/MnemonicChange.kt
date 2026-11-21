@@ -13,12 +13,8 @@ fun pickMnemonicChange(
     usedInternalByType: Map<AddressScriptType, List<Int>>,
     random: Random,
 ): MnemonicChangePick {
-    val types =
-        when (parseWalletSecret(wallet.secret).kind) {
-            WalletSecretKind.MNEMONIC -> HD_SCRIPT_TYPES
-            WalletSecretKind.ZPUB -> listOf(AddressScriptType.P2WPKH)
-            else -> error("pickMnemonicChange requires a mnemonic or zpub wallet")
-        }
+    val types = parseWalletSecret(wallet.secret).hdScriptTypes()
+    if (types.isEmpty()) error("pickMnemonicChange requires a mnemonic or watch-key wallet")
     val scriptType = types[random.nextInt(types.size)]
     val index = firstUnusedIndex(usedInternalByType[scriptType] ?: emptyList())
     val address =

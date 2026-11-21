@@ -51,6 +51,23 @@ class MnemonicChangeTest {
     }
 
     @Test
+    fun watch_key_change_comes_from_its_own_internal_chain() {
+        val cases =
+            mapOf(
+                ABANDON_BIP44_XPUB to AddressScriptType.P2PKH,
+                ABANDON_BIP49_YPUB to AddressScriptType.P2SH_P2WPKH,
+                TR_ABANDON_DESCRIPTOR to AddressScriptType.P2TR,
+            )
+        for ((secret, type) in cases) {
+            val wallet = deriveWatchWallet(secret, WatchGaps(2, 2))
+            val pick = pickMnemonicChange(wallet, mapOf(type to listOf(0)), Random(7))
+            assertEquals(type, pick.scriptType)
+            assertEquals(1, pick.index)
+            assertEquals(wallet.hd(type, 1, change = true), pick.address)
+        }
+    }
+
+    @Test
     fun pick_uses_injected_random_and_that_type_internal_index() {
         val wallet = deriveWatchWallet(ABANDON, WatchGaps(2, 2))
         val used =

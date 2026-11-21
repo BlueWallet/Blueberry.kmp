@@ -17,6 +17,7 @@ import io.bluewallet.blueberry.wallet.compactFilterFrom
 import io.bluewallet.blueberry.wallet.firstUnusedExternalAddress
 import io.bluewallet.blueberry.wallet.firstUnusedIndex
 import io.bluewallet.blueberry.wallet.growWatchGapsIfNeeded
+import io.bluewallet.blueberry.wallet.hdScriptTypes
 import io.bluewallet.blueberry.wallet.loadHdWatchGaps
 import io.bluewallet.blueberry.wallet.loadReceiveScriptType
 import io.bluewallet.blueberry.wallet.parseWalletSecret
@@ -130,11 +131,12 @@ fun snapshotReceive(
 ): ReceiveSnapshot {
     var watch = wallet.refresh()
     val txs = db.transactions.list()
+    val secret = parseWalletSecret(watch.secret)
     val receiveType =
-        if (parseWalletSecret(watch.secret).kind == WalletSecretKind.MNEMONIC) {
+        if (secret.kind == WalletSecretKind.MNEMONIC) {
             loadReceiveScriptType(db)
         } else {
-            AddressScriptType.P2WPKH
+            secret.hdScriptTypes().singleOrNull() ?: AddressScriptType.P2WPKH
         }
     if (watch.kind != WatchWalletKind.BIP84) {
         return ReceiveSnapshot(receiveAddressFromWallet(watch, txs, receiveType), chain = null)
