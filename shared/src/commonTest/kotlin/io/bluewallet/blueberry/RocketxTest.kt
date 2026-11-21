@@ -355,6 +355,9 @@ class RocketxTest {
         assertEquals(null, privateSendSigningError(WalletSecretKind.MNEMONIC))
         assertEquals(null, privateSendSigningError(WalletSecretKind.WIF))
         assertEquals("Private send needs a signing wallet", privateSendSigningError(WalletSecretKind.ZPUB))
+        assertEquals("Private send needs a signing wallet", privateSendSigningError(WalletSecretKind.XPUB))
+        assertEquals("Private send needs a signing wallet", privateSendSigningError(WalletSecretKind.YPUB))
+        assertEquals("Private send needs a signing wallet", privateSendSigningError(WalletSecretKind.DESCRIPTOR))
         assertEquals("Private send needs a signing wallet", privateSendSigningError(WalletSecretKind.ADDRESS))
     }
 
