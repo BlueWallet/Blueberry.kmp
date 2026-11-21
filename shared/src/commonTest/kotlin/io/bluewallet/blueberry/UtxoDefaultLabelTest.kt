@@ -53,6 +53,22 @@ class UtxoDefaultLabelTest {
         txLabel = txLabel,
     )
 
+    private fun peerCoin(
+        id: String,
+        height: Int,
+        change: Boolean = false,
+    ): WalletUtxoRow {
+        val idTx = id.repeat(32).take(64)
+        return coin().copy(
+            key = "$idTx:0",
+            txid = idTx,
+            outpointShort = "$id:0",
+            height = height,
+            isChange = change,
+            name = null,
+        )
+    }
+
     @Test
     fun address_label_is_the_default_when_the_coin_has_no_name() {
         assertEquals("savings", coin(addressLabel = " savings ").label)
@@ -69,6 +85,42 @@ class UtxoDefaultLabelTest {
         assertEquals("mine", coin(name = "mine", txLabel = "rent", addressLabel = "savings").label)
         assertEquals("rent", coin(name = "  ", txLabel = "rent", addressLabel = "savings").label)
         assertEquals("savings", coin(addressLabel = "savings").label)
+    }
+
+    @Test
+    fun a_named_coin_names_another_coin_on_the_same_address_without_saving_it() {
+        val db = createSqliteDatabase(":memory:")
+        val named = peerCoin("aa", height = 1)
+        val blank = peerCoin("bb", height = 2)
+        db.utxoNames.upsert(named.key, "cafe")
+        val snap = withStoredUtxoMeta(db, WalletTxsSnapshot(utxos = listOf(named, blank), utxosReady = true))
+        val coins = snap.utxos.associateBy { it.key }
+        assertEquals("cafe", coins.getValue(blank.key).label)
+        assertNull(coins.getValue(blank.key).name)
+        assertEquals(listOf(named.key), db.utxoNames.list().map { it.outpoint })
+
+        db.utxoNames.delete(named.key)
+        val cleared = withStoredUtxoMeta(db, snap).utxos.associateBy { it.key }
+        assertNull(cleared.getValue(blank.key).label)
+        db.close()
+    }
+
+    @Test
+    fun a_change_name_does_not_spread_and_an_address_label_wins() {
+        val db = createSqliteDatabase(":memory:")
+        val change = peerCoin("cc", height = 3, change = true)
+        val receive = peerCoin("dd", height = 4)
+        db.utxoNames.upsert(change.key, "change from: groceries")
+        val unspread = withStoredUtxoMeta(db, WalletTxsSnapshot(utxos = listOf(change, receive), utxosReady = true))
+        assertNull(unspread.utxos.single { it.key == receive.key }.label)
+
+        db.addressLabels.upsert(address, "savings")
+        db.utxoNames.upsert(peerCoin("ee", height = 1).key, "cafe")
+        val named = peerCoin("ee", height = 1)
+        val blank = peerCoin("ff", height = 2)
+        val labeled = withStoredUtxoMeta(db, WalletTxsSnapshot(utxos = listOf(named, blank), utxosReady = true))
+        assertEquals("savings", labeled.utxos.single { it.key == blank.key }.label)
+        db.close()
     }
 
     @Test

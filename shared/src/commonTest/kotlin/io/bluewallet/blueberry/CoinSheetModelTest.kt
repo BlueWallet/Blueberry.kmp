@@ -149,6 +149,22 @@ class CoinSheetModelTest {
     }
 
     @Test
+    fun reused_address_name_is_a_placeholder_not_a_saved_name() {
+        val blank = utxo("bb", 20_000).copy(peerLabel = "Cafe")
+        val control =
+            buildCoinControlSnapshot(
+                listOf(blank),
+                CoinLinkage(mapOf(blank.key to blank.key), mapOf(blank.key to blank.key)),
+                emptySet(),
+            )
+        val snap = WalletTxsSnapshot(utxos = listOf(blank), coinLinkGraph = CoinLinkGraph.Empty)
+        val model = buildCoinSheetModel(CoinSheetRequest(blank.key, snap, control, emptyMap(), 0, null, false))
+        assertNotNull(model)
+        assertEquals("", model.label)
+        assertEquals("Cafe", model.labelPlaceholder)
+    }
+
+    @Test
     fun coin_name_is_the_default_address_label() {
         val named = utxo("ee", 50_000, name = "Rent")
         val control =

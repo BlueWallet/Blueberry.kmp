@@ -43,3 +43,9 @@ Check: `shared/src/commonTest/kotlin/io/bluewallet/blueberry/CoinSheetModelTest.
 When you create a payment and set its label, each change coin that payment creates is named `change from: {label}`. The label is trimmed first, so spaces around it are not part of the name. A payment that sends the whole coin creates no change, so it stores the payment label and no change name. A blank label is not saved. This name is the coin's own saved name.
 
 Check: `parse/src/commonTest/kotlin/io/bluewallet/blueberry/parse/PaymentLabelTest.kt` — `trims_label_and_names_change_outpoints`, `send_max_stores_label_without_utxo_name`
+
+## INV-7
+
+A receive address can already hold a coin with a saved name. Another coin on that address shows that name when it has no name of its own, the transaction that created it has no label, and the address has no label. The name comes from the newest other received coin on that address. A change coin's name does not spread. Renaming or clearing the source coin updates the default. A name saved on the coin itself replaces the default. The name field starts empty, so you can type a new name without first deleting the inferred one. The default is only a display name. It is not stored as the coin's own name, and a label backup does not export it as a coin label.
+
+Check: `shared/src/commonTest/kotlin/io/bluewallet/blueberry/UtxoDefaultLabelTest.kt` — `a_named_coin_names_another_coin_on_the_same_address_without_saving_it`

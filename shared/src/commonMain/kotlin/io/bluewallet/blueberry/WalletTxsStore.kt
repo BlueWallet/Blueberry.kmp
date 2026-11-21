@@ -78,9 +78,11 @@ data class WalletUtxoRow(
     val addressLabel: String? = null,
     /** Label of the transaction that created this coin. A display default, not a saved coin name. */
     val txLabel: String? = null,
+    /** Saved name of another received coin on this address. A display default, not a saved coin name. */
+    val peerLabel: String? = null,
 ) {
-    /** What to show for this coin: the explicit [name], else the creating transaction's label, else the [addressLabel]. */
-    val label: String? get() = name.nonBlank() ?: txLabel.nonBlank() ?: addressLabel.nonBlank()
+    /** Explicit [name], else this coin's transaction, else the address, else another coin on that address. */
+    val label: String? get() = name.nonBlank() ?: txLabel.nonBlank() ?: addressLabel.nonBlank() ?: peerLabel.nonBlank()
 }
 
 data class WalletTxsSnapshot(
@@ -574,7 +576,7 @@ fun snapshotFromDb(
             CoinLabels(labelByAddress, noteByTxid),
         )
     val coins = wallet?.let { walletCoins(it, stored, coinCtx, cachedLinkage) } ?: WalletCoins.None
-    val utxos = coins.utxos
+    val utxos = withPeerLabels(coins.utxos)
     val fees = coins.fees
     val linkage = coins.linkage
     // After coin linkage, so a payment saved during that work is included.
@@ -627,16 +629,17 @@ internal fun withStoredUtxoMeta(
             known != null && snap.txs.all { it.txid in known } -> known
             else -> txTouchMap(db)
         }
+    val refreshed =
+        snap.utxos.map {
+            it.copy(
+                name = nameByOutpoint[it.key],
+                isFrozen = it.key in frozen,
+                addressLabel = it.address?.let { a -> labelByAddress[a] },
+                txLabel = noteByTxid[it.txid],
+            )
+        }
     return snap.copy(
-        utxos =
-            snap.utxos.map {
-                it.copy(
-                    name = nameByOutpoint[it.key],
-                    isFrozen = it.key in frozen,
-                    addressLabel = it.address?.let { a -> labelByAddress[a] },
-                    txLabel = noteByTxid[it.txid],
-                )
-            },
+        utxos = withPeerLabels(refreshed),
         txs =
             snap.txs.map {
                 it.copy(
@@ -647,6 +650,43 @@ internal fun withStoredUtxoMeta(
             },
         txTouches = if (labelByAddress.isEmpty()) null else touches,
     )
+}
+
+/** Saved name of the newest other received coin on the same address. Change names do not spread. */
+private fun withPeerLabels(rows: List<WalletUtxoRow>): List<WalletUtxoRow> {
+    val peers = peerLabelByKey(rows)
+    return rows.map { it.copy(peerLabel = peers[it.key]) }
+}
+
+private fun peerLabelByKey(rows: List<WalletUtxoRow>): Map<String, String> {
+    val result = mutableMapOf<String, String>()
+    val groups = rows.groupBy { it.address?.trim()?.takeIf { address -> address.isNotEmpty() } }
+    for ((address, group) in groups) {
+        if (address != null) result.putAll(peerLabelsIn(group))
+    }
+    return result
+}
+
+private fun peerLabelsIn(group: List<WalletUtxoRow>): Map<String, String> {
+    val newestFirst =
+        compareByDescending<WalletUtxoRow> { it.height == 0 }
+            .thenByDescending { it.height }
+            .thenByDescending { it.txid }
+            .thenByDescending { it.vout }
+    val named =
+        group
+            .filter { coin -> !coin.isChange && coin.name.nonBlank() != null }
+            .sortedWith(newestFirst)
+    val latest = named.firstOrNull()
+    val latestName = latest?.name.nonBlank()
+    if (latest == null || latestName == null) return emptyMap()
+    val previous = named.getOrNull(1)?.name.nonBlank()
+    val pairs = mutableMapOf<String, String>()
+    for (coin in group) {
+        val inferred = if (coin.key == latest.key) previous else latestName
+        if (inferred != null) pairs[coin.key] = inferred
+    }
+    return pairs
 }
 
 /** Confirmed transactions plus pending sends, so a spend of a stored coin can see that coin's address. */
