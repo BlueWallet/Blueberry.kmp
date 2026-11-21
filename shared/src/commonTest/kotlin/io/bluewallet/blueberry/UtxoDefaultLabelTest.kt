@@ -13,6 +13,7 @@ import io.bluewallet.blueberry.labels.decryptWalletLabels
 import io.bluewallet.blueberry.labels.labelingAccountKey
 import io.bluewallet.blueberry.parse.CoinLinkage
 import io.bluewallet.blueberry.storage.StoredTx
+import io.bluewallet.blueberry.storage.TxPaymentLabelRow
 import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.AddressScriptType
 import io.bluewallet.blueberry.wallet.createWallet
@@ -33,6 +34,7 @@ class UtxoDefaultLabelTest {
     private fun coin(
         name: String? = null,
         addressLabel: String? = null,
+        txLabel: String? = null,
     ) = WalletUtxoRow(
         key = key,
         txid = txid,
@@ -48,6 +50,7 @@ class UtxoDefaultLabelTest {
         name = name,
         isChange = false,
         addressLabel = addressLabel,
+        txLabel = txLabel,
     )
 
     @Test
@@ -58,6 +61,14 @@ class UtxoDefaultLabelTest {
     @Test
     fun explicit_coin_name_wins_over_the_address_label() {
         assertEquals("rent", coin(name = " rent ", addressLabel = "savings").label)
+    }
+
+    @Test
+    fun transaction_label_is_the_default_when_the_coin_has_no_name() {
+        assertEquals("rent", coin(txLabel = " rent ").label)
+        assertEquals("mine", coin(name = "mine", txLabel = "rent", addressLabel = "savings").label)
+        assertEquals("rent", coin(name = "  ", txLabel = "rent", addressLabel = "savings").label)
+        assertEquals("savings", coin(addressLabel = "savings").label)
     }
 
     @Test
@@ -102,6 +113,29 @@ class UtxoDefaultLabelTest {
 
         setAddressLabel(db, wallet, store, recv.address, "")
         assertNull(store.onlyCoinLabel())
+        db.close()
+    }
+
+    @Test
+    fun transaction_label_labels_its_coin_without_saving_a_coin_name() {
+        val db = createSqliteDatabase(":memory:")
+        val wif = "L4ccWrPMmFDZw4kzAKFqJNxgHANjdy6b7YKNXMwB4xac4FLF3Tov"
+        saveWalletSecret(db, wif)
+        val wallet = createWallet(db)
+        val recv = deriveWatchWallet(wif).addresses.first { it.scriptType == AddressScriptType.P2PKH }
+        val stored = fundingTx(recv.scriptPubKey)
+        db.transactions.upsert(stored)
+        db.txPaymentLabels.upsert(TxPaymentLabelRow(stored.txid, "rent"))
+        db.addressLabels.upsert(recv.address, "savings")
+
+        val coin = snapshotFromDb(db, 1, 1, wallet).utxos.single()
+        assertEquals("rent", coin.label)
+        assertNull(coin.name, "default must not become an explicit name")
+        assertEquals(emptyList(), db.utxoNames.list())
+
+        db.txPaymentLabels.delete(stored.txid)
+        val cleared = withStoredUtxoMeta(db, snapshotFromDb(db, 2, 2, wallet))
+        assertEquals("savings", cleared.utxos.single().label)
         db.close()
     }
 

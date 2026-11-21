@@ -76,9 +76,11 @@ data class WalletUtxoRow(
     val isFrozen: Boolean = false,
     /** Label of the address this coin pays to; the default when [name] is blank. Never persisted as a name. */
     val addressLabel: String? = null,
+    /** Label of the transaction that created this coin. A display default, not a saved coin name. */
+    val txLabel: String? = null,
 ) {
-    /** What to show for this coin: the explicit [name], else the [addressLabel]. */
-    val label: String? get() = name.nonBlank() ?: addressLabel.nonBlank()
+    /** What to show for this coin: the explicit [name], else the creating transaction's label, else the [addressLabel]. */
+    val label: String? get() = name.nonBlank() ?: txLabel.nonBlank() ?: addressLabel.nonBlank()
 }
 
 data class WalletTxsSnapshot(
@@ -361,13 +363,18 @@ private class WalletCoins(
     }
 }
 
+private class CoinLabels(
+    val byAddress: Map<String, String>,
+    val byTxid: Map<String, String>,
+)
+
 private class CoinRowCtx(
     val db: Database,
     val nowMs: Long,
     val timeLabels: MutableMap<Int, HeightTimeLabel>,
     val nameByOutpoint: Map<String, String>,
     val frozenOutpoints: Set<String>,
-    val labelByAddress: Map<String, String>,
+    val labels: CoinLabels,
 )
 
 private fun walletCoins(
@@ -420,7 +427,8 @@ private fun walletCoins(
                     name = ctx.nameByOutpoint[key],
                     isChange = changeScripts.any { it.contentEquals(u.scriptPubKey) },
                     isFrozen = key in ctx.frozenOutpoints,
-                    addressLabel = watch?.address?.let { ctx.labelByAddress[it] },
+                    addressLabel = watch?.address?.let { ctx.labels.byAddress[it] },
+                    txLabel = ctx.labels.byTxid[txid],
                 )
             }.sortedWith(
                 compareByDescending<WalletUtxoRow> { it.height }
@@ -560,7 +568,15 @@ fun snapshotFromDb(
             addressByOutpoint = addressByOutpoint(stored.map { it.txid to it.tx }),
         )
 
-    val coinCtx = CoinRowCtx(db, nowMs, timeLabels, nameByOutpoint, frozenOutpoints, labelByAddress)
+    val coinCtx =
+        CoinRowCtx(
+            db,
+            nowMs,
+            timeLabels,
+            nameByOutpoint,
+            frozenOutpoints,
+            CoinLabels(labelByAddress, labels.noteByTxid),
+        )
     val coins = wallet?.let { walletCoins(it, stored, coinCtx, cachedLinkage) } ?: WalletCoins.None
     val utxos = coins.utxos
     val fees = coins.fees
@@ -605,6 +621,7 @@ internal fun withStoredUtxoMeta(
                     name = nameByOutpoint[it.key],
                     isFrozen = it.key in frozen,
                     addressLabel = it.address?.let { a -> labelByAddress[a] },
+                    txLabel = noteByTxid[it.txid],
                 )
             },
         txs = snap.txs.map { it.copy(utxoLabel = utxoLabelByTxid[it.txid], paymentLabel = noteByTxid[it.txid]) },

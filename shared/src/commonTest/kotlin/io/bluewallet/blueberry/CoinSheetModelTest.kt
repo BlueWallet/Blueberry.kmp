@@ -116,6 +116,17 @@ class CoinSheetModelTest {
     }
 
     @Test
+    fun transaction_label_is_the_placeholder_not_the_saved_name() {
+        val hinted = utxo("ee", 50_000).copy(txLabel = "Rent", addressLabel = "Cafe")
+        val control = buildCoinControlSnapshot(listOf(hinted), CoinLinkage(mapOf(hinted.key to hinted.key), mapOf(hinted.key to hinted.key)), emptySet())
+        val snap = WalletTxsSnapshot(utxos = listOf(hinted), coinLinkGraph = CoinLinkGraph.Empty)
+        val hint = buildCoinSheetModel(CoinSheetRequest(hinted.key, snap, control, emptyMap(), 0, null, false))
+        assertNotNull(hint)
+        assertEquals("", hint.label)
+        assertEquals("Rent", hint.labelPlaceholder)
+    }
+
+    @Test
     fun address_label_is_the_placeholder_not_the_saved_name() {
         val hinted = utxo("ee", 50_000).copy(addressLabel = "Rent")
         val named = utxo("ff", 40_000, name = "Mine").copy(addressLabel = "Rent")
