@@ -6,6 +6,8 @@ import io.bluewallet.bip324.TxInput
 import io.bluewallet.bip324.TxOutput
 import io.bluewallet.bip324.bytesToHex
 import io.bluewallet.bip324.encodeTransaction
+import io.bluewallet.blueberry.storage.BroadcastViaRepository
+import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
 import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.storage.StoredTx
@@ -150,6 +152,30 @@ class SignedPsbtBroadcastTest {
             val started = assertIs<SignedPsbtSent.Started>(result)
             val session = runtime.broadcastStore.sessions().single { it.snapshot.id == started.id }
             assertTrue(session.snapshot.heldBefore)
+            assertEquals(signed.txHex, requests.single().txHex)
+        }
+
+    /** The route is noted after the job starts; failing to note it must not report a started payment as unsaved. */
+    @Test
+    fun a_failed_route_write_after_the_start_still_reports_started() =
+        runFlow { db, runtime, _ ->
+            val requests = listenForRequests(runtime)
+            storeUnsignedSend(db, runtime, unsignedRow).join()
+            runtime.walletTxsStore.update { it.copy(utxos = listOf(c), utxosReady = true) }
+            val signed = signedPsbt(unsignedTxid)
+            val receipt = BroadcastReceipt(unsignedTxid, ADDRESS, "Rent", 50_000, 141)
+            val failingRoute =
+                object : Database by db {
+                    override val broadcastVia =
+                        object : BroadcastViaRepository by db.broadcastVia {
+                            override fun upsert(
+                                txid: String,
+                                via: String,
+                            ): Unit = error("disk full")
+                        }
+                }
+            val started = assertIs<SignedPsbtSent.Started>(broadcastSignedPsbt(failingRoute, runtime, unsignedTxid, signed, receipt))
+            assertTrue(runtime.broadcastStore.sessions().any { it.snapshot.id == started.id })
             assertEquals(signed.txHex, requests.single().txHex)
         }
 

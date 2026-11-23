@@ -77,8 +77,9 @@ fun startSignedPsbtBroadcast(
         blocked != null -> SignedPsbtSent.Refused(blocked)
         id == null -> SignedPsbtSent.Refused(BROADCAST_BUSY)
         else -> {
-            // Like a hot-wallet send, so transaction details name Tor as how it was published.
-            db.broadcastVia.upsert(signed.txid, BROADCAST_VIA_TOR)
+            // Like a hot-wallet send, so transaction details name Tor as how it was published. The job has started,
+            // so a failed note only loses that line; it must not turn a started payment into a refusal.
+            runCatching { db.broadcastVia.upsert(signed.txid, BROADCAST_VIA_TOR) }
             SignedPsbtSent.Started(id)
         }
     }
