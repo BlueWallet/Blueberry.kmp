@@ -30,31 +30,15 @@ fun encodeCryptoPsbtUrFragments(
 /** Inverts [encodeCryptoPsbtUrFragments]: reassembles the PSBT bytes from its UR fragments. */
 internal fun decodeCryptoPsbtUrFragments(parts: List<String>): ByteArray {
     require(parts.isNotEmpty()) { "no UR parts provided" }
-    val parsed = parts.map { parseUrPart(it) }
-    val type = parsed.first().type
-    require(parsed.all { it.type == type }) { "UR parts have mixed types" }
-
-    if (parsed.size == 1 && parsed[0].seqNum == null) {
-        val message = bytewordsDecodeMinimal(parsed[0].body)
-        return cborDecodeByteString(message)
+    val decoder = UrDecoder(setOf(CRYPTO_PSBT_UR_TYPE))
+    for (part in parts) {
+        when (val step = decoder.receive(part)) {
+            is UrReceive.Complete -> return psbtFromUrMessage(step.message)
+            is UrReceive.Failed -> error(step.reason)
+            else -> Unit
+        }
     }
-
-    val decoder = FountainDecoder()
-    for (p in parsed) {
-        val seqNum = requireNotNull(p.seqNum) { "multi-part UR is missing seq/count: $p" }
-        val partCbor = bytewordsDecodeMinimal(p.body)
-        val fountainPart = cborDecodeFountainPart(partCbor)
-        decoder.receivePart(
-            seqNum = seqNum,
-            seqLength = fountainPart.seqLength.toInt(),
-            messageLength = fountainPart.messageLength.toInt(),
-            checksum = fountainPart.checksum,
-            fragment = fountainPart.fragment,
-        )
-        if (decoder.isComplete()) break
-    }
-    require(decoder.isSuccess()) { "failed to reassemble UR fragments" }
-    return cborDecodeByteString(decoder.resultMessage())
+    error("failed to reassemble UR fragments")
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -94,14 +78,14 @@ private class UrEncoder(
     }
 }
 
-private data class ParsedUrPart(
+internal data class ParsedUrPart(
     val type: String,
     val seqNum: Long?,
     val seqCount: Int?,
     val body: String,
 )
 
-private fun parseUrPart(part: String): ParsedUrPart {
+internal fun parseUrPart(part: String): ParsedUrPart {
     val trimmed = part.trim()
     val schemeEnd = trimmed.indexOf(':')
     require(schemeEnd >= 0 && trimmed.substring(0, schemeEnd).lowercase() == "ur") {
@@ -218,14 +202,14 @@ private class FountainEncoder(
 // Fountain decoder (ports fountainDecoder.ts, inverse of FountainEncoder)
 // ---------------------------------------------------------------------------------------------
 
-private class FountainDecoderPart(
+internal class FountainDecoderPart(
     val indexes: List<Int>,
     val fragment: ByteArray,
 ) {
     fun isSimple(): Boolean = indexes.size == 1
 }
 
-private class FountainDecoder {
+internal class FountainDecoder {
     private var result: ByteArray? = null
     private var failed = false
     private var expectedMessageLength = 0
@@ -238,6 +222,15 @@ private class FountainDecoder {
     private val simpleParts = mutableListOf<FountainDecoderPart>()
 
     fun isComplete(): Boolean = result != null
+
+    /** The fragments reassembled into a message whose CRC32 doesn't match. Only a new decoder recovers. */
+    val hasFailed: Boolean get() = failed
+
+    /** Fragment count of the message, 0 before the first part. */
+    val expectedCount: Int get() = expectedPartIndexes.size
+
+    /** Fragments recovered so far. */
+    val recoveredCount: Int get() = receivedPartIndexes.size
 
     fun isSuccess(): Boolean = !failed && isComplete()
 
@@ -573,14 +566,14 @@ private val BYTEWORDS_MINIMAL_LOOKUP: IntArray by lazy {
     table
 }
 
-private fun bytewordsEncodeMinimal(bytes: ByteArray): String {
+internal fun bytewordsEncodeMinimal(bytes: ByteArray): String {
     val withCrc = bytes + crc32Bytes(bytes)
     val sb = StringBuilder(withCrc.size * 2)
     for (b in withCrc) sb.append(minimalBytewordAt(b.toInt() and 0xFF))
     return sb.toString()
 }
 
-private fun bytewordsDecodeMinimal(input: String): ByteArray {
+internal fun bytewordsDecodeMinimal(input: String): ByteArray {
     require(input.length % 2 == 0) { "invalid bytewords length" }
     val dim = 26
     val bytes = ByteArray(input.length / 2)
@@ -679,24 +672,25 @@ private class CborReader(
     }
 }
 
-private fun cborDecodeByteString(bytes: ByteArray): ByteArray = CborReader(bytes).readByteString()
+internal fun cborDecodeByteString(bytes: ByteArray): ByteArray = CborReader(bytes).readByteString()
 
-private data class DecodedFountainPart(
+internal data class DecodedFountainPart(
+    val seqNum: Long,
     val seqLength: Long,
     val messageLength: Long,
     val checksum: Long,
     val fragment: ByteArray,
 )
 
-private fun cborDecodeFountainPart(bytes: ByteArray): DecodedFountainPart {
+internal fun cborDecodeFountainPart(bytes: ByteArray): DecodedFountainPart {
     val reader = CborReader(bytes)
     val (majorType, info) = reader.readHeader()
     require(majorType == 4) { "expected CBOR array, got major type $majorType" }
     require(reader.readLength(info) == 5L) { "expected 5-element fountain-part array" }
-    reader.readUInt() // seqNum (caller already knows it from the UR sequence component)
+    val seqNum = reader.readUInt()
     val seqLength = reader.readUInt()
     val messageLength = reader.readUInt()
     val checksum = reader.readUInt()
     val fragment = reader.readByteString()
-    return DecodedFountainPart(seqLength, messageLength, checksum, fragment)
+    return DecodedFountainPart(seqNum, seqLength, messageLength, checksum, fragment)
 }

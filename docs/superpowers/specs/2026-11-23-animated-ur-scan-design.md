@@ -29,7 +29,7 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
    - `Complete(message)`: the CBOR message is reassembled and its CRC32 matches,
    - `Ignored(reason)`: not a UR, a UR of a type we don't accept, a type other than the one already locked in, a corrupt frame (bad bytewords checksum or CBOR), or a part of a different animation (other length, size or checksum). Ignored parts never change state, so a stray QR can't break a scan in progress,
    - `Failed(reason)`: reassembly produced a message whose checksum doesn't match. Only `reset()` recovers.
-   `reset()` clears everything. After `Complete`, further parts are ignored.
+   `reset()` clears everything. After `Complete`, every further `receive` returns the same `Complete`.
 3. **Types.** For PSBTs the decoder accepts `crypto-psbt` (BCR-2020-006) and `psbt` (newer registry name). Both wrap the PSBT in a CBOR byte string. The first accepted part locks the type.
 4. **Progress.** `max(recovered fragments / fragment count, min(0.99, distinct parts / (fragment count × 1.75)))`, shown as a whole percent. The second term is `@ngraveio/bc-ur`'s estimate, so fountain-mixed frames move the bar before any fragment is recovered. Complete is 100.
 5. **Plain PSBT text.** A scanned or pasted string that is not a UR is read as base64 (standard alphabet) or hex, and must start with the PSBT magic `70736274ff`. Whitespace is trimmed.
