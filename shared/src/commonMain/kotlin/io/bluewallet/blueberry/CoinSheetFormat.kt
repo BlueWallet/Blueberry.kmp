@@ -73,7 +73,7 @@ fun percentOfValue(
 /** Five derivation chips, or null when [path] is not `m/purpose'/cointype'/account'/chain/index`. */
 fun derivationChips(path: String?): List<PathChipModel>? {
     val parts = path?.removePrefix("m/")?.split('/').orEmpty()
-    if (parts.size < 5) return null
+    if (parts.size != 5) return null
     val account = parts[2].removeSuffix("'").toIntOrNull() ?: 0
     val purpose =
         when (parts[0].removeSuffix("'")) {

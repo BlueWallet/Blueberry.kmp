@@ -432,7 +432,7 @@ private fun ImportWalletPage(
     ) {
         PlatformLargeTitle(title = "Import")
         Text(
-            text = "Enter BIP39 seed, account zpub, WIF private key, or address",
+            text = "Enter BIP39 seed, xpub/ypub/zpub, descriptor, WIF private key, or address",
             style = PlatformBodyStyle(),
         )
         ImportEntry(
@@ -537,7 +537,7 @@ private fun ImportSecretField(
                     singleLine = false,
                     visualTransformation = VisualTransformation.None,
                     interactionSource = interactionSource,
-                    placeholder = { Text("seed words, zpub, WIF, or address…") },
+                    placeholder = { Text("seed words, xpub, descriptor, WIF, or address…") },
                     colors = colors,
                     contentPadding =
                         OutlinedTextFieldDefaults.contentPadding(

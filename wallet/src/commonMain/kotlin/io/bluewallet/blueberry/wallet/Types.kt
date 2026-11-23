@@ -41,7 +41,7 @@ data class WatchWallet(
     val addresses: List<WatchAddress>,
     val scripts: List<ByteArray>,
 ) {
-    /** Redacts [secret] (mnemonic/WIF/zpub/address) so it never lands in logs or crash reports. */
+    /** Redacts [secret] (mnemonic/WIF/watch key/address) so it never lands in logs or crash reports. */
     override fun toString(): String = "WatchWallet(kind=$kind, secret=[redacted], addresses=$addresses, scripts=$scripts)"
 }
 

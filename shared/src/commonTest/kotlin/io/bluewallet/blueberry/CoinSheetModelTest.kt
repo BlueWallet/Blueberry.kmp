@@ -10,6 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CoinSheetModelTest {
@@ -35,6 +36,9 @@ class CoinSheetModelTest {
         assertEquals("Index", chips[4].meaning)
         assertTrue(chips[3].accent && chips[4].accent)
         assertFalse(chips[0].accent)
+        // A descriptor origin longer than an account path must not shift chain and index into the wrong chips.
+        assertNull(derivationChips("m/84'/0'/0'/0'/0/5"))
+        assertNull(derivationChips("m/0/0/1/3"))
     }
 
     @Test

@@ -13,8 +13,8 @@ class EncodePsbtUrTest {
      */
     private val goldenPsbtUrFragments =
         listOf(
-            "ur:crypto-psbt/1-2/lpadaocsttcyfyckjkbdhdinhdtkjojkidjyzmadaejsaoaeaeaeadbybybybybybybybybybybybybybybybybybybybybybybybybybybybybybybybyaeaeaeaeaezmzmzmzmaogdsraeaeaeaeaeaecmaebbnsmhyteewdgyzsbsihaachjofxvtmhlgolmonllstoryaeaeaeaeaeaecmaebbfmeemkhlsgjlrlcprhfs",
-            "ur:crypto-psbt/2-2/lpaoaocsttcyfyckjkbdhdinutsozoennlfzvesttpvoltfhgmnsaeaeaeaeaeadadctnblnadaeaeaeaeaecmaebbrttorftbsrtesglkkpuohyswdmrngoeobaytbevocpamaxdytlgwtiutfwbkjthelgendkykwffddwplecbskktlwtkpfrykrnwsnsdpmepefnbnzcbwpksoaeaeaeaeaeaeaeaeaeaeaeaeahvwwytt",
+            "ur:crypto-psbt/1-2/lpadaocfadeycykpwennrfhdnlhkaddljojkidjyzmadaejsaoaeaeaeadbybybybybybybybybybybybybybybybybybybybybybybybybybybybybybybybyaeaeaeaeaezmzmzmzmaogdsraeaeaeaeaeaecmaebbnsmhyteewdgyzsbsihaachjofxvtmhlgolmonllstoryaeaeaeaeaeaecmaebbfmeemkhlsgjlutsozoennlfzvesttpvoltfhgmnsaeaeaeaeaeadadctnblnadaeaeaeaeaecmaebbrttorftbsrtesglkkpuohyswdmrnwpmwlsvd",
+            "ur:crypto-psbt/2-2/lpaoaocfadeycykpwennrfhdnlgoeobaytbevocpamaxdytlgwtiutfwbkjthelgendkykwffddwplecbskktlwtkpfrykrnwsnsdpmepefnbnzcbwpksoaeaeaeaeaeaeaeaeaecpaoaxvdkpzcgywturrosnlnhlnewnsfoeoyhdtkihctwlmszcsozewlseterewlmdwdktbnzcbwpksoaeaeaeaeadaeaeaeaecpaoaxaogudklomnfwnyrovluypectksaoielunstickndfplrlpskzsgscwndhgaevyolbnzcbwpksoadaeaeaeaeaeaeaeaeuylygybt",
         )
 
     @Test
@@ -55,11 +55,13 @@ class EncodePsbtUrTest {
     private companion object {
         /** The unsigned PSBT this test builds; pinned so [goldenPsbtUrFragments] stays interop-checked. */
         const val GOLDEN_PSBT_HEX =
-            "70736274ff010071020000000111111111111111111111111111111111111111111111111111111111" +
-                "111111110000000000ffffffff0250c30000000000001600149c90f934ea51fa0f6504177043e0" +
-                "908da6929983cebd0000000000001600143e34985dca6fddc9fb369940e4c7d8e2873f529c00000" +
-                "0000001011fa086010000000000160014c0cebcd6c3d3ca8c75dc5ec62ebe55330ef910e2220603" +
-                "30d54fd0dd420a6e5f8d3624f5f3482cae350f79d5f0753bf5beef9c2d91af3c0cfd13aac9000000" +
-                "0000000000000000"
+            "70736274ff0100710200000001111111111111111111111111111111111111111111111111111111" +
+                "11111111110000000000ffffffff0250c30000000000001600149c90f934ea51fa0f6504177043e0" +
+                "908da6929983cebd0000000000001600143e34985dca6fddc9fb369940e4c7d8e2873f529c000000" +
+                "000001011fa086010000000000160014c0cebcd6c3d3ca8c75dc5ec62ebe55330ef910e222060330" +
+                "d54fd0dd420a6e5f8d3624f5f3482cae350f79d5f0753bf5beef9c2d91af3c0cfd13aac900000000" +
+                "0000000000220203e775fd51f0dfb8cd865d9ff1cca2a158cf651fe997fdc9fee9c1d3b5e995ea77" +
+                "0cfd13aac9000000000100000000220203025324888e429ab8e3dbaf1f7802648b9cd01e9b418485" +
+                "c5fa4c1b9b5700e1a60cfd13aac9010000000000000000"
     }
 }

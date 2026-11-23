@@ -7,12 +7,12 @@ appId: io.bluewallet.blueberry
 - takeScreenshot: onboarding-01-welcome
 - tapOn: "Import wallet"
 - extendedWaitUntil:
-    visible: "seed words, zpub, WIF, or address…"
+    visible: "seed words, xpub, descriptor, WIF, or address…"
     timeout: 30000
-- tapOn: "seed words, zpub, WIF, or address…"
+- tapOn: "seed words, xpub, descriptor, WIF, or address…"
 - inputText: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
 # Tapping the instructions closes the keyboard.
-- tapOn: "Enter BIP39 seed, account zpub, WIF private key, or address"
+- tapOn: "Enter BIP39 seed, xpub/ypub/zpub, descriptor, WIF private key, or address"
 - takeScreenshot: onboarding-02-import-address
 - tapOn: "Continue"
 - extendedWaitUntil:

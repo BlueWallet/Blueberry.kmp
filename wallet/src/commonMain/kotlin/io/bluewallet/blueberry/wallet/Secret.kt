@@ -2,17 +2,21 @@ package io.bluewallet.blueberry.wallet
 
 import fr.acinq.bitcoin.Base58
 import fr.acinq.bitcoin.Base58Check
-import fr.acinq.bitcoin.DeterministicWallet
 import fr.acinq.bitcoin.MnemonicCode
 import io.bluewallet.blueberry.storage.Database
 
-enum class WalletSecretKind { MNEMONIC, ZPUB, WIF, ADDRESS }
+enum class WalletSecretKind { MNEMONIC, XPUB, YPUB, ZPUB, DESCRIPTOR, WIF, ADDRESS }
+
+/** Text that names an extended key or a key origin but is none of the accepted forms; never a mnemonic. */
+private val EXTENDED_KEY_SHAPE = Regex("[xyz]pub|^\\[[0-9a-f]{8}", RegexOption.IGNORE_CASE)
+
+private val WATCH_KEY_KINDS = mapOf("xpub" to WalletSecretKind.XPUB, "ypub" to WalletSecretKind.YPUB, "zpub" to WalletSecretKind.ZPUB)
 
 data class ParsedWalletSecret(
     val kind: WalletSecretKind,
     val value: String,
 ) {
-    /** Redacts [value] (mnemonic/WIF/zpub/address) so it never lands in logs or crash reports. */
+    /** Redacts [value] (mnemonic/WIF/watch key/address) so it never lands in logs or crash reports. */
     override fun toString(): String = "ParsedWalletSecret(kind=$kind, value=[redacted])"
 }
 
@@ -68,21 +72,15 @@ fun decodeWifPrivateKey(wif: String): ByteArray {
 fun parseWalletSecret(raw: String): ParsedWalletSecret {
     val value = raw.trim()
     if (value.isEmpty()) throw IllegalArgumentException("wallet secret is empty")
-    if (value.startsWith("zpub")) {
-        val decoded =
-            try {
-                DeterministicWallet.ExtendedPublicKey.decode(value)
-            } catch (_: Exception) {
-                throw IllegalArgumentException("invalid zpub")
-            }
-        if (decoded.second.depth != 3) {
-            throw IllegalArgumentException("zpub must be account-level (m/84'/0'/0')")
-        }
-        return ParsedWalletSecret(WalletSecretKind.ZPUB, value)
+    if (looksLikeDescriptor(value)) {
+        parseDescriptor(value)
+        return ParsedWalletSecret(WalletSecretKind.DESCRIPTOR, descriptorLines(value).joinToString("\n"))
     }
-    if (Regex("^[xyzvt]p(?:ub|rv)").containsMatchIn(value)) {
-        throw IllegalArgumentException("only mainnet account zpub is supported")
+    WATCH_KEY_KINDS[value.take(4)]?.let { kind ->
+        decodeAccountKey(value)
+        return ParsedWalletSecret(kind, value)
     }
+    require(!Regex("^[xyzuvt]p(?:ub|rv)").containsMatchIn(value)) { "only mainnet account xpub, ypub or zpub is supported" }
     if (looksLikeWifCandidate(value)) {
         decodeWifPrivateKey(value)
         return ParsedWalletSecret(WalletSecretKind.WIF, value)
@@ -94,6 +92,7 @@ fun parseWalletSecret(raw: String): ParsedWalletSecret {
     if (looksLikeAddressCandidate(value)) {
         throw IllegalArgumentException("invalid mainnet address")
     }
+    require(!EXTENDED_KEY_SHAPE.containsMatchIn(value)) { "unsupported descriptor or extended key" }
     val mnemonic = value.replace(Regex("\\s+"), " ").lowercase()
     try {
         MnemonicCode.validate(mnemonic)
@@ -102,6 +101,16 @@ fun parseWalletSecret(raw: String): ParsedWalletSecret {
     }
     return ParsedWalletSecret(WalletSecretKind.MNEMONIC, mnemonic)
 }
+
+/** The watch key of an xpub, ypub, zpub or descriptor secret; null for other kinds. */
+fun ParsedWalletSecret.watchKey(): WatchKey? =
+    when (kind) {
+        WalletSecretKind.XPUB, WalletSecretKind.YPUB, WalletSecretKind.ZPUB, WalletSecretKind.DESCRIPTOR -> parseWatchKey(value)
+        WalletSecretKind.MNEMONIC, WalletSecretKind.WIF, WalletSecretKind.ADDRESS -> null
+    }
+
+/** HD script types this secret watches: all four for a mnemonic, the key's one for a watch key, none otherwise. */
+fun ParsedWalletSecret.hdScriptTypes(): List<AddressScriptType> = if (kind == WalletSecretKind.MNEMONIC) HD_SCRIPT_TYPES else listOfNotNull(watchKey()?.scriptType)
 
 fun hasWalletSecret(db: Database): Boolean {
     val v = db.keyValue.get(WALLET_SECRET_KEY)

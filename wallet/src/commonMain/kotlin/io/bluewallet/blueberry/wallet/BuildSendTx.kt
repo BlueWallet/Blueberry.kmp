@@ -20,6 +20,7 @@ import fr.acinq.bitcoin.TxOut
 import fr.acinq.bitcoin.XonlyPublicKey
 import fr.acinq.bitcoin.psbt.KeyPathWithMaster
 import fr.acinq.bitcoin.psbt.Psbt
+import fr.acinq.bitcoin.psbt.TaprootBip32DerivationPath
 import fr.acinq.secp256k1.Secp256k1
 import kotlin.math.ceil
 
@@ -42,7 +43,7 @@ data class BuildSendTxParams(
     val feeRateSatPerVb: Double,
     val changeAddress: String,
 ) {
-    /** Redacts [secret] (mnemonic/WIF/zpub/address) so it never lands in logs or crash reports. */
+    /** Redacts [secret] (mnemonic/WIF/watch key/address) so it never lands in logs or crash reports. */
     override fun toString(): String =
         "BuildSendTxParams(secret=[redacted], wallet=$wallet, utxos=$utxos, toAddress=$toAddress, " +
             "amountSats=$amountSats, feeRateSatPerVb=$feeRateSatPerVb, changeAddress=$changeAddress)"
@@ -253,17 +254,17 @@ private fun signLegacyLowR(
     )
 
 /**
- * The key material a wallet secret gives us. Mnemonics and WIFs can sign; zpub and single-address
- * watches can only describe their inputs, so they stop at an unsigned PSBT. Mnemonics and zpubs
- * also supply PSBT origin metadata (account fingerprint + derivation path).
+ * The key material a wallet secret gives us. Mnemonics and WIFs can sign; watch keys (xpub, ypub,
+ * zpub, descriptor) and single-address watches can only describe their inputs, so they stop at an
+ * unsigned PSBT. Mnemonics and watch keys also supply PSBT origin metadata (fingerprint + path).
  */
 private sealed class SendAccount {
     data class Mnemonic(
         val master: DeterministicWallet.ExtendedPrivateKey,
     ) : SendAccount()
 
-    data class Zpub(
-        val account: DeterministicWallet.ExtendedPublicKey,
+    data class Watch(
+        val key: WatchKey,
     ) : SendAccount()
 
     data class Wif(
@@ -277,8 +278,8 @@ private fun sendAccountFor(parsed: ParsedWalletSecret): SendAccount =
     when (parsed.kind) {
         WalletSecretKind.MNEMONIC ->
             SendAccount.Mnemonic(DeterministicWallet.generate(MnemonicCode.toSeed(parsed.value, "")))
-        WalletSecretKind.ZPUB ->
-            SendAccount.Zpub(DeterministicWallet.ExtendedPublicKey.decode(parsed.value).second)
+        WalletSecretKind.XPUB, WalletSecretKind.YPUB, WalletSecretKind.ZPUB, WalletSecretKind.DESCRIPTOR ->
+            SendAccount.Watch(parseWatchKey(parsed.value))
         WalletSecretKind.WIF ->
             SendAccount.Wif(PrivateKey(decodeWifPrivateKey(parsed.value)))
         WalletSecretKind.ADDRESS -> SendAccount.AddressWatch
@@ -287,17 +288,14 @@ private fun sendAccountFor(parsed: ParsedWalletSecret): SendAccount =
 private fun SendAccount.fingerprint(): Long? =
     when (this) {
         is SendAccount.Mnemonic -> master.fingerprint()
-        is SendAccount.Zpub -> account.fingerprint()
+        is SendAccount.Watch -> key.bip32Fingerprint()
         is SendAccount.Wif, SendAccount.AddressWatch -> null
     }
-
-/** zpub watches use a chain/index path relative to the account; mnemonics use the full BIP84 path. */
-private fun relativePathNums(addr: WatchAddress): List<Long> = listOf(if (addr.change) 1L else 0L, addr.index.toLong())
 
 private fun SendAccount.publicKeyAt(addr: WatchAddress): PublicKey? =
     when (this) {
         is SendAccount.Mnemonic -> master.derivePrivateKey(addr.path).publicKey
-        is SendAccount.Zpub -> account.derivePublicKey(relativePathNums(addr)).publicKey
+        is SendAccount.Watch -> key.publicKeyAt(addr.change, addr.index)
         is SendAccount.Wif -> privateKey.publicKey()
         SendAccount.AddressWatch -> null
     }
@@ -305,7 +303,7 @@ private fun SendAccount.publicKeyAt(addr: WatchAddress): PublicKey? =
 private fun SendAccount.bip32PathNums(addr: WatchAddress): List<Long>? =
     when (this) {
         is SendAccount.Mnemonic -> KeyPath.computePath(addr.path)
-        is SendAccount.Zpub -> relativePathNums(addr)
+        is SendAccount.Watch -> key.bip32Path(addr.change, addr.index).path
         is SendAccount.Wif, SendAccount.AddressWatch -> null
     }
 
@@ -313,7 +311,7 @@ private fun SendAccount.privateKeyFor(signPath: String): PrivateKey =
     when (this) {
         is SendAccount.Mnemonic -> master.derivePrivateKey(signPath).privateKey
         is SendAccount.Wif -> privateKey
-        is SendAccount.Zpub, SendAccount.AddressWatch ->
+        is SendAccount.Watch, SendAccount.AddressWatch ->
             throw IllegalArgumentException(SIGNING_SECRET_REQUIRED)
     }
 
@@ -540,12 +538,12 @@ fun buildSignedSendTx(params: BuildSendTxParams): BuildSendTxResult {
 /**
  * Build an unsigned PSBT (no signing). Works with any wallet secret. Each input carries the data a
  * signer needs and nothing more: legacy inputs get the full previous transaction, segwit inputs get
- * their spent output, and mnemonic/zpub inputs get their BIP32 origin. A single-address watch knows
+ * their spent output, and mnemonic/watch-key inputs and own outputs get their BIP32 origin. A single-address watch knows
  * no public key, so its inputs stay script-only (no redeemScript, no tapInternalKey).
  */
 fun buildUnsignedSendPsbt(params: BuildSendTxParams): BuildSendPsbtResult {
     val draft = buildDraftSendTx(params)
-    val psbt = unsignedPsbt(draft.unsignedTx, draft.inputs, draft.account)
+    val psbt = unsignedPsbt(draft.unsignedTx, draft.inputs, draft.account, watchAddressesByScript(params.wallet))
     return BuildSendPsbtResult(
         psbtHex = hexFromBytes(Psbt.write(psbt).toByteArray()),
         unsignedTxHex = hexFromBytes(Transaction.write(draft.unsignedTx)),
@@ -583,24 +581,25 @@ fun rebuildSendPsbt(
                 bip32Path = account.bip32PathNums(addr),
             )
         }
-    return hexFromBytes(Psbt.write(unsignedPsbt(tx, inputs, account)).toByteArray())
+    return hexFromBytes(Psbt.write(unsignedPsbt(tx, inputs, account, byScript)).toByteArray())
 }
 
 private fun unsignedPsbt(
     unsignedTx: Transaction,
     inputs: List<DraftInput>,
     account: SendAccount,
+    byScript: Map<String, WatchAddress>,
 ): Psbt {
     val fingerprint = account.fingerprint()
     var psbt = Psbt(unsignedTx)
     inputs.forEachIndexed { index, input ->
         val outPoint = unsignedTx.txIn[index].outPoint
         val txOut = TxOut(Satoshi(input.utxo.valueSats), input.utxo.scriptPubKey)
-        val derivationPaths =
+        val origin =
             if (input.publicKey != null && input.bip32Path != null && fingerprint != null) {
-                mapOf(input.publicKey to KeyPathWithMaster(fingerprint, KeyPath(input.bip32Path)))
+                KeyOriginFields(input.publicKey, KeyPathWithMaster(fingerprint, KeyPath(input.bip32Path)))
             } else {
-                emptyMap()
+                null
             }
         val updated =
             when (input.scriptType) {
@@ -609,36 +608,85 @@ private fun unsignedPsbt(
                         Transaction.read(
                             input.utxo.nonWitnessUtxo ?: throw IllegalArgumentException(LEGACY_PREV_TX_REQUIRED),
                         )
-                    psbt.updateNonWitnessInput(prevTx, input.utxo.vout, derivationPaths = derivationPaths)
+                    psbt.updateNonWitnessInput(prevTx, input.utxo.vout, derivationPaths = origin.ecdsa())
                 }
                 AddressScriptType.P2SH_P2WPKH ->
                     psbt.updateWitnessInput(
                         outPoint,
                         txOut,
                         redeemScript = input.publicKey?.let { Script.pay2wpkh(it) },
-                        derivationPaths = derivationPaths,
+                        derivationPaths = origin.ecdsa(),
                     )
                 AddressScriptType.P2WPKH ->
                     psbt.updateWitnessInput(
                         outPoint,
                         txOut,
-                        derivationPaths = derivationPaths,
+                        derivationPaths = origin.ecdsa(),
                     )
                 AddressScriptType.P2TR ->
                     psbt.updateWitnessInput(
                         outPoint,
                         txOut,
-                        derivationPaths = derivationPaths,
                         taprootInternalKey = input.publicKey?.let { XonlyPublicKey(it) },
+                        taprootDerivationPaths = origin.taproot(),
                     )
             }
         psbt = updated.right ?: throw IllegalStateException("failed to update PSBT input $index: ${updated.left}")
+    }
+    return describeOwnOutputs(psbt, account, byScript)
+}
+
+/** One of our keys and its BIP32 origin. Taproot keys go in the tap fields (BIP371), others in the ECDSA ones. */
+private class KeyOriginFields(
+    val publicKey: PublicKey,
+    val origin: KeyPathWithMaster,
+)
+
+private fun KeyOriginFields?.ecdsa(): Map<PublicKey, KeyPathWithMaster> = if (this == null) emptyMap() else mapOf(publicKey to origin)
+
+private fun KeyOriginFields?.taproot(): Map<XonlyPublicKey, TaprootBip32DerivationPath> =
+    if (this == null) {
+        emptyMap()
+    } else {
+        mapOf(XonlyPublicKey(publicKey) to TaprootBip32DerivationPath(emptyList(), origin.masterKeyFingerprint, origin.keyPath))
+    }
+
+/**
+ * Outputs that pay one of our HD addresses (change, or a send to self) carry the same key origin as
+ * inputs, so a signing device can recognise them as ours instead of showing them as payments.
+ */
+private fun describeOwnOutputs(
+    unsigned: Psbt,
+    account: SendAccount,
+    byScript: Map<String, WatchAddress>,
+): Psbt {
+    val fingerprint = account.fingerprint() ?: return unsigned
+    var psbt = unsigned
+    psbt.global.tx.txOut.forEachIndexed { index, out ->
+        val addr = byScript[scriptHex(out.publicKeyScript.toByteArray())] ?: return@forEachIndexed
+        val publicKey = account.publicKeyAt(addr) ?: return@forEachIndexed
+        val path = account.bip32PathNums(addr) ?: return@forEachIndexed
+        val origin = KeyOriginFields(publicKey, KeyPathWithMaster(fingerprint, KeyPath(path)))
+        val updated =
+            when (addr.resolvedScriptType()) {
+                AddressScriptType.P2PKH -> psbt.updateNonWitnessOutput(index, derivationPaths = origin.ecdsa())
+                AddressScriptType.P2SH_P2WPKH ->
+                    psbt.updateWitnessOutput(index, redeemScript = Script.pay2wpkh(publicKey), derivationPaths = origin.ecdsa())
+                AddressScriptType.P2WPKH -> psbt.updateWitnessOutput(index, derivationPaths = origin.ecdsa())
+                AddressScriptType.P2TR ->
+                    psbt.updateWitnessOutput(
+                        index,
+                        taprootInternalKey = XonlyPublicKey(publicKey),
+                        taprootDerivationPaths = origin.taproot(),
+                    )
+            }
+        psbt = updated.right ?: error("failed to update PSBT output $index: ${updated.left}")
     }
     return psbt
 }
 
 /**
- * Mnemonic/WIF secrets sign; zpub/address watches produce an unsigned PSBT. When sending a
+ * Mnemonic/WIF secrets sign; watch-key/address watches produce an unsigned PSBT. When sending a
  * non-max amount from an address watch, change is forced back to the single watched address.
  */
 fun buildSend(params: BuildSendTxParams): BuildSendResult {

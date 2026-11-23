@@ -67,6 +67,54 @@ class DeriveTest {
     }
 
     @Test
+    fun watch_keys_match_the_mnemonic_watch_for_their_script() {
+        val mnemonic = deriveWatchWallet(ABANDON, WatchGaps(3, 2))
+
+        fun mnemonicAddresses(type: AddressScriptType) = mnemonic.addresses.filter { it.scriptType == type }.map { it.address }
+        val cases =
+            listOf(
+                ABANDON_BIP44_XPUB to AddressScriptType.P2PKH,
+                ABANDON_BIP49_YPUB to AddressScriptType.P2SH_P2WPKH,
+                PKH_ABANDON_DESCRIPTOR to AddressScriptType.P2PKH,
+                WPKH_BARE_DESCRIPTOR to AddressScriptType.P2WPKH,
+                TR_ABANDON_DESCRIPTOR to AddressScriptType.P2TR,
+                TR_BARE_DESCRIPTOR to AddressScriptType.P2TR,
+                "$TR_ABANDON_RECEIVE_DESCRIPTOR\n$TR_ABANDON_CHANGE_DESCRIPTOR" to AddressScriptType.P2TR,
+            )
+        for ((secret, type) in cases) {
+            val watch = deriveWatchWallet(secret, WatchGaps(3, 2))
+            assertEquals(WatchWalletKind.BIP84, watch.kind)
+            assertEquals(mnemonicAddresses(type), watch.addresses.map { it.address }, secret)
+            assertTrue(watch.addresses.all { it.scriptType == type })
+        }
+    }
+
+    @Test
+    fun watch_key_vectors_and_paths() {
+        val xpub = deriveWatchWallet(ABANDON_BIP44_XPUB, WatchGaps(1, 1))
+        assertEquals(BIP44_ABANDON_EXT_0, xpub.hd(AddressScriptType.P2PKH, 0).address)
+        assertEquals(BIP44_ABANDON_INT_0, xpub.hd(AddressScriptType.P2PKH, 0, change = true).address)
+        assertEquals("m/44'/0'/0'/1/0", xpub.hd(AddressScriptType.P2PKH, 0, change = true).path)
+        val ypub = deriveWatchWallet(ABANDON_BIP49_YPUB, WatchGaps(1, 1))
+        assertEquals(BIP49_ABANDON_EXT_0, ypub.hd(AddressScriptType.P2SH_P2WPKH, 0).address)
+        assertEquals(BIP49_ABANDON_INT_0, ypub.hd(AddressScriptType.P2SH_P2WPKH, 0, change = true).address)
+        val tr = deriveWatchWallet(TR_ABANDON_DESCRIPTOR, WatchGaps(2, 1))
+        assertEquals(BIP86_ABANDON_EXT_1, tr.hd(AddressScriptType.P2TR, 1).address)
+        assertEquals(BIP86_ABANDON_INT_0, tr.hd(AddressScriptType.P2TR, 0, change = true).address)
+        assertEquals("m/86'/0'/0'/0/1", tr.hd(AddressScriptType.P2TR, 1).path)
+        // An origin path wins over the standard one, even when it is unusual.
+        val custom = "wpkh([73c5da0a/84'/0'/7']$ABANDON_BIP84_XPUB/<0;1>/*)"
+        assertEquals("m/84'/0'/7'/0/0", deriveWatchWallet(custom, WatchGaps(1, 0)).addresses.single().path)
+    }
+
+    @Test
+    fun watch_key_uses_its_own_script_gap_window() {
+        val gaps = HdWatchGaps.initial().with(AddressScriptType.P2TR, WatchGaps(4, 3))
+        assertEquals(7, deriveWatchWallet(TR_ABANDON_DESCRIPTOR, gaps).addresses.size)
+        assertEquals(INITIAL_WATCH_COUNT * 2, deriveWatchWallet(ABANDON_BIP44_XPUB, gaps).addresses.size)
+    }
+
+    @Test
     fun wif_unwraps_four_types() {
         val w = deriveWatchWallet(WIF_BECH32)
         assertEquals(WatchWalletKind.WIF, w.kind)

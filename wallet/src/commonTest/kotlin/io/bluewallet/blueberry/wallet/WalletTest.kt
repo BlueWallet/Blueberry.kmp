@@ -73,6 +73,28 @@ class WalletTest {
     }
 
     @Test
+    fun watch_keys_round_trip_through_kv() {
+        val db = createSqliteDatabase(":memory:")
+        val pasted = "\n  $TR_ABANDON_RECEIVE_DESCRIPTOR  \r\n$TR_ABANDON_CHANGE_DESCRIPTOR \n"
+        assertEquals(WalletSecretKind.DESCRIPTOR, saveWalletSecret(db, pasted).kind)
+        assertEquals("$TR_ABANDON_RECEIVE_DESCRIPTOR\n$TR_ABANDON_CHANGE_DESCRIPTOR", db.keyValue.get(WALLET_SECRET_KEY))
+        val wallet = createWallet(db, CreateWalletOptions(addressGap = 2))
+        assertEquals(BIP86_ABANDON_EXT_1, wallet.snapshot().hd(AddressScriptType.P2TR, 1).address)
+        assertEquals(4, wallet.scripts().size)
+        saveWatchGaps(db, AddressScriptType.P2TR, WatchGaps(5, 2))
+        assertTrue(wallet.syncFromDb().grew)
+        assertEquals(7, wallet.scripts().size)
+        db.close()
+
+        val xdb = createSqliteDatabase(":memory:")
+        saveWalletSecret(xdb, ABANDON_BIP44_XPUB)
+        val xw = createWallet(xdb, CreateWalletOptions(addressGap = 1))
+        assertEquals(ABANDON_BIP44_XPUB, xw.snapshot().secret)
+        assertEquals(listOf(BIP44_ABANDON_EXT_0, BIP44_ABANDON_INT_0), xw.snapshot().addresses.map { it.address })
+        xdb.close()
+    }
+
+    @Test
     fun zpub_and_wif_from_kv() {
         val zdb = createSqliteDatabase(":memory:")
         saveWalletSecret(zdb, BLUE_ZPUB)

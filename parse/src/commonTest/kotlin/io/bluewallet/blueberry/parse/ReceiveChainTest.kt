@@ -78,7 +78,30 @@ class ReceiveChainTest {
         db.close()
     }
 
+    @Test
+    fun watch_key_receive_uses_its_script_and_origin_path() {
+        val db = createSqliteDatabase(":memory:")
+        // A saved mnemonic receive type must not leak into a watch-only wallet.
+        saveReceiveScriptType(db, AddressScriptType.P2WPKH)
+        val wallet = createWallet(db, CreateWalletOptions(secret = TR_DESCRIPTOR))
+        val snapshot = snapshotReceive(db, wallet)
+        assertEquals(wallet.snapshot().hd(AddressScriptType.P2TR, 0).address, snapshot.address)
+        val chain = snapshot.chain!!
+        assertTrue(chain.addresses.all { it.resolvedScriptType() == AddressScriptType.P2TR && !it.change })
+        assertEquals("m/86'/0'/0'/0/2", chain.addresses[2].path)
+
+        val xpubDb = createSqliteDatabase(":memory:")
+        val xpub = createWallet(xpubDb, CreateWalletOptions(secret = XPUB))
+        assertEquals("1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA", snapshotReceive(xpubDb, xpub).address)
+        db.close()
+        xpubDb.close()
+    }
+
     private companion object {
+        const val XPUB =
+            "xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj"
+        const val TR_DESCRIPTOR =
+            "tr([73c5da0a/86'/0'/0']xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ/<0;1>/*)#kjk9q86c"
         const val ZPUB =
             "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs"
     }
