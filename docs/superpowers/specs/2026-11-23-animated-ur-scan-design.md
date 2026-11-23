@@ -53,7 +53,9 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
 11. **Review screen.** Recipient label, amount hero, destination address groups, network fee and total leaving the wallet, and a Broadcast button. Back returns to the PSBT QR.
 - **Review-loop decisions.** A PSBT that fails its check is remembered: holding the same QR in view keeps its
   reason on screen instead of re-checking it every frame. That reason, like a checksum failure, stays up on
-  every following frame until a different PSBT completes or the user taps Start over. On the send flow, the scan target is captured when
+  every following frame until a different PSBT completes or the user taps Start over, including frames from a stray QR.
+  Start over also cancels a signature check in flight. The review's amount is the first output paying the
+  destination: `buildSend` puts the payment before change, which matters when the destination is our change address. On the send flow, the scan target is captured when
   "Scan signed PSBT" is tapped, so the scan, review and broadcast survive the build dropping once a moved
   legacy/nested spend makes its coins look spent. From tx details, finishing a broadcast whose txid moved opens
   the details of the new txid in place of the old one.
