@@ -206,6 +206,34 @@ class SignedPsbtTest {
     }
 
     @Test
+    fun rejects_a_psbt_with_only_some_inputs_signed() {
+        for (case in listOf(p2pkh, p2wpkh, p2tr)) {
+            val wallet = deriveWatchWallet(case.secret, WatchGaps(2, 2))
+            val utxos =
+                (0..1).map { index ->
+                    val coin = wallet.hd(case.type, index)
+                    val funding = testFundingTx(coin.scriptPubKey, 100_000L, salt = index + 1)
+                    SendInputUtxo(funding.txid, 0, 100_000L, coin.scriptPubKey, funding.bytes)
+                }
+            val built =
+                buildSend(
+                    BuildSendTxParams(
+                        secret = case.secret,
+                        wallet = wallet,
+                        utxos = utxos,
+                        toAddress = DEST_LEGACY,
+                        amountSats = SendAmount.Exact(150_000L),
+                        feeRateSatPerVb = 2.0,
+                        changeAddress = wallet.hd(case.type, 0, change = true).address,
+                    ),
+                ) as PsbtSendResult
+            val half = signed(case, built.psbtHex)
+            assertEquals(2, half.inputs.size, case.type.name)
+            assertEquals(SignedPsbtCheck.Failed(PSBT_NOT_SIGNED), finalizeSignedPsbt(built.psbtHex, half.bytes()), case.type.name)
+        }
+    }
+
+    @Test
     fun rejects_a_signature_from_the_wrong_key() {
         for (case in listOf(p2pkh, p2wpkh, p2tr)) {
             val built = build(case)
