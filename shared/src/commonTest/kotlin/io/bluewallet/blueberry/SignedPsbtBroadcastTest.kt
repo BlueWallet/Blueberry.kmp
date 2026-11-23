@@ -127,12 +127,18 @@ class SignedPsbtBroadcastTest {
             assertNull(db.broadcastVia.get(unsignedTxid))
         }
 
-    /** Back during Broadcast cancels the review's scope; the store and the start must still run as one step. */
+    /**
+     * Back during Broadcast cancels the review's scope; the store and the start must still run as one step.
+     * A segwit spend keeps its txid, so storing leaves the wallet's tx set alone and the coins seeded here stay
+     * known: the start isn't refused for loading coins, and only a real start passes.
+     */
     @Test
     fun storing_and_starting_finish_when_the_caller_is_cancelled() =
         runFlow { db, runtime, _ ->
+            val requests = listenForRequests(runtime)
             storeUnsignedSend(db, runtime, unsignedRow).join()
-            val signed = signedPsbt("ef".repeat(32))
+            runtime.walletTxsStore.update { it.copy(utxos = listOf(c), utxosReady = true) }
+            val signed = signedPsbt(unsignedTxid)
             val receipt = BroadcastReceipt(unsignedTxid, ADDRESS, "Rent", 50_000, 141)
             var result: SignedPsbtSent? = null
             coroutineScope {
@@ -141,7 +147,10 @@ class SignedPsbtBroadcastTest {
                 job.join()
             }
             assertEquals(signed.txHex, db.sends.get(signed.txid)?.txHex)
-            assertTrue(result != null, "the start step ran and reported back")
+            val started = assertIs<SignedPsbtSent.Started>(result)
+            val session = runtime.broadcastStore.sessions().single { it.snapshot.id == started.id }
+            assertTrue(session.snapshot.heldBefore)
+            assertEquals(signed.txHex, requests.single().txHex)
         }
 
     /** The review leaves to the signed txid after this, since the payment is no longer waiting to be signed. */
