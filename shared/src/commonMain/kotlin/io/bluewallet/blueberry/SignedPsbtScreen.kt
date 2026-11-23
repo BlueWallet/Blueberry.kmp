@@ -78,9 +78,15 @@ internal fun SignedPsbtFlow(
             }
         }
         review != null ->
-            OverlayBackEffects(enabled = true, onDismiss = { signed = null }) {
-                SignedPsbtReview(runtime, db, target, review, onStarted = { broadcastId = it }, onBack = { signed = null })
-            }
+            SignedPsbtReview(
+                runtime,
+                db,
+                target,
+                review,
+                onStarted = { broadcastId = it },
+                onBack = { signed = null },
+                onExit = { onDone(review.txid) },
+            )
         else ->
             OverlayBackEffects(enabled = true, onDismiss = onBack) {
                 SignedPsbtScanStep(target, onSigned = { signed = it }, onBack = onBack)
@@ -202,33 +208,62 @@ private fun SignedPsbtReview(
     signed: SignedPsbt,
     onStarted: (String) -> Unit,
     onBack: () -> Unit,
+    onExit: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var error by remember(signed) { mutableStateOf<String?>(null) }
     var sending by remember(signed) { mutableStateOf(false) }
+    // Once stored, the payment no longer waits to be signed (and may have moved txid): leaving exits the flow.
+    var stored by remember(signed) { mutableStateOf(false) }
     val paid = remember(signed) { signed.paidTo(target.to.address) }
+
+    fun leave() {
+        when {
+            sending -> Unit
+            stored -> onExit()
+            else -> onBack()
+        }
+    }
 
     fun broadcast() {
         sending = true
         error = null
         scope.launch {
-            val stored = withContext(Dispatchers.Default) { storeSignedPsbt(db, runtime, target.storedTxid, signed) }
             val receipt = BroadcastReceipt(signed.txid, target.to.address, target.to.label, paid, signed.feeSats)
-            val sent = if (stored) startSignedPsbtBroadcast(runtime, db, signed, receipt) else SignedPsbtSent.Refused(SIGNED_PSBT_GONE)
-            sending = false
-            when (sent) {
+            when (val sent = broadcastSignedPsbt(db, runtime, target.storedTxid, signed, receipt)) {
                 is SignedPsbtSent.Started -> onStarted(sent.id)
-                is SignedPsbtSent.Refused -> error = sent.reason
+                is SignedPsbtSent.Refused -> {
+                    stored = stored || sent.stored
+                    error = sent.reason
+                }
             }
+            sending = false
         }
     }
 
+    // Enabled throughout so Back is swallowed, not passed to the screen below, while the broadcast is starting.
+    OverlayBackEffects(enabled = true, onDismiss = ::leave) {
+        SignedPsbtReviewBody(target, signed, paid, sending, error, onBroadcast = ::broadcast, onBack = ::leave)
+    }
+}
+
+@Composable
+@Suppress("LongParameterList")
+private fun SignedPsbtReviewBody(
+    target: SignedPsbtTarget,
+    signed: SignedPsbt,
+    paid: Long,
+    sending: Boolean,
+    error: String?,
+    onBroadcast: () -> Unit,
+    onBack: () -> Unit,
+) {
     SendStepFrame(
         title = "Review",
         caption = "Signed and ready to broadcast",
         onBack = onBack,
         bottom = {
-            TintedPillButton(text = if (sending) "Broadcasting…" else "Broadcast", onClick = ::broadcast, enabled = !sending, modifier = Modifier.fillMaxWidth())
+            TintedPillButton(text = if (sending) "Broadcasting…" else "Broadcast", onClick = onBroadcast, enabled = !sending, modifier = Modifier.fillMaxWidth())
         },
     ) {
         if (target.to.label.isNotBlank()) ToPill(label = target.to.label, address = "")

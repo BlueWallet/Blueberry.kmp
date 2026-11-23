@@ -12,6 +12,9 @@ import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.storage.TxPaymentLabelRow
 import io.bluewallet.blueberry.wallet.SignedPsbt
 import io.bluewallet.blueberry.wallet.hexToBytes
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -122,6 +125,35 @@ class SignedPsbtBroadcastTest {
             assertTrue(storedSendCanGoAgain(db, signed.txid))
             assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
             assertNull(db.broadcastVia.get(unsignedTxid))
+        }
+
+    /** Back during Broadcast cancels the review's scope; the store and the start must still run as one step. */
+    @Test
+    fun storing_and_starting_finish_when_the_caller_is_cancelled() =
+        runFlow { db, runtime, _ ->
+            storeUnsignedSend(db, runtime, unsignedRow).join()
+            val signed = signedPsbt("ef".repeat(32))
+            val receipt = BroadcastReceipt(unsignedTxid, ADDRESS, "Rent", 50_000, 141)
+            var result: SignedPsbtSent? = null
+            coroutineScope {
+                val job = launch(start = CoroutineStart.UNDISPATCHED) { result = broadcastSignedPsbt(db, runtime, unsignedTxid, signed, receipt) }
+                job.cancel()
+                job.join()
+            }
+            assertEquals(signed.txHex, db.sends.get(signed.txid)?.txHex)
+            assertTrue(result != null, "the start step ran and reported back")
+        }
+
+    /** The review leaves to the signed txid after this, since the payment is no longer waiting to be signed. */
+    @Test
+    fun a_start_refused_after_storing_says_the_payment_was_stored() =
+        runFlow { db, runtime, _ ->
+            storeUnsignedSend(db, runtime, unsignedRow).join()
+            val signed = signedPsbt("ef".repeat(32))
+            val receipt = BroadcastReceipt(unsignedTxid, ADDRESS, "", 50_000, 141)
+            val refused = assertIs<SignedPsbtSent.Refused>(broadcastSignedPsbt(db, runtime, unsignedTxid, signed, receipt))
+            assertTrue(refused.stored)
+            assertFalse(assertIs<SignedPsbtSent.Refused>(broadcastSignedPsbt(db, runtime, "aa".repeat(32), signedPsbt("bb".repeat(32)), receipt)).stored)
         }
 
     @Test

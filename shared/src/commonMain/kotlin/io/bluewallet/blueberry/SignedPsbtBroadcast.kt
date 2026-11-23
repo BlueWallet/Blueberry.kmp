@@ -5,16 +5,22 @@ import io.bluewallet.blueberry.parse.movePaymentLabel
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.wallet.SignedPsbt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 const val SIGNED_PSBT_GONE = "This payment is no longer waiting to be signed."
+const val SIGNED_PSBT_NOT_STORED = "The signed payment couldn't be saved. Try again."
 
 sealed class SignedPsbtSent {
     data class Started(
         val id: String,
     ) : SignedPsbtSent()
 
+    /** [stored]: the signed payment was stored (its row may have moved to the signed txid) before the refusal. */
     data class Refused(
         val reason: String,
+        val stored: Boolean = false,
     ) : SignedPsbtSent()
 }
 
@@ -77,3 +83,31 @@ fun startSignedPsbtBroadcast(
         }
     }
 }
+
+/**
+ * Stores the signed payment, then starts its broadcast, as one step its caller can't cancel halfway: a stored
+ * (possibly moved) row always reaches the start. A throw becomes a refusal.
+ */
+suspend fun broadcastSignedPsbt(
+    db: Database,
+    runtime: PeersRuntime,
+    storedTxid: String,
+    signed: SignedPsbt,
+    receipt: BroadcastReceipt,
+): SignedPsbtSent =
+    withContext(NonCancellable) {
+        runCatching {
+            val stored = withContext(Dispatchers.Default) { storeSignedPsbt(db, runtime, storedTxid, signed) }
+            when {
+                !stored -> SignedPsbtSent.Refused(SIGNED_PSBT_GONE)
+                else ->
+                    when (val sent = startSignedPsbtBroadcast(runtime, db, signed, receipt)) {
+                        is SignedPsbtSent.Refused -> sent.copy(stored = true)
+                        is SignedPsbtSent.Started -> sent
+                    }
+            }
+        }.getOrElse {
+            val stored = runCatching { openSend(db, signed.txid)?.txHex == signed.txHex }.getOrDefault(false)
+            SignedPsbtSent.Refused(SIGNED_PSBT_NOT_STORED, stored)
+        }
+    }
