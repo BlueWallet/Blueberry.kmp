@@ -8,6 +8,7 @@ import io.bluewallet.bip324.bytesToHex
 import io.bluewallet.bip324.encodeTransaction
 import io.bluewallet.blueberry.storage.PrivateSendCoin
 import io.bluewallet.blueberry.storage.SendRow
+import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.storage.TxPaymentLabelRow
 import io.bluewallet.blueberry.wallet.SignedPsbt
 import io.bluewallet.blueberry.wallet.hexToBytes
@@ -56,6 +57,22 @@ class SignedPsbtBroadcastTest {
         runFlow { db, runtime, _ ->
             assertFalse(storeSignedPsbt(db, runtime, unsignedTxid, signedPsbt(unsignedTxid)))
             assertNull(db.sends.get(unsignedTxid))
+        }
+
+    @Test
+    fun a_segwit_spend_already_in_a_block_is_refused() = refusedOnceInABlock(unsignedTxid)
+
+    @Test
+    fun a_legacy_spend_already_in_a_block_is_refused() = refusedOnceInABlock("ef".repeat(32))
+
+    /** The signed txid is in the chain table, so storing settles the row and the payment isn't open anymore. */
+    private fun refusedOnceInABlock(signedTxid: String) =
+        runFlow { db, runtime, _ ->
+            storeUnsignedSend(db, runtime, unsignedRow).join()
+            val signed = signedPsbt(signedTxid)
+            db.transactions.upsert(StoredTx(signedTxid, 300, 0, "33".repeat(32), hexToBytes(signed.txHex), -1_141L))
+            assertFalse(storeSignedPsbt(db, runtime, unsignedTxid, signed))
+            assertEquals(300L, db.sends.get(signedTxid)?.confirmedInBlock)
         }
 
     @Test

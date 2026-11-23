@@ -21,7 +21,8 @@ sealed class SignedPsbtSent {
 /**
  * Replaces the stored unsigned send [storedTxid] with its signed transaction, keeping its coins held.
  * Segwit-only spends keep their txid. Legacy and nested-segwit signatures change it, so the row and its
- * note move to the signed txid. False when the payment is gone (forgotten or confirmed). Runs off the UI thread.
+ * note move to the signed txid. False when the payment is gone (forgotten or confirmed), including when the
+ * signed transaction turns out to be in a block already. Runs off the UI thread.
  */
 fun storeSignedPsbt(
     db: Database,
@@ -41,7 +42,8 @@ fun storeSignedPsbt(
     }
     runtime.storedHolds.clear()
     hydrateWallet(db, runtime.walletTxsStore, runtime.wallet, nowMillis())
-    return true
+    // Hydrating settles the row when the signed txid is already in a block, so it's no longer waiting.
+    return openSend(db, signed.txid) != null
 }
 
 private fun openSend(
