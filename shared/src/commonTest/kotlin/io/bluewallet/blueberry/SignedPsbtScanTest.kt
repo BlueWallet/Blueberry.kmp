@@ -77,6 +77,20 @@ class SignedPsbtScanTest {
     }
 
     @Test
+    fun start_over_lets_the_same_psbt_be_checked_again() {
+        val scan = SignedPsbtScan()
+        val parts = encodeCryptoPsbtUrFragments(PSBT_HEX, 30)
+        assertIs<SignedPsbtScanState.Done>(parts.map { scan.accept(it) }.last())
+        scan.reject("Not this one")
+        scan.reset()
+        val done = assertIs<SignedPsbtScanState.Done>(parts.map { scan.accept(it) }.last())
+        assertEquals(PSBT_HEX, hexFromBytes(done.psbt))
+        scan.reject("Not this one")
+        scan.reset()
+        assertIs<SignedPsbtScanState.Done>(scan.accept(psbtBase64FromHex(PSBT_HEX)))
+    }
+
+    @Test
     fun a_stray_qr_does_not_hide_a_rejection() {
         val scan = SignedPsbtScan()
         assertIs<SignedPsbtScanState.Done>(scan.accept(psbtBase64FromHex(PSBT_HEX)))

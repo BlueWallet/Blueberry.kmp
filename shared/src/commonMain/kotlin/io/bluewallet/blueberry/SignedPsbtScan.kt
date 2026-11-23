@@ -63,8 +63,12 @@ internal class SignedPsbtScan {
         reset(reason)
     }
 
-    /** Starts the scan over. A [note] is why, and stays on screen until a PSBT completes or a plain reset. */
+    /**
+     * Starts the scan over. A [note] is why, and stays on screen until a PSBT completes or a plain reset.
+     * A plain reset is Start over: it also forgets the rejected PSBT, so the same bytes get checked again.
+     */
     fun reset(note: String? = null) {
+        if (note == null) rejected = null
         decoder.reset()
         lastText = null
         failure = note
