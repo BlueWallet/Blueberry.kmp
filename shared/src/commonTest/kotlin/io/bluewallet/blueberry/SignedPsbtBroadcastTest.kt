@@ -44,12 +44,42 @@ class SignedPsbtBroadcastTest {
         runFlow { db, runtime, _ ->
             storeUnsignedSend(db, runtime, unsignedRow).join()
             db.txPaymentLabels.upsert(TxPaymentLabelRow(unsignedTxid, "Rent"))
+            db.utxoNames.upsert("$unsignedTxid:1", "change from: Rent")
             val signed = signedPsbt("ef".repeat(32))
             assertTrue(storeSignedPsbt(db, runtime, unsignedTxid, signed))
             assertNull(db.sends.get(unsignedTxid))
             assertEquals(ADDRESS, db.sends.get(signed.txid)?.destination)
             assertEquals("Rent", db.txPaymentLabels.get(signed.txid)?.label)
+            assertEquals(
+                "change from: Rent",
+                db.utxoNames
+                    .list()
+                    .single { it.outpoint == "${signed.txid}:1" }
+                    .name,
+            )
             assertTrue(storeSignedPsbt(db, runtime, unsignedTxid, signed), "a second scan finds the moved row")
+        }
+
+    /** The row moved but the app died before its note did: the next scan finds the row on the signed txid. */
+    @Test
+    fun a_note_left_behind_by_an_interrupted_move_follows_on_the_next_scan() =
+        runFlow { db, runtime, _ ->
+            storeUnsignedSend(db, runtime, unsignedRow).join()
+            val signed = signedPsbt("ef".repeat(32))
+            db.sends.delete(unsignedTxid)
+            db.sends.upsert(unsignedRow.copy(txid = signed.txid))
+            db.txPaymentLabels.upsert(TxPaymentLabelRow(unsignedTxid, "Rent"))
+            db.utxoNames.upsert("$unsignedTxid:1", "change from: Rent")
+            assertTrue(storeSignedPsbt(db, runtime, unsignedTxid, signed))
+            assertEquals(signed.txHex, db.sends.get(signed.txid)?.txHex)
+            assertEquals("Rent", db.txPaymentLabels.get(signed.txid)?.label)
+            assertEquals(
+                "change from: Rent",
+                db.utxoNames
+                    .list()
+                    .single { it.outpoint == "${signed.txid}:1" }
+                    .name,
+            )
         }
 
     @Test

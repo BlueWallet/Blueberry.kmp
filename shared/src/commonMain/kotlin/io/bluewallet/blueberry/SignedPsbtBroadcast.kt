@@ -31,14 +31,18 @@ fun storeSignedPsbt(
     signed: SignedPsbt,
 ): Boolean {
     val row = openSend(db, storedTxid) ?: openSend(db, signed.txid) ?: return false
-    if (row.txid == signed.txid) {
+    if (storedTxid == signed.txid) {
         db.sends.upsert(row.copy(txHex = signed.txHex))
     } else {
-        db.transaction {
-            db.sends.delete(row.txid)
-            db.sends.upsert(row.copy(txid = signed.txid, txHex = signed.txHex))
+        // The row, its note and its change names move together. A row already on the signed txid is a move that
+        // was cut short before; copying the labels again repairs it (movePaymentLabel never overwrites).
+        editLabels(db) {
+            db.transaction {
+                if (row.txid != signed.txid) db.sends.delete(row.txid)
+                db.sends.upsert(row.copy(txid = signed.txid, txHex = signed.txHex))
+                movePaymentLabel(db, storedTxid, signed.txid)
+            }
         }
-        editLabels(db) { movePaymentLabel(db, row.txid, signed.txid) }
     }
     runtime.storedHolds.clear()
     hydrateWallet(db, runtime.walletTxsStore, runtime.wallet, nowMillis())
