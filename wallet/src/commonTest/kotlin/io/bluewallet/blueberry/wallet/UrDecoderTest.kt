@@ -116,6 +116,34 @@ class UrDecoderTest {
         assertEquals(UrReceive.Ignored(UR_CORRUPT), psbtDecoder().receive("ur:crypto-psbt/1-10000/${bytewordsEncodeMinimal(cbor)}"))
     }
 
+    /** A mixed frame makes the decoder shuffle fragment indexes on the camera thread, so the count is capped. */
+    @Test
+    fun a_frame_claiming_more_fragments_than_a_psbt_animation_needs_is_ignored() {
+        assertIs<UrReceive.Progress>(psbtDecoder().receive(claimed(seqLength = 1_000)))
+        assertEquals(UrReceive.Ignored(UR_CORRUPT), psbtDecoder().receive(claimed(seqLength = 1_001)))
+    }
+
+    @Test
+    fun mixed_parts_kept_for_later_are_bounded() {
+        val decoder = FountainDecoder()
+        var most = 0
+        for (seq in 21L..400L) {
+            decoder.receivePart(seq, 20, 200, 12_345L, ByteArray(10) { (seq + it).toByte() })
+            most = maxOf(most, decoder.mixedCount)
+        }
+        assertTrue(most <= 80, "kept $most mixed parts")
+    }
+
+    /** One mixed part (sequence past the count) of a message claiming [seqLength] 10-byte fragments. */
+    private fun claimed(seqLength: Long): String {
+        val seq = seqLength + 1
+        val fragment = ByteArray(10) { it.toByte() }
+        val cbor =
+            byteArrayOf(0x85.toByte()) + cborUInt(seq) + cborUInt(seqLength) + cborUInt(seqLength * fragment.size) + cborUInt(1) +
+                byteArrayOf(0x4a) + fragment
+        return "ur:crypto-psbt/$seq-$seqLength/${bytewordsEncodeMinimal(cbor)}"
+    }
+
     /** The same part with one fragment byte flipped and a valid bytewords checksum, so only the message CRC catches it. */
     private fun tamperedFragment(part: String): String = reframed(part, flip = true)
 

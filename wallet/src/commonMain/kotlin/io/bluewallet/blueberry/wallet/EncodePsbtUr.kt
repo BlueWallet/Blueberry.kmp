@@ -10,6 +10,7 @@ import fr.acinq.bitcoin.Crypto
  */
 private const val CRYPTO_PSBT_UR_TYPE = "crypto-psbt"
 private const val FOUNTAIN_MIN_FRAGMENT_LENGTH = 10
+private const val MAX_MIXED_PER_FRAGMENT = 4
 
 /** Encode a PSBT as BC-UR v2 `crypto-psbt` fragments (one string per `UREncoder.nextPart()`). */
 fun encodeCryptoPsbtUrFragments(
@@ -232,6 +233,9 @@ internal class FountainDecoder {
     /** Fragments recovered so far. */
     val recoveredCount: Int get() = receivedPartIndexes.size
 
+    /** Mixed parts held for later reduction. */
+    val mixedCount: Int get() = mixedParts.size
+
     fun isSuccess(): Boolean = !failed && isComplete()
 
     fun resultMessage(): ByteArray = if (isSuccess()) result!! else ByteArray(0)
@@ -330,7 +334,8 @@ internal class FountainDecoder {
             queuedParts.addLast(reduced)
         } else {
             reduceMixedBy(reduced)
-            mixedParts.add(reduced)
+            // Bounded so a stream of frames that never resolve can't grow the work done per frame without end.
+            if (mixedParts.size < expectedPartIndexes.size * MAX_MIXED_PER_FRAGMENT) mixedParts.add(reduced)
         }
     }
 
@@ -395,8 +400,7 @@ private fun chooseFragments(
     val seed = intToBytesBE(seqNum) + intToBytesBE(checksum)
     val rng = Xoshiro256(seed)
     val degree = chooseDegree(seqLength, rng)
-    val shuffled = shuffle((0 until seqLength).toList(), rng)
-    return shuffled.take(degree)
+    return shuffle((0 until seqLength).toList(), rng, degree)
 }
 
 private fun chooseDegree(
@@ -408,13 +412,15 @@ private fun chooseDegree(
     return alias.draw(rng) + 1
 }
 
+/** The first [count] items of the reference shuffle; stopping early draws the same ones. */
 private fun shuffle(
     items: List<Int>,
     rng: Xoshiro256,
+    count: Int,
 ): List<Int> {
     val remaining = items.toMutableList()
     val result = mutableListOf<Int>()
-    while (remaining.isNotEmpty()) {
+    while (remaining.isNotEmpty() && result.size < count) {
         val index = rng.nextInt(0, remaining.size - 1)
         result.add(remaining.removeAt(index))
     }

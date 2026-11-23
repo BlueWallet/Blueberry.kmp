@@ -11,7 +11,9 @@ const val UR_OTHER_ANIMATION = "This QR code is from a different animation."
 const val UR_CORRUPT = "Couldn't read this QR frame."
 const val UR_CHECKSUM_FAILED = "The scanned parts don't fit together. Start over."
 
-private const val MAX_FRAGMENT_COUNT = 10_000
+// 175 KB at our own 175-byte fragments, far past any single-sig PSBT. Each mixed frame shuffles this many
+// indexes on the camera thread, so it stays small.
+private const val MAX_FRAGMENT_COUNT = 1_000
 private const val PERCENT = 100
 private const val MAX_ESTIMATE = 0.99
 private const val FOUNTAIN_OVERHEAD = 1.75
