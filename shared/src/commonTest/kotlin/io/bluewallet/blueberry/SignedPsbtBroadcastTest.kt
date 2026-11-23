@@ -90,6 +90,8 @@ class SignedPsbtBroadcastTest {
             assertEquals(signed.txid, session.receipt?.txid)
             assertEquals(signed.txHex, requests.single().txHex)
             assertTrue(storedSendCanGoAgain(db, signed.txid))
+            assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
+            assertNull(db.broadcastVia.get(unsignedTxid))
         }
 
     @Test

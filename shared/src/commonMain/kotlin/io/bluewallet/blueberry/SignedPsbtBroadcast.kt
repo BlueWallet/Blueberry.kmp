@@ -66,6 +66,10 @@ fun startSignedPsbtBroadcast(
     return when {
         blocked != null -> SignedPsbtSent.Refused(blocked)
         id == null -> SignedPsbtSent.Refused(BROADCAST_BUSY)
-        else -> SignedPsbtSent.Started(id)
+        else -> {
+            // Like a hot-wallet send, so transaction details name Tor as how it was published.
+            db.broadcastVia.upsert(signed.txid, BROADCAST_VIA_TOR)
+            SignedPsbtSent.Started(id)
+        }
     }
 }
