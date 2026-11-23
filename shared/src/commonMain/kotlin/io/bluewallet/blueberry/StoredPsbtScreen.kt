@@ -2,7 +2,10 @@ package io.bluewallet.blueberry
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import io.bluewallet.blueberry.parse.storedSendPsbt
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.wallet.Wallet
@@ -65,8 +68,14 @@ internal fun StoredPsbtScreen(
     val state by produceState<StoredPsbt?>(null, txid, runtime.walletRevision) {
         value = withContext(Dispatchers.Default) { loadStoredPsbt(db, runtime.wallet, txid) }
     }
+    var scanning by remember(txid) { mutableStateOf(false) }
     when (val s = state) {
-        is StoredPsbt.Ready -> SendPsbtStep(s.to, s.psbtHex, onDone = onBack, onBack = onBack)
+        is StoredPsbt.Ready ->
+            if (scanning) {
+                SignedPsbtFlow(runtime, db, SignedPsbtTarget(txid, s.to, s.psbtHex), onDone = onBack, onBack = { scanning = false })
+            } else {
+                SendPsbtStep(s.to, s.psbtHex, onDone = onBack, onBack = onBack, onScanSigned = { scanning = true })
+            }
         else ->
             SendStepFrame(title = "Sign elsewhere", caption = null, onBack = onBack, bottom = {}) {
                 HelperText((s as? StoredPsbt.Failed)?.reason ?: "Preparing the PSBT…", error = s != null)

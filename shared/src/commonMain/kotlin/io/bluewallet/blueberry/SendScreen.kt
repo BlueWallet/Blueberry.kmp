@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -212,8 +213,17 @@ private fun SendCoins(flow: SendFlow) {
 @Composable
 private fun SendPsbt(flow: SendFlow) {
     val psbt = (flow.build as? ReviewBuild.Built)?.result as? PsbtSendResult
-    if (psbt != null) {
-        SendPsbtStep(flow.recipient, psbt.psbtHex, onDone = flow::finish, onBack = flow::goBack)
+    var scanning by remember(psbt?.txid) { mutableStateOf(false) }
+    if (psbt != null && scanning) {
+        SignedPsbtFlow(
+            runtime = flow.runtime,
+            db = flow.db,
+            target = SignedPsbtTarget(psbt.txid, flow.recipient, psbt.psbtHex),
+            onDone = flow::finish,
+            onBack = { scanning = false },
+        )
+    } else if (psbt != null) {
+        SendPsbtStep(flow.recipient, psbt.psbtHex, onDone = flow::finish, onBack = flow::goBack, onScanSigned = { scanning = true })
     } else {
         SendStepFrame(title = "Sign", caption = null, onBack = flow::goBack, bottom = {}) {
             HelperText("The transaction isn't ready to sign.", error = true)

@@ -77,7 +77,7 @@ private class BuildCell(
  */
 @Suppress("TooManyFunctions")
 internal class SendFlow(
-    private val runtime: PeersRuntime,
+    val runtime: PeersRuntime,
     val db: Database,
     private val scope: CoroutineScope,
     private val close: () -> Unit,
