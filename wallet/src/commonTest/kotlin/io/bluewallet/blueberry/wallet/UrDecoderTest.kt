@@ -134,6 +134,20 @@ class UrDecoderTest {
         assertTrue(most <= 80, "kept $most mixed parts")
     }
 
+    /** With one fragment missing, a mixed frame reduces to that fragment or to nothing; nothing isn't kept. */
+    @Test
+    fun mixed_frames_that_reduce_to_nothing_are_not_kept() {
+        val decoder = FountainDecoder()
+        for (seq in 1L..19L) decoder.receivePart(seq, 20, 200, 12_345L, ByteArray(10) { (seq + it).toByte() })
+        var seq = 21L
+        while (decoder.recoveredCount < 20 && seq <= 400L) {
+            decoder.receivePart(seq, 20, 200, 12_345L, ByteArray(10) { (seq + it).toByte() })
+            assertEquals(0, decoder.mixedCount, "kept a mixed part after sequence $seq")
+            seq++
+        }
+        assertTrue(seq > 22L, "at least one frame reduced to nothing before the missing fragment arrived")
+    }
+
     /** One mixed part (sequence past the count) of a message claiming [seqLength] 10-byte fragments. */
     private fun claimed(seqLength: Long): String {
         val seq = seqLength + 1

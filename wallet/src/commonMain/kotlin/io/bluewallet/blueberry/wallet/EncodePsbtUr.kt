@@ -330,12 +330,15 @@ internal class FountainDecoder {
         var reduced = simpleParts.fold(part) { acc, p -> reducePartByPart(acc, p) }
         reduced = mixedParts.fold(reduced) { acc, p -> reducePartByPart(acc, p) }
 
-        if (reduced.isSimple()) {
-            queuedParts.addLast(reduced)
-        } else {
-            reduceMixedBy(reduced)
-            // Bounded so a stream of frames that never resolve can't grow the work done per frame without end.
-            if (mixedParts.size < expectedPartIndexes.size * MAX_MIXED_PER_FRAGMENT) mixedParts.add(reduced)
+        when {
+            reduced.isSimple() -> queuedParts.addLast(reduced)
+            // Every fragment it mixes is known already: it carries nothing new and would only take a kept slot.
+            reduced.indexes.isEmpty() -> Unit
+            else -> {
+                reduceMixedBy(reduced)
+                // Bounded so a stream of frames that never resolve can't grow the work done per frame without end.
+                if (mixedParts.size < expectedPartIndexes.size * MAX_MIXED_PER_FRAGMENT) mixedParts.add(reduced)
+            }
         }
     }
 
