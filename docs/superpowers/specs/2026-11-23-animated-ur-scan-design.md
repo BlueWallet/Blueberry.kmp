@@ -60,6 +60,22 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
   "Scan signed PSBT" is tapped, so the scan, review and broadcast survive the build dropping once a moved
   legacy/nested spend makes its coins look spent. From tx details, finishing a broadcast whose txid moved opens
   the details of the new txid in place of the old one.
+- **Review round 2 decisions (GLaDOS, 2026-11-24).**
+  - Storing and starting the broadcast run as one non-cancellable step (`broadcastSignedPsbt`). Back and the edge
+    swipe do nothing while it runs, and a throw from storing becomes a refusal on the review instead of leaving it stuck.
+    Once the signed row is stored, leaving the review exits the flow to the signed txid (as Done does), since the
+    payment is no longer waiting to be signed.
+  - A moved row and its note and change names commit in one transaction. When the row is already on the signed
+    txid (a retry after a crash), the note and change names are still copied from the unsigned txid.
+  - A broadcast that starts held and that every node refuses keeps its row and coin hold, but shows the refusal
+    ("Not accepted", with the node's reason) instead of "Sent".
+  - A started signed-PSBT broadcast records Tor as its broadcast method, like a hot-wallet send.
+  - Transaction details only say a signed payment "was given to Bitcoin nodes" once a broadcast of it is recorded
+    (a Tor record or a broadcast job). Otherwise they say it is signed and may not be published yet.
+  - Animated URs are limited to 1,000 fragments (175 KB at our own 175-byte fragments, far beyond a single-sig
+    PSBT), and the fountain decoder keeps at most 4 × fragment-count mixed parts, so one frame's work stays small
+    enough for the camera thread.
+  - An unexpected throw while checking a scanned PSBT shows `This QR isn't a PSBT.` instead of the exception text.
 
 ## Units
 

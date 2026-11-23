@@ -213,3 +213,16 @@ fun finalizeSignedPsbt(unsignedPsbtHex: String, scanned: ByteArray): SignedPsbtC
 
 - [ ] Run the review-loop skill until a round has no major issues; fix findings with tests first.
 - [ ] Run the full checks; compile Android (`:shared:compileDebugKotlinAndroid` or `:androidApp:assembleDebug --offline` if the SDK is present). iOS needs macOS (skip).
+
+### Task 7: GLaDOS review round 2 (2026-11-24)
+
+One commit per fix, each test first (watch it fail, minimal fix, watch it pass). Spec: "Review round 2 decisions".
+
+- [ ] `SignedPsbtBroadcastTest`: a started broadcast records `BROADCAST_VIA_TOR` on the signed txid (also when it moved).
+- [ ] `SignedPsbtBroadcastTest`: the moved row carries the change names; a retry with the row already on the signed txid still moves the note and change names.
+- [ ] `BroadcastStoreTest`: a held run that every node refuses shows "Not accepted" with the reason, not "Sent".
+- [ ] `StoredSendAgainTest`/details: the signed-payment explainer only claims nodes got it once a broadcast is recorded.
+- [ ] `UrDecoderTest`: a part claiming more than 1,000 fragments is ignored; mixed parts are bounded.
+- [ ] `SignedPsbtScanTest`: an unexpected throw while checking maps to `PSBT_NOT_A_PSBT`.
+- [ ] `SignedPsbtBroadcastTest`: `broadcastSignedPsbt` finishes storing and starting when its caller is cancelled, and turns a throw into a refusal. Screens disable Back while it runs and exit to the signed txid once stored.
+- [ ] Review loop, full checks, push, reply to and resolve threads.
