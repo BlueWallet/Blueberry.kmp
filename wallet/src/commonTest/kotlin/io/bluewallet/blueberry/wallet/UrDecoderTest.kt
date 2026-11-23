@@ -97,14 +97,30 @@ class UrDecoderTest {
         assertEquals(BW_PSBT_HEX, completedPsbt(decoder.feed(BW_PARTS)))
     }
 
+    @Test
+    fun a_sequence_zero_frame_is_ignored_and_the_animation_still_completes() {
+        val decoder = psbtDecoder()
+        assertIs<UrReceive.Progress>(decoder.receive(BW_PARTS[0]))
+        assertEquals(UrReceive.Ignored(UR_CORRUPT), decoder.receive(reframed(BW_PARTS[0], seqNum = 0)))
+        assertEquals(BW_PSBT_HEX, completedPsbt(decoder.receive(BW_PARTS[1])))
+    }
+
     /** The same part with one fragment byte flipped and a valid bytewords checksum, so only the message CRC catches it. */
-    private fun tamperedFragment(part: String): String {
-        val prefix = part.substringBeforeLast('/')
+    private fun tamperedFragment(part: String): String = reframed(part, flip = true)
+
+    /** [part] re-encoded with a new sequence number (path and CBOR agree) or a flipped fragment byte. */
+    private fun reframed(
+        part: String,
+        seqNum: Long? = null,
+        flip: Boolean = false,
+    ): String {
         val decoded = cborDecodeFountainPart(bytewordsDecodeMinimal(part.substringAfterLast('/')))
-        val fragment = decoded.fragment.copyOf().also { it[0] = (it[0].toInt() xor 1).toByte() }
+        val seq = seqNum ?: decoded.seqNum
+        val prefix = part.substringBeforeLast('/').substringBeforeLast('/') + "/$seq-${decoded.seqLength}"
+        val fragment = decoded.fragment.copyOf().also { if (flip) it[0] = (it[0].toInt() xor 1).toByte() }
         val cbor =
             byteArrayOf(0x85.toByte()) +
-                cborUInt(decoded.seqNum) + cborUInt(decoded.seqLength) + cborUInt(decoded.messageLength) + cborUInt(decoded.checksum) +
+                cborUInt(seq) + cborUInt(decoded.seqLength) + cborUInt(decoded.messageLength) + cborUInt(decoded.checksum) +
                 byteArrayOf(0x58, fragment.size.toByte()) + fragment
         return "$prefix/${bytewordsEncodeMinimal(cbor)}"
     }

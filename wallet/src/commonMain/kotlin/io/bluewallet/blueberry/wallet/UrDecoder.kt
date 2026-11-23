@@ -148,12 +148,16 @@ class UrDecoder(
     }
 }
 
-/** The fountain header agrees with the `/seq-count/` path and is small enough to decode. */
+/**
+ * The fountain header agrees with the `/seq-count/` path and is small enough to decode. Sequence numbers start
+ * at 1: a 0 would be filed as fragment -1 and block completion for good.
+ */
 private fun DecodedFountainPart.isSane(
     seqNum: Long,
     seqCount: Int?,
 ): Boolean =
-    seqNum == this.seqNum &&
+    seqNum >= 1 &&
+        seqNum == this.seqNum &&
         seqCount?.toLong() == seqLength &&
         seqLength in 1..MAX_FRAGMENT_COUNT &&
         fragment.isNotEmpty() &&
