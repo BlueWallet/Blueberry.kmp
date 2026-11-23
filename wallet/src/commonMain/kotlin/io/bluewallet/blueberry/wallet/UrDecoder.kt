@@ -150,7 +150,7 @@ class UrDecoder(
 
 /**
  * The fountain header agrees with the `/seq-count/` path and is small enough to decode. Sequence numbers start
- * at 1: a 0 would be filed as fragment -1 and block completion for good.
+ * at 1: a 0 would be filed as fragment -1 and block completion for good. The message must fit a ByteArray.
  */
 private fun DecodedFountainPart.isSane(
     seqNum: Long,
@@ -161,7 +161,7 @@ private fun DecodedFountainPart.isSane(
         seqCount?.toLong() == seqLength &&
         seqLength in 1..MAX_FRAGMENT_COUNT &&
         fragment.isNotEmpty() &&
-        messageLength in 1..(seqLength * fragment.size)
+        messageLength in 1..minOf(seqLength * fragment.size, Int.MAX_VALUE.toLong())
 
 /** The PSBT inside a `crypto-psbt` / `psbt` UR message (a CBOR byte string). */
 fun psbtFromUrMessage(message: ByteArray): ByteArray = cborDecodeByteString(message)

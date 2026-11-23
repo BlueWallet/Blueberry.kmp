@@ -105,6 +105,17 @@ class UrDecoderTest {
         assertEquals(BW_PSBT_HEX, completedPsbt(decoder.receive(BW_PARTS[1])))
     }
 
+    @Test
+    fun a_message_longer_than_an_int_is_ignored() {
+        val fragment = ByteArray(215_000)
+        val messageLength = Int.MAX_VALUE.toLong() + 5
+        val size = fragment.size.toLong()
+        val cbor =
+            byteArrayOf(0x85.toByte()) + cborUInt(1) + cborUInt(10_000) + cborUInt(messageLength) + cborUInt(1) +
+                byteArrayOf(0x5a, (size shr 24).toByte(), (size shr 16).toByte(), (size shr 8).toByte(), size.toByte()) + fragment
+        assertEquals(UrReceive.Ignored(UR_CORRUPT), psbtDecoder().receive("ur:crypto-psbt/1-10000/${bytewordsEncodeMinimal(cbor)}"))
+    }
+
     /** The same part with one fragment byte flipped and a valid bytewords checksum, so only the message CRC catches it. */
     private fun tamperedFragment(part: String): String = reframed(part, flip = true)
 
