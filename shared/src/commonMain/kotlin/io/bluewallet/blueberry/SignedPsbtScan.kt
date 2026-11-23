@@ -2,9 +2,11 @@ package io.bluewallet.blueberry
 
 import io.bluewallet.blueberry.wallet.PSBT_NOT_A_PSBT
 import io.bluewallet.blueberry.wallet.PSBT_UR_TYPES
+import io.bluewallet.blueberry.wallet.SignedPsbtCheck
 import io.bluewallet.blueberry.wallet.UR_CORRUPT
 import io.bluewallet.blueberry.wallet.UrDecoder
 import io.bluewallet.blueberry.wallet.UrReceive
+import io.bluewallet.blueberry.wallet.finalizeSignedPsbt
 import io.bluewallet.blueberry.wallet.psbtBytesFromText
 import io.bluewallet.blueberry.wallet.psbtFromUrMessage
 
@@ -92,3 +94,12 @@ internal class SignedPsbtScan {
 
     private fun scanning(note: String?): SignedPsbtScanState = SignedPsbtScanState.Scanning(decoder.percent, note)
 }
+
+/** Checks a scanned PSBT against the unsigned one. A throw is reported as a fixed sentence, never its message. */
+internal fun checkSignedPsbt(
+    unsignedPsbtHex: String,
+    scanned: ByteArray,
+    finalize: (String, ByteArray) -> SignedPsbtCheck = ::finalizeSignedPsbt,
+): SignedPsbtCheck =
+    runCatching { finalize(unsignedPsbtHex, scanned) }
+        .getOrElse { SignedPsbtCheck.Failed(PSBT_NOT_A_PSBT) }

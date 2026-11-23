@@ -37,7 +37,6 @@ import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.ToPill
 import io.bluewallet.blueberry.wallet.SignedPsbt
 import io.bluewallet.blueberry.wallet.SignedPsbtCheck
-import io.bluewallet.blueberry.wallet.finalizeSignedPsbt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -110,10 +109,7 @@ private fun SignedPsbtScanStep(
                 try {
                     // Cancelled by Start over: withContext then throws on return, so a discarded PSBT never lands.
                     val result =
-                        withContext(Dispatchers.Default) {
-                            runCatching { finalizeSignedPsbt(target.psbtHex, psbt) }
-                                .getOrElse { SignedPsbtCheck.Failed("Couldn't check this PSBT: ${it.message ?: it}") }
-                        }
+                        withContext(Dispatchers.Default) { checkSignedPsbt(target.psbtHex, psbt) }
                     when (result) {
                         is SignedPsbtCheck.Ok -> onSigned(result.signed)
                         is SignedPsbtCheck.Failed -> {

@@ -1,6 +1,7 @@
 package io.bluewallet.blueberry
 
 import io.bluewallet.blueberry.wallet.PSBT_NOT_A_PSBT
+import io.bluewallet.blueberry.wallet.SignedPsbtCheck
 import io.bluewallet.blueberry.wallet.UR_CHECKSUM_FAILED
 import io.bluewallet.blueberry.wallet.encodeCryptoPsbtUrFragments
 import io.bluewallet.blueberry.wallet.hexFromBytes
@@ -118,6 +119,12 @@ class SignedPsbtScanTest {
         scan.accept(encodeCryptoPsbtUrFragments(PSBT_HEX, 30).first())
         scan.reset("Try again")
         assertEquals(SignedPsbtScanState.Scanning(null, "Try again"), scan.state)
+    }
+
+    @Test
+    fun a_check_that_throws_shows_a_fixed_sentence_not_the_exception() {
+        val result = checkSignedPsbt("00", byteArrayOf(1)) { _, _ -> throw IllegalStateException("70736274ff secret bytes") }
+        assertEquals(SignedPsbtCheck.Failed(PSBT_NOT_A_PSBT), result)
     }
 
     private companion object {
