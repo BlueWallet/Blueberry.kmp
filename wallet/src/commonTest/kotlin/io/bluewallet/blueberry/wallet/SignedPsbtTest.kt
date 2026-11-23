@@ -246,6 +246,55 @@ class SignedPsbtTest {
     }
 
     @Test
+    fun rejects_signatures_that_do_not_commit_to_every_output_and_input() {
+        for (case in listOf(p2pkh, p2shP2wpkh, p2wpkh, p2tr)) {
+            for (sighash in listOf(SIGHASH_NONE, SIGHASH_SINGLE, SIGHASH_ALL_ANYONECANPAY, SIGHASH_NONE_ANYONECANPAY, SIGHASH_SINGLE_ANYONECANPAY)) {
+                val built = build(case)
+                assertEquals(
+                    SignedPsbtCheck.Failed(PSBT_BAD_SIGNATURES),
+                    finalizeSignedPsbt(built.psbtHex, signedWithSighash(case, built.psbtHex, sighash)),
+                    "${case.type.name} sighash=$sighash",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun rejects_a_signer_finalized_input_whose_signature_does_not_commit_to_the_outputs() {
+        for (case in listOf(p2pkh, p2shP2wpkh, p2wpkh)) {
+            val built = build(case)
+            val finalized =
+                rewriteFirstInput(signedWithSighash(case, built.psbtHex, SIGHASH_NONE)) { entries ->
+                    val partial = entries.single { it.first[0] == PSBT_IN_PARTIAL_SIG }
+                    val pub = partial.first.copyOfRange(1, partial.first.size)
+                    entries.filter { it.first[0] != PSBT_IN_PARTIAL_SIG } + finalScripts(case.type, pub, partial.second)
+                }
+            assertEquals(SignedPsbtCheck.Failed(PSBT_BAD_SIGNATURES), finalizeSignedPsbt(built.psbtHex, finalized), case.type.name)
+        }
+    }
+
+    @Test
+    fun accepts_an_explicit_sighash_all_signature() {
+        for (case in listOf(p2pkh, p2wpkh, p2tr)) {
+            val built = build(case)
+            assertIs<SignedPsbtCheck.Ok>(finalizeSignedPsbt(built.psbtHex, signedWithSighash(case, built.psbtHex, SIGHASH_ALL)), case.type.name)
+        }
+    }
+
+    /** Our PSBT signed with [sighash] on its first input, as a signer that honours PSBT_IN_SIGHASH_TYPE does. */
+    private fun signedWithSighash(
+        case: Case,
+        psbtHex: String,
+        sighash: Int,
+    ): ByteArray {
+        val requested =
+            rewriteFirstInput(hexToBytes(psbtHex)) { entries ->
+                entries + (byteArrayOf(PSBT_IN_SIGHASH_TYPE) to byteArrayOf(sighash.toByte(), 0, 0, 0))
+            }
+        return signed(case, hexFromBytes(requested)).bytes()
+    }
+
+    @Test
     fun rejects_bytes_that_are_not_a_psbt() {
         val built = build(p2wpkh)
         assertEquals(SignedPsbtCheck.Failed(PSBT_NOT_A_PSBT), finalizeSignedPsbt(built.psbtHex, "hello".encodeToByteArray()))
@@ -269,8 +318,15 @@ class SignedPsbtTest {
         const val PSBT_IN_NON_WITNESS_UTXO: Byte = 0x00
         const val PSBT_IN_WITNESS_UTXO: Byte = 0x01
         const val PSBT_IN_PARTIAL_SIG: Byte = 0x02
+        const val PSBT_IN_SIGHASH_TYPE: Byte = 0x03
         const val PSBT_IN_FINAL_SCRIPTSIG: Byte = 0x07
         const val PSBT_IN_FINAL_WITNESS: Byte = 0x08
+        const val SIGHASH_ALL = 0x01
+        const val SIGHASH_NONE = 0x02
+        const val SIGHASH_SINGLE = 0x03
+        const val SIGHASH_ALL_ANYONECANPAY = 0x81
+        const val SIGHASH_NONE_ANYONECANPAY = 0x82
+        const val SIGHASH_SINGLE_ANYONECANPAY = 0x83
 
         /** Rewrites the first input's key-value map of a raw PSBT, leaving every other byte as it was. */
         fun rewriteFirstInput(

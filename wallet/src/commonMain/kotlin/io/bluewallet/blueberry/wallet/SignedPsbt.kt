@@ -8,6 +8,7 @@ import fr.acinq.bitcoin.Script
 import fr.acinq.bitcoin.ScriptFlags
 import fr.acinq.bitcoin.ScriptWitness
 import fr.acinq.bitcoin.Transaction
+import fr.acinq.bitcoin.TxIn
 import fr.acinq.bitcoin.TxOut
 import fr.acinq.bitcoin.psbt.Psbt
 import kotlin.io.encoding.Base64
@@ -19,6 +20,8 @@ const val PSBT_BAD_SIGNATURES = "The signatures in this PSBT don't check out. Si
 
 private val PSBT_MAGIC = byteArrayOf(0x70, 0x73, 0x62, 0x74, 0xff.toByte())
 private val HEX_CHARS = Regex("^(?:[0-9a-fA-F]{2})+$")
+private const val SIGHASH_ALL: Byte = 0x01
+private const val SCHNORR_SIGNATURE_SIZE = 64
 
 /** A PSBT written as hex or standard base64 (whitespace ignored), or null when the text is neither. */
 fun psbtBytesFromText(text: String): ByteArray? {
@@ -64,7 +67,8 @@ sealed class SignedPsbtCheck {
  * Checks a PSBT scanned back from a signing device against the unsigned one we built, then finalizes it.
  * The same unsigned txid means the same inputs, outputs and fee. Each input takes the signer's final
  * scriptSig/witness, or one built from its single-sig signature; the coins come from our PSBT, so a signer
- * that strips them still works. Every input script is verified before the transaction is returned.
+ * that strips them still works. Every input script is verified before the transaction is returned, and every
+ * signature must be SIGHASH_ALL (or taproot's default): any other type leaves inputs or outputs free to change.
  */
 fun finalizeSignedPsbt(
     unsignedPsbtHex: String,
@@ -76,7 +80,10 @@ fun finalizeSignedPsbt(
     val spent = spentOutputs(ours)
     val signatures = same?.let { inputSignatures(scanned, it.inputs.size) }
     val tx = signatures?.let { finalTx(ours, it, spent) }
-    val valid = tx != null && runCatching { Transaction.correctlySpends(tx, spent, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS) }.isSuccess
+    val valid =
+        tx != null &&
+            signsEverything(tx, spent) &&
+            runCatching { Transaction.correctlySpends(tx, spent, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS) }.isSuccess
     return when {
         theirs == null -> SignedPsbtCheck.Failed(PSBT_NOT_A_PSBT)
         same == null -> SignedPsbtCheck.Failed(PSBT_DIFFERENT_TX)
@@ -154,5 +161,39 @@ private fun singleSigScripts(
         AddressScriptType.P2WPKH -> Pair(ByteVector.empty, witness)
         AddressScriptType.P2SH_P2WPKH -> Pair(ByteVector(Script.write(listOf(OP_PUSHDATA(Script.write(Script.pay2wpkh(pub)))))), witness)
         else -> Pair(ByteVector(Script.write(listOf(OP_PUSHDATA(sig), OP_PUSHDATA(pub)))), ScriptWitness.empty)
+    }
+}
+
+/**
+ * Every input carries one SIGHASH_ALL signature, in the only shape our single-sig scripts are spent with.
+ * NONE, SINGLE and ANYONECANPAY signatures verify too, but don't commit to the transaction on the review.
+ */
+private fun signsEverything(
+    tx: Transaction,
+    spent: Map<OutPoint, TxOut>,
+): Boolean =
+    tx.txIn.all { txIn ->
+        val type = scriptTypeOfScriptPubKey(spent.getValue(txIn.outPoint).publicKeyScript.toByteArray())
+        val sig = inputSignature(txIn, type)?.toByteArray() ?: return@all false
+        when {
+            type == AddressScriptType.P2TR -> sig.size == SCHNORR_SIGNATURE_SIZE || (sig.size == SCHNORR_SIGNATURE_SIZE + 1 && sig.last() == SIGHASH_ALL)
+            else -> sig.isNotEmpty() && sig.last() == SIGHASH_ALL
+        }
+    }
+
+/** The signature an input of [type] is spent with: the key-path witness item, the first of `[sig, pubkey]`, or the first of `<sig> <pubkey>`. */
+private fun inputSignature(
+    txIn: TxIn,
+    type: AddressScriptType,
+): ByteVector? {
+    val stack = txIn.witness.stack
+    return when (type) {
+        AddressScriptType.P2TR -> stack.singleOrNull()
+        AddressScriptType.P2WPKH, AddressScriptType.P2SH_P2WPKH -> stack.takeIf { it.size == 2 }?.first()
+        else ->
+            runCatching { Script.parse(txIn.signatureScript) }
+                .getOrNull()
+                ?.takeIf { it.size == 2 }
+                ?.let { (it.first() as? OP_PUSHDATA)?.data }
     }
 }
