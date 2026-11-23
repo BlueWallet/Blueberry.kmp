@@ -69,7 +69,12 @@ internal fun SignedPsbtFlow(
     when {
         id != null -> {
             val done = { onDone(review?.txid ?: target.storedTxid) }
-            OverlayBackEffects(enabled = true, onDismiss = done) {
+            // Same exit as BroadcastScreen's own Done/back: the iOS edge swipe lands here, not in its BackHandler.
+            val leave = {
+                dismissConfirmedBroadcast(runtime.broadcastStore, id)
+                done()
+            }
+            OverlayBackEffects(enabled = true, onDismiss = leave) {
                 BroadcastScreen(runtime = runtime, id = id, onClose = done)
             }
         }
