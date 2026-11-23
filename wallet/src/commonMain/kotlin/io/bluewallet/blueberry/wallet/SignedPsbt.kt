@@ -40,10 +40,13 @@ data class SignedPsbt(
     val vsize: Int,
     val outputs: List<Pair<String, Long>>,
 ) {
-    /** Sats this transaction pays to [address]. */
+    /**
+     * Sats this payment sends to [address]. [buildSend] puts the payment first and change after it, so when
+     * the destination is also the change address only the first matching output is the payment.
+     */
     fun paidTo(address: String): Long {
         val script = runCatching { scriptHex(outputScriptFromAddress(address)) }.getOrNull()
-        return outputs.filter { it.first == script }.sumOf { it.second }
+        return outputs.firstOrNull { it.first == script }?.second ?: 0L
     }
 }
 

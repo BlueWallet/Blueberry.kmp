@@ -15,6 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** A watch-only PSBT signed elsewhere comes back, is checked against what we built, finalized and extracted. */
 class SignedPsbtTest {
@@ -34,8 +35,10 @@ class SignedPsbtTest {
     private fun build(
         case: Case,
         amountSats: Long = 50_000L,
+        toChange: Boolean = false,
     ): PsbtSendResult {
         val wallet = deriveWatchWallet(case.secret, WatchGaps(2, 2))
+        val change = wallet.hd(case.type, 0, change = true).address
         val coin = wallet.hd(case.type, 0)
         val funding = testFundingTx(coin.scriptPubKey, 100_000L)
         return buildSend(
@@ -43,10 +46,10 @@ class SignedPsbtTest {
                 secret = case.secret,
                 wallet = wallet,
                 utxos = listOf(SendInputUtxo(funding.txid, 0, 100_000L, coin.scriptPubKey, funding.bytes)),
-                toAddress = DEST_LEGACY,
+                toAddress = if (toChange) change else DEST_LEGACY,
                 amountSats = SendAmount.Exact(amountSats),
                 feeRateSatPerVb = 2.0,
-                changeAddress = wallet.hd(case.type, 0, change = true).address,
+                changeAddress = change,
             ),
         ) as PsbtSendResult
     }
@@ -79,6 +82,15 @@ class SignedPsbtTest {
             assertEquals(built.feeSats, signed.feeSats, case.type.name)
             assertEquals(50_000L, signed.paidTo(DEST_LEGACY), case.type.name)
         }
+    }
+
+    @Test
+    fun a_payment_to_our_own_change_address_counts_only_the_payment() {
+        val built = build(p2wpkh, amountSats = 30_000L, toChange = true)
+        assertTrue(built.changeSats > 0)
+        val ok = assertIs<SignedPsbtCheck.Ok>(finalizeSignedPsbt(built.psbtHex, signed(p2wpkh, built.psbtHex).bytes()))
+        val change = deriveWatchWallet(p2wpkh.secret, WatchGaps(2, 2)).hd(p2wpkh.type, 0, change = true).address
+        assertEquals(30_000L, ok.signed.paidTo(change))
     }
 
     @Test
