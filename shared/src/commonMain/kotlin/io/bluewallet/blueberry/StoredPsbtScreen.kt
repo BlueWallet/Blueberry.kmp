@@ -64,6 +64,7 @@ internal fun StoredPsbtScreen(
     db: Database,
     txid: String,
     onBack: () -> Unit,
+    onBroadcast: (txid: String) -> Unit = { onBack() },
 ) {
     val state by produceState<StoredPsbt?>(null, txid, runtime.walletRevision) {
         value = withContext(Dispatchers.Default) { loadStoredPsbt(db, runtime.wallet, txid) }
@@ -72,7 +73,7 @@ internal fun StoredPsbtScreen(
     when (val s = state) {
         is StoredPsbt.Ready ->
             if (scanning) {
-                SignedPsbtFlow(runtime, db, SignedPsbtTarget(txid, s.to, s.psbtHex), onDone = onBack, onBack = { scanning = false })
+                SignedPsbtFlow(runtime, db, SignedPsbtTarget(txid, s.to, s.psbtHex), onDone = onBroadcast, onBack = { scanning = false })
             } else {
                 SendPsbtStep(s.to, s.psbtHex, onDone = onBack, onBack = onBack, onScanSigned = { scanning = true })
             }

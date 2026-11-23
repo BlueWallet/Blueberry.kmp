@@ -51,6 +51,11 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
 9. **UI entry points.** The PSBT step (`SendPsbtStep`) gets a "Scan signed PSBT" button above Done. It appears in both places that show that step: the watch-only exit of Send, and "Show PSBT" in a pending payment's details. The helper text becomes "This wallet can't sign. Sign the PSBT on your signing device, then scan the signed PSBT here to broadcast it."
 10. **Scan screen.** Camera preview that keeps scanning across frames, a line with progress ("Scanning animated QR… 40%" / "Point the camera at the signed PSBT QR"), the last ignore or error reason, "Paste" (clipboard text through the same parser) and "Start over" (reset). On a complete PSBT the check runs off the main thread; a check error shows on the scan screen and resets the decoder.
 11. **Review screen.** Recipient label, amount hero, destination address groups, network fee and total leaving the wallet, and a Broadcast button. Back returns to the PSBT QR.
+- **Review-loop decisions.** A PSBT that fails its check is remembered: holding the same QR in view keeps its
+  reason on screen instead of re-checking it every frame. On the send flow, the scan target is captured when
+  "Scan signed PSBT" is tapped, so the scan, review and broadcast survive the build dropping once a moved
+  legacy/nested spend makes its coins look spent. From tx details, finishing a broadcast whose txid moved opens
+  the details of the new txid in place of the old one.
 
 ## Units
 

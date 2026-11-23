@@ -27,6 +27,7 @@ internal sealed class SignedPsbtScanState {
 internal class SignedPsbtScan {
     private val decoder = UrDecoder(PSBT_UR_TYPES)
     private var lastText: String? = null
+    private var rejected: Pair<ByteArray, String>? = null
 
     var state: SignedPsbtScanState = SignedPsbtScanState.Scanning(null, null)
         private set
@@ -41,7 +42,20 @@ internal class SignedPsbtScan {
             } else {
                 psbtBytesFromText(trimmed)?.let { SignedPsbtScanState.Done(it) } ?: scanning(PSBT_NOT_A_PSBT)
             }
+        val done = state as? SignedPsbtScanState.Done
+        val again = rejected?.takeIf { done != null && it.first.contentEquals(done.psbt) }
+        if (again != null) {
+            // The same PSBT is still in front of the camera: keep its reason up instead of checking it again.
+            reset(again.second)
+            lastText = text
+        }
         return state
+    }
+
+    /** The PSBT handed over failed its check: scan again, and don't hand the same bytes over again. */
+    fun reject(reason: String) {
+        (state as? SignedPsbtScanState.Done)?.let { rejected = it.psbt to reason }
+        reset(reason)
     }
 
     fun reset(note: String? = null) {

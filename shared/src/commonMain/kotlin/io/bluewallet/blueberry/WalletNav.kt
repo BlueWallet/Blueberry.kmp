@@ -224,7 +224,22 @@ internal fun WalletNavHost(
             }
             composable<StoredPsbtRoute> { entry ->
                 val route = entry.toRoute<StoredPsbtRoute>()
-                StoredPsbtScreen(runtime = runtime, db = db, txid = route.txid, onBack = backFrom(entry))
+                StoredPsbtScreen(
+                    runtime = runtime,
+                    db = db,
+                    txid = route.txid,
+                    onBack = backFrom(entry),
+                    onBroadcast = { sentTxid ->
+                        if (sentTxid == route.txid || navController.currentBackStackEntry?.id != entry.id) {
+                            popIfCurrent(entry)
+                        } else {
+                            // A legacy or nested spend got a new txid: the old details page has nothing left to show.
+                            navController.navigate(TxDetailsRoute(txid = sentTxid)) {
+                                popUpTo(TxDetailsRoute(txid = route.txid)) { inclusive = true }
+                            }
+                        }
+                    },
+                )
             }
             composable<BroadcastRoute> { entry ->
                 val route = entry.toRoute<BroadcastRoute>()

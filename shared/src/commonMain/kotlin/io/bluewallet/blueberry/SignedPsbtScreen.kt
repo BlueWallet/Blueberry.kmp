@@ -49,13 +49,16 @@ internal class SignedPsbtTarget(
     val psbtHex: String,
 )
 
-/** Scan the signed PSBT, review it, then broadcast it. Back goes one step back; [onBack] leaves from the scan. */
+/**
+ * Scan the signed PSBT, review it, then broadcast it. Back goes one step back; [onBack] leaves from the scan.
+ * [onDone] gets the broadcast txid, which differs from [SignedPsbtTarget.storedTxid] for legacy and nested inputs.
+ */
 @Composable
 internal fun SignedPsbtFlow(
     runtime: PeersRuntime,
     db: Database,
     target: SignedPsbtTarget,
-    onDone: () -> Unit,
+    onDone: (txid: String) -> Unit,
     onBack: () -> Unit,
 ) {
     var signed by remember(target.storedTxid) { mutableStateOf<SignedPsbt?>(null) }
@@ -63,10 +66,12 @@ internal fun SignedPsbtFlow(
     val id = broadcastId
     val review = signed
     when {
-        id != null ->
-            OverlayBackEffects(enabled = true, onDismiss = onDone) {
-                BroadcastScreen(runtime = runtime, id = id, onClose = onDone)
+        id != null -> {
+            val done = { onDone(review?.txid ?: target.storedTxid) }
+            OverlayBackEffects(enabled = true, onDismiss = done) {
+                BroadcastScreen(runtime = runtime, id = id, onClose = done)
             }
+        }
         review != null ->
             OverlayBackEffects(enabled = true, onDismiss = { signed = null }) {
                 SignedPsbtReview(runtime, db, target, review, onStarted = { broadcastId = it }, onBack = { signed = null })
@@ -98,7 +103,7 @@ private fun SignedPsbtScanStep(
             when (result) {
                 is SignedPsbtCheck.Ok -> onSigned(result.signed)
                 is SignedPsbtCheck.Failed -> {
-                    scan.reset(result.reason)
+                    scan.reject(result.reason)
                     state = scan.state
                 }
             }

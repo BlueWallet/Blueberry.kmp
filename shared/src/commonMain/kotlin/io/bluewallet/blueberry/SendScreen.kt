@@ -213,17 +213,26 @@ private fun SendCoins(flow: SendFlow) {
 @Composable
 private fun SendPsbt(flow: SendFlow) {
     val psbt = (flow.build as? ReviewBuild.Built)?.result as? PsbtSendResult
-    var scanning by remember(psbt?.txid) { mutableStateOf(false) }
-    if (psbt != null && scanning) {
+    // Held apart from flow.build: once a legacy or nested spend moves to its signed txid, the build sees its coins
+    // as spent and drops, and the scan, review and broadcast must outlive that.
+    var target by remember { mutableStateOf<SignedPsbtTarget?>(null) }
+    val scanTarget = target
+    if (scanTarget != null) {
         SignedPsbtFlow(
             runtime = flow.runtime,
             db = flow.db,
-            target = SignedPsbtTarget(psbt.txid, flow.recipient, psbt.psbtHex),
-            onDone = flow::finish,
-            onBack = { scanning = false },
+            target = scanTarget,
+            onDone = { flow.finish() },
+            onBack = { if (psbt != null) target = null else flow.goBack() },
         )
     } else if (psbt != null) {
-        SendPsbtStep(flow.recipient, psbt.psbtHex, onDone = flow::finish, onBack = flow::goBack, onScanSigned = { scanning = true })
+        SendPsbtStep(
+            flow.recipient,
+            psbt.psbtHex,
+            onDone = flow::finish,
+            onBack = flow::goBack,
+            onScanSigned = { target = SignedPsbtTarget(psbt.txid, flow.recipient, psbt.psbtHex) },
+        )
     } else {
         SendStepFrame(title = "Sign", caption = null, onBack = flow::goBack, bottom = {}) {
             HelperText("The transaction isn't ready to sign.", error = true)
