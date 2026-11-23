@@ -29,6 +29,9 @@ internal class SignedPsbtScan {
     private var lastText: String? = null
     private var rejected: Pair<ByteArray, String>? = null
 
+    // Why the last attempt failed (a rejected PSBT or a checksum failure); stays up while frames keep coming.
+    private var failure: String? = null
+
     var state: SignedPsbtScanState = SignedPsbtScanState.Scanning(null, null)
         private set
 
@@ -48,6 +51,8 @@ internal class SignedPsbtScan {
             // The same PSBT is still in front of the camera: keep its reason up instead of checking it again.
             reset(again.second)
             lastText = text
+        } else if (done != null) {
+            failure = null
         }
         return state
     }
@@ -58,15 +63,17 @@ internal class SignedPsbtScan {
         reset(reason)
     }
 
+    /** Starts the scan over. A [note] is why, and stays on screen until a PSBT completes or a plain reset. */
     fun reset(note: String? = null) {
         decoder.reset()
         lastText = null
+        failure = note
         state = SignedPsbtScanState.Scanning(null, note)
     }
 
     private fun fromUr(step: UrReceive): SignedPsbtScanState =
         when (step) {
-            is UrReceive.Progress -> scanning(null)
+            is UrReceive.Progress -> scanning(failure)
             is UrReceive.Ignored -> scanning(step.reason)
             is UrReceive.Failed -> {
                 reset(step.reason)
