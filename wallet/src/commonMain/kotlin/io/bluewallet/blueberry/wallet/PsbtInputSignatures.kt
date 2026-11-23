@@ -48,7 +48,10 @@ private fun signaturesOf(entries: List<Pair<ByteArray, ByteArray>>): InputSignat
 
 private fun readWitness(bytes: ByteArray): ScriptWitness {
     val reader = RawReader(bytes, 0)
-    val items = List(reader.compactSize().toInt()) { ByteVector(reader.bytes(reader.compactSize().toInt())) }
+    val count = reader.compactSize().toInt()
+    // Every item takes at least its length byte, so a larger count is malformed (and must not size a list).
+    require(count <= bytes.size)
+    val items = List(count) { ByteVector(reader.bytes(reader.compactSize().toInt())) }
     require(reader.done)
     return ScriptWitness(items)
 }

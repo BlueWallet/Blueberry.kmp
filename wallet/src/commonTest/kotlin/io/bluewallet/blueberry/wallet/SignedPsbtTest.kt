@@ -153,6 +153,14 @@ class SignedPsbtTest {
         }
     }
 
+    @Test
+    fun malformed_raw_input_maps_read_as_null() {
+        val magic = byteArrayOf(0x70, 0x73, 0x62, 0x74, 0xff.toByte())
+        val hugeWitness = byteArrayOf(0x01, PSBT_IN_FINAL_WITNESS, 0x05, 0xfe.toByte(), 0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0x7f, 0x00)
+        assertNull(inputSignatures(magic + byteArrayOf(0x00) + hugeWitness, 1))
+        assertNull(inputSignatures(magic + byteArrayOf(0x00, 0x01, 0x02), 1))
+    }
+
     /** BIP174 final scriptSig (0x07) / final witness (0x08) entries for a single-sig spend. */
     private fun finalScripts(
         type: AddressScriptType,
