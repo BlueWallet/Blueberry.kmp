@@ -4,6 +4,8 @@ import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.DeterministicWallet
 import fr.acinq.bitcoin.KeyPath
 import fr.acinq.bitcoin.MnemonicCode
+import fr.acinq.bitcoin.OP_PUSHDATA
+import fr.acinq.bitcoin.Script
 import fr.acinq.bitcoin.ScriptWitness
 import fr.acinq.bitcoin.psbt.Input
 import fr.acinq.bitcoin.psbt.Psbt
@@ -115,6 +117,62 @@ class SignedPsbtTest {
     }
 
     @Test
+    fun reads_partial_signatures_from_inputs_the_signer_stripped_of_coins() {
+        for (case in listOf(p2pkh, p2shP2wpkh, p2wpkh, p2tr)) {
+            val built = build(case)
+            val stripped =
+                rewriteFirstInput(signed(case, built.psbtHex).bytes()) { entries ->
+                    entries.filterNot { it.first[0] == PSBT_IN_NON_WITNESS_UTXO || it.first[0] == PSBT_IN_WITNESS_UTXO }
+                }
+            val ok = assertIs<SignedPsbtCheck.Ok>(finalizeSignedPsbt(built.psbtHex, stripped), case.type.name)
+            assertEquals(true, isSignedTxHex(ok.signed.txHex), case.type.name)
+        }
+    }
+
+    @Test
+    fun reads_final_scripts_the_signer_left_beside_other_fields() {
+        for (case in listOf(p2pkh, p2shP2wpkh, p2wpkh)) {
+            for (keepCoins in listOf(true, false)) {
+                val built = build(case)
+                val signedBytes = signed(case, built.psbtHex).bytes()
+                val finalized =
+                    rewriteFirstInput(signedBytes) { entries ->
+                        val partial = entries.single { it.first[0] == PSBT_IN_PARTIAL_SIG }
+                        val sig = partial.second
+                        val pub = partial.first.copyOfRange(1, partial.first.size)
+                        val kept =
+                            entries.filter {
+                                it.first[0] != PSBT_IN_PARTIAL_SIG &&
+                                    (keepCoins || (it.first[0] != PSBT_IN_NON_WITNESS_UTXO && it.first[0] != PSBT_IN_WITNESS_UTXO))
+                            }
+                        kept + finalScripts(case.type, pub, sig)
+                    }
+                val ok = assertIs<SignedPsbtCheck.Ok>(finalizeSignedPsbt(built.psbtHex, finalized), "${case.type.name} coins=$keepCoins")
+                assertEquals(true, isSignedTxHex(ok.signed.txHex), case.type.name)
+            }
+        }
+    }
+
+    /** BIP174 final scriptSig (0x07) / final witness (0x08) entries for a single-sig spend. */
+    private fun finalScripts(
+        type: AddressScriptType,
+        pub: ByteArray,
+        sig: ByteArray,
+    ): List<Pair<ByteArray, ByteArray>> {
+        val witness = byteArrayOf(2, sig.size.toByte()) + sig + byteArrayOf(pub.size.toByte()) + pub
+        val redeem = Script.write(Script.pay2wpkh(fr.acinq.bitcoin.PublicKey(ByteVector(pub))))
+        return when (type) {
+            AddressScriptType.P2WPKH -> listOf(byteArrayOf(PSBT_IN_FINAL_WITNESS) to witness)
+            AddressScriptType.P2SH_P2WPKH ->
+                listOf(
+                    byteArrayOf(PSBT_IN_FINAL_SCRIPTSIG) to Script.write(listOf(OP_PUSHDATA(redeem))),
+                    byteArrayOf(PSBT_IN_FINAL_WITNESS) to witness,
+                )
+            else -> listOf(byteArrayOf(PSBT_IN_FINAL_SCRIPTSIG) to Script.write(listOf(OP_PUSHDATA(sig), OP_PUSHDATA(pub))))
+        }
+    }
+
+    @Test
     fun rejects_a_psbt_for_a_different_transaction() {
         val other = build(p2wpkh, amountSats = 40_000L)
         val built = build(p2wpkh)
@@ -157,5 +215,49 @@ class SignedPsbtTest {
         assertNull(psbtBytesFromText("cHNidP8"))
         assertNull(psbtBytesFromText(Base64.encode(ByteVector("deadbeefdeadbeef").toByteArray())))
         assertNull(psbtBytesFromText(""))
+    }
+
+    private companion object {
+        const val PSBT_IN_NON_WITNESS_UTXO: Byte = 0x00
+        const val PSBT_IN_WITNESS_UTXO: Byte = 0x01
+        const val PSBT_IN_PARTIAL_SIG: Byte = 0x02
+        const val PSBT_IN_FINAL_SCRIPTSIG: Byte = 0x07
+        const val PSBT_IN_FINAL_WITNESS: Byte = 0x08
+
+        /** Rewrites the first input's key-value map of a raw PSBT, leaving every other byte as it was. */
+        fun rewriteFirstInput(
+            psbt: ByteArray,
+            edit: (List<Pair<ByteArray, ByteArray>>) -> List<Pair<ByteArray, ByteArray>>,
+        ): ByteArray {
+            var at = 5
+
+            fun compact(): Int {
+                val first = psbt[at++].toInt() and 0xff
+                val width = mapOf(0xfd to 2, 0xfe to 4).getOrElse(first) { 0 }
+                if (width == 0) return first
+                var value = 0
+                for (i in 0 until width) value = value or ((psbt[at++].toInt() and 0xff) shl (8 * i))
+                return value
+            }
+
+            fun entries(): List<Pair<ByteArray, ByteArray>> {
+                val out = mutableListOf<Pair<ByteArray, ByteArray>>()
+                while (true) {
+                    val keyLength = compact()
+                    if (keyLength == 0) return out
+                    val key = psbt.copyOfRange(at, at + keyLength).also { at += keyLength }
+                    val valueLength = compact()
+                    out += key to psbt.copyOfRange(at, at + valueLength).also { at += valueLength }
+                }
+            }
+            entries()
+            val inputStart = at
+            val input = entries()
+
+            fun writeCompact(n: Int): ByteArray = if (n < 0xfd) byteArrayOf(n.toByte()) else byteArrayOf(0xfd.toByte(), n.toByte(), (n shr 8).toByte())
+            val rewritten =
+                edit(input).fold(ByteArray(0)) { acc, (k, v) -> acc + writeCompact(k.size) + k + writeCompact(v.size) + v } + byteArrayOf(0)
+            return psbt.copyOfRange(0, inputStart) + rewritten + psbt.copyOfRange(at, psbt.size)
+        }
     }
 }

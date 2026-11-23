@@ -9,7 +9,6 @@ import fr.acinq.bitcoin.ScriptFlags
 import fr.acinq.bitcoin.ScriptWitness
 import fr.acinq.bitcoin.Transaction
 import fr.acinq.bitcoin.TxOut
-import fr.acinq.bitcoin.psbt.Input
 import fr.acinq.bitcoin.psbt.Psbt
 import kotlin.io.encoding.Base64
 
@@ -72,7 +71,8 @@ fun finalizeSignedPsbt(
     val ours = Psbt.read(hexToBytes(unsignedPsbtHex)).right ?: error("the unsigned PSBT doesn't parse")
     val same = theirs?.takeIf { it.global.tx.txid == ours.global.tx.txid && it.inputs.size == ours.inputs.size }
     val spent = spentOutputs(ours)
-    val tx = same?.let { finalTx(ours, it, spent) }
+    val signatures = same?.let { inputSignatures(scanned, it.inputs.size) }
+    val tx = signatures?.let { finalTx(ours, it, spent) }
     val valid = tx != null && runCatching { Transaction.correctlySpends(tx, spent, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS) }.isSuccess
     return when {
         theirs == null -> SignedPsbtCheck.Failed(PSBT_NOT_A_PSBT)
@@ -107,12 +107,12 @@ private fun spentOutputs(ours: Psbt): Map<OutPoint, TxOut> =
 /** The unsigned transaction with every input's final scripts, or null when one has no signature. */
 private fun finalTx(
     ours: Psbt,
-    theirs: Psbt,
+    signatures: List<InputSignatures>,
     spent: Map<OutPoint, TxOut>,
 ): Transaction? {
     val txIns =
         ours.global.tx.txIn.mapIndexed { index, txIn ->
-            val final = finalInput(theirs.inputs[index], spent.getValue(txIn.outPoint)) ?: return null
+            val final = finalInput(signatures[index], spent.getValue(txIn.outPoint)) ?: return null
             txIn.copy(signatureScript = final.first, witness = final.second)
         }
     return ours.global.tx.copy(txIn = txIns)
@@ -120,24 +120,24 @@ private fun finalTx(
 
 /** The signer's final scriptSig and witness, or ones built from its single-sig signature. */
 private fun finalInput(
-    input: Input,
+    input: InputSignatures,
     spent: TxOut,
 ): Pair<ByteVector, ScriptWitness>? =
     if (input.scriptSig != null || input.scriptWitness != null) {
-        Pair(input.scriptSig?.let { ByteVector(Script.write(it)) } ?: ByteVector.empty, input.scriptWitness ?: ScriptWitness.empty)
+        Pair(input.scriptSig ?: ByteVector.empty, input.scriptWitness ?: ScriptWitness.empty)
     } else {
         signedInput(input, scriptTypeOfScriptPubKey(spent.publicKeyScript.toByteArray()))
     }
 
 private fun signedInput(
-    input: Input,
+    input: InputSignatures,
     type: AddressScriptType,
 ): Pair<ByteVector, ScriptWitness>? {
-    val partial = input.partialSigs.entries.firstOrNull()
+    val partial = input.partialSigs.firstOrNull()
     return when {
         type == AddressScriptType.P2TR -> input.taprootKeySignature?.let { Pair(ByteVector.empty, ScriptWitness(listOf(it))) }
         partial == null -> null
-        else -> singleSigScripts(type, partial.key, partial.value)
+        else -> runCatching { singleSigScripts(type, PublicKey(partial.first), partial.second) }.getOrNull()
     }
 }
 
