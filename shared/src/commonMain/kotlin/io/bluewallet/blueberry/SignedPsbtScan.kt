@@ -43,7 +43,7 @@ internal class SignedPsbtScan {
             if (trimmed.startsWith("ur:", ignoreCase = true)) {
                 fromUr(decoder.receive(trimmed))
             } else {
-                psbtBytesFromText(trimmed)?.let { SignedPsbtScanState.Done(it) } ?: scanning(PSBT_NOT_A_PSBT)
+                psbtBytesFromText(trimmed)?.let { SignedPsbtScanState.Done(it) } ?: scanning(failure ?: PSBT_NOT_A_PSBT)
             }
         val done = state as? SignedPsbtScanState.Done
         val again = rejected?.takeIf { done != null && it.first.contentEquals(done.psbt) }
@@ -74,7 +74,7 @@ internal class SignedPsbtScan {
     private fun fromUr(step: UrReceive): SignedPsbtScanState =
         when (step) {
             is UrReceive.Progress -> scanning(failure)
-            is UrReceive.Ignored -> scanning(step.reason)
+            is UrReceive.Ignored -> scanning(failure ?: step.reason)
             is UrReceive.Failed -> {
                 reset(step.reason)
                 state

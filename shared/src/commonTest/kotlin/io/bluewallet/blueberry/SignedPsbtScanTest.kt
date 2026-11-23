@@ -77,6 +77,15 @@ class SignedPsbtScanTest {
     }
 
     @Test
+    fun a_stray_qr_does_not_hide_a_rejection() {
+        val scan = SignedPsbtScan()
+        assertIs<SignedPsbtScanState.Done>(scan.accept(psbtBase64FromHex(PSBT_HEX)))
+        scan.reject("Not this one")
+        assertEquals("Not this one", assertIs<SignedPsbtScanState.Scanning>(scan.accept("bitcoin:1GX36PGBUrF8XahZEGQqHqnJGW2vCZteoB")).note)
+        assertEquals("Not this one", assertIs<SignedPsbtScanState.Scanning>(scan.accept("ur:bytes/hdcxzezezezezezezezezezezezezezezezezezezezezezezezezezezezezezezez")).note)
+    }
+
+    @Test
     fun a_checksum_failure_stays_on_screen_while_good_frames_come_in() {
         val scan = SignedPsbtScan()
         val bad = wrongChecksumParts(PSBT_HEX)
