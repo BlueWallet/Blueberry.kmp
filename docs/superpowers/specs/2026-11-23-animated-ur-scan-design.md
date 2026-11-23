@@ -32,7 +32,7 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
    `reset()` clears everything. After `Complete`, every further `receive` returns the same `Complete`.
 3. **Types.** For PSBTs the decoder accepts `crypto-psbt` (BCR-2020-006) and `psbt` (newer registry name). Both wrap the PSBT in a CBOR byte string. The first accepted part locks the type.
 4. **Progress.** `max(recovered fragments / fragment count, min(0.99, distinct parts / (fragment count × 1.75)))`, shown as a whole percent. The second term is `@ngraveio/bc-ur`'s estimate, so fountain-mixed frames move the bar before any fragment is recovered. Complete is 100.
-5. **Plain PSBT text.** A scanned or pasted string that is not a UR is read as base64 (standard alphabet) or hex, and must start with the PSBT magic `70736274ff`. Whitespace is trimmed.
+5. **Plain PSBT text.** A scanned or pasted string that is not a UR is read as base64 (standard alphabet, trailing `=` padding optional) or hex, and must start with the PSBT magic `70736274ff`. Whitespace is trimmed.
 6. **Check against what we asked to sign.** `finalizeSignedPsbt(unsignedPsbtHex, signedBytes)`:
    1. parses the scanned PSBT (bitcoin-kmp `Psbt.read`),
    2. requires its unsigned transaction txid to equal ours. Same unsigned txid means the same inputs, outputs, amounts and fee, so nothing on the review can differ from what was built,
@@ -75,7 +75,7 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
 ## Testing
 
 - `UrDecoderTest`: BlueWallet's 2-part `crypto-psbt` vector in order, reversed, with duplicates; a fountain-only vector generated with `@ngraveio/bc-ur` (parts 7..19 of a 6-fragment animation) decodes without any simple part; uppercase QR alphanumeric form; single-part; `ur:psbt`; foreign type, mixed type, other animation, corrupt frame are ignored without losing progress; progress grows and hits 100; reset; round trips with our encoder at several capacities in shuffled order.
-- `SignedPsbtTest`: watch-only PSBTs for the `abandon … about` xpub (P2PKH), ypub (P2SH-P2WPKH), zpub (P2WPKH) and BIP86 tr (P2TR) are signed with the matching private keys through bitcoin-kmp (`Psbt.sign`, partial signatures), round-tripped through UR, finalized and extracted; a signer-finalized PSBT also passes; different transaction, unsigned, half-signed, wrong-key and non-`SIGHASH_ALL` (partial or signer-finalized) cases give the errors above; base64 and hex text parse; non-PSBT text is rejected.
+- `SignedPsbtTest`: watch-only PSBTs for the `abandon … about` xpub (P2PKH), ypub (P2SH-P2WPKH), zpub (P2WPKH) and BIP86 tr (P2TR) are signed with the matching private keys through bitcoin-kmp (`Psbt.sign`, partial signatures), round-tripped through UR, finalized and extracted; a signer-finalized PSBT also passes; different transaction, unsigned, half-signed, wrong-key and non-`SIGHASH_ALL` (partial or signer-finalized) cases give the errors above; base64 (padded or not) and hex text parse; non-PSBT text is rejected.
 - `SignedPsbtScanTest`: UR frames reach 100 and yield the PSBT; base64 text completes at once; ignored text keeps progress; reset.
 - `SignedPsbtBroadcastTest`: a segwit spend keeps its row key with the signed hex; a legacy spend moves to the new txid with its note; a missing row is refused; the broadcast job starts held and `storedSendCanGoAgain` becomes true.
 - Compose screens are not unit tested (repo convention); they are thin over the units above.

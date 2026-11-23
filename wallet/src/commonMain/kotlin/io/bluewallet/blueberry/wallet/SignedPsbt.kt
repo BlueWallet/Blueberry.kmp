@@ -23,14 +23,17 @@ private val HEX_CHARS = Regex("^(?:[0-9a-fA-F]{2})+$")
 private const val SIGHASH_ALL: Byte = 0x01
 private const val SCHNORR_SIGNATURE_SIZE = 64
 
-/** A PSBT written as hex or standard base64 (whitespace ignored), or null when the text is neither. */
+/** Standard base64 whose trailing `=` may have been dropped by whatever carried the text. */
+private val PSBT_BASE64 = Base64.Default.withPadding(Base64.PaddingOption.PRESENT_OPTIONAL)
+
+/** A PSBT written as hex or standard base64, padded or not (whitespace ignored), or null when the text is neither. */
 fun psbtBytesFromText(text: String): ByteArray? {
     val compact = text.filterNot { it.isWhitespace() }
     val bytes =
         if (HEX_CHARS.matches(compact)) {
             hexToBytes(compact)
         } else {
-            runCatching { Base64.decode(compact) }.getOrNull()
+            runCatching { PSBT_BASE64.decode(compact) }.getOrNull()
         }
     return bytes?.takeIf { it.size > PSBT_MAGIC.size && it.copyOfRange(0, PSBT_MAGIC.size).contentEquals(PSBT_MAGIC) }
 }

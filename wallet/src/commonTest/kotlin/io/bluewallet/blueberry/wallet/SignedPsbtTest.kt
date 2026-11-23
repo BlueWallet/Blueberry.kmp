@@ -314,6 +314,16 @@ class SignedPsbtTest {
         assertNull(psbtBytesFromText(""))
     }
 
+    @Test
+    fun reads_base64_psbt_text_that_lost_its_padding() {
+        val psbt = hexToBytes(build(p2wpkh).psbtHex)
+        for (extra in 0..2) {
+            val bytes = psbt + ByteArray(extra)
+            val unpadded = Base64.encode(bytes).trimEnd('=')
+            assertEquals(hexFromBytes(bytes), psbtBytesFromText(unpadded)?.let(::hexFromBytes), "extra=$extra")
+        }
+    }
+
     private companion object {
         const val PSBT_IN_NON_WITNESS_UTXO: Byte = 0x00
         const val PSBT_IN_WITNESS_UTXO: Byte = 0x01
