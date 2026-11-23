@@ -39,6 +39,7 @@ import io.bluewallet.blueberry.wallet.SignedPsbt
 import io.bluewallet.blueberry.wallet.SignedPsbtCheck
 import io.bluewallet.blueberry.wallet.finalizeSignedPsbt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -95,19 +96,38 @@ private fun SignedPsbtScanStep(
     var checking by remember(target.storedTxid) { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
 
+    var checkJob by remember(target.storedTxid) { mutableStateOf<Job?>(null) }
+
     fun check(psbt: ByteArray) {
         checking = true
-        scope.launch {
-            val result = withContext(Dispatchers.Default) { finalizeSignedPsbt(target.psbtHex, psbt) }
-            checking = false
-            when (result) {
-                is SignedPsbtCheck.Ok -> onSigned(result.signed)
-                is SignedPsbtCheck.Failed -> {
-                    scan.reject(result.reason)
-                    state = scan.state
+        checkJob =
+            scope.launch {
+                try {
+                    // Cancelled by Start over: withContext then throws on return, so a discarded PSBT never lands.
+                    val result =
+                        withContext(Dispatchers.Default) {
+                            runCatching { finalizeSignedPsbt(target.psbtHex, psbt) }
+                                .getOrElse { SignedPsbtCheck.Failed("Couldn't check this PSBT: ${it.message ?: it}") }
+                        }
+                    when (result) {
+                        is SignedPsbtCheck.Ok -> onSigned(result.signed)
+                        is SignedPsbtCheck.Failed -> {
+                            scan.reject(result.reason)
+                            state = scan.state
+                        }
+                    }
+                } finally {
+                    if (checkJob == coroutineContext[Job]) checking = false
                 }
             }
-        }
+    }
+
+    fun startOver() {
+        checkJob?.cancel()
+        checkJob = null
+        checking = false
+        scan.reset()
+        state = scan.state
     }
 
     fun accept(text: String): Boolean {
@@ -133,13 +153,7 @@ private fun SignedPsbtScanStep(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
             TextAction(text = "Paste", onClick = { clipboard.getText()?.text?.let(::accept) })
-            TextAction(
-                text = "Start over",
-                onClick = {
-                    scan.reset()
-                    state = scan.state
-                },
-            )
+            TextAction(text = "Start over", onClick = ::startOver)
         }
         HelperText("Show the signed transaction as a QR code on your signing device. Animated QR codes are read frame by frame.")
     }
