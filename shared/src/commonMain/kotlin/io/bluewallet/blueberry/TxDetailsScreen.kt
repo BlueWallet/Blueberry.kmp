@@ -309,7 +309,7 @@ private fun OpenSendActions(
     val txid = row.txid
     val open = remember(txid, snap) { unconfirmedSendOpen(db, txid) }
     val signed = remember(txid, snap) { storedSendCanGoAgain(db, txid) }
-    val psbt = remember(txid, snap) { storedSendIsPsbt(db, txid) }
+    val (psbt, viaRecorded) = remember(txid, snap) { storedSendIsPsbt(db, txid) to (db.broadcastVia.get(txid) != null) }
     var confirming by remember(txid) { mutableStateOf(false) }
     var note by remember(txid) { mutableStateOf<String?>(null) }
     var forgetting by remember(txid) { mutableStateOf(false) }
@@ -332,7 +332,7 @@ private fun OpenSendActions(
     Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
         session?.let { BroadcastStatusCard(broadcastStatus(it.snapshot)) }
         Text(
-            text = note ?: openSendExplainer(signed),
+            text = note ?: openSendExplainer(signed, published = viaRecorded || session != null),
             color = BwColors.InkMuted,
             fontFamily = BwFontFamily,
             fontSize = BwType.LabelSize,
@@ -409,13 +409,22 @@ private fun toggleLabelEdit(
     }
 }
 
-private fun openSendExplainer(signed: Boolean): String =
-    if (signed) {
-        "This payment was given to Bitcoin nodes and may still confirm. Broadcast again gives the same transaction to more nodes. " +
-            "Forgetting it does not pull it back, and a new spend of these coins conflicts with it."
-    } else {
-        "This payment waits to be signed and published from another device. Show PSBT to scan it there. " +
-            "Its coins stay locked until it confirms. Forget it only if it will never be published."
+/** [published]: a broadcast of it was recorded. A signed PSBT is stored before its broadcast starts. */
+internal fun openSendExplainer(
+    signed: Boolean,
+    published: Boolean,
+): String =
+    when {
+        signed && published ->
+            "This payment was given to Bitcoin nodes and may still confirm. Broadcast again gives the same transaction to more nodes. " +
+                "Forgetting it does not pull it back, and a new spend of these coins conflicts with it."
+        signed ->
+            "This payment is signed but may not be published yet. Broadcast again gives it to Bitcoin nodes. " +
+                "Its coins stay locked until it confirms. The signing device may have published it too, " +
+                "so forget it only if it will never confirm."
+        else ->
+            "This payment waits to be signed and published from another device. Show PSBT to scan it there. " +
+                "Its coins stay locked until it confirms. Forget it only if it will never be published."
     }
 
 @Composable

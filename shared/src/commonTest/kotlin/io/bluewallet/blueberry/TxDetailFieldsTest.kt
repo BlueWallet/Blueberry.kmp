@@ -12,6 +12,8 @@ import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.wallet.outputScriptFromAddress
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class TxDetailFieldsTest {
     private fun row(note: String? = "coffee") =
@@ -181,5 +183,14 @@ class TxDetailFieldsTest {
             ),
             fields.take(2),
         )
+    }
+
+    /** A signed PSBT is stored before its broadcast starts, and stays stored if the start is refused. */
+    @Test
+    fun a_signed_payment_is_said_to_be_with_nodes_only_once_a_broadcast_is_recorded() {
+        val waiting = openSendExplainer(signed = true, published = false)
+        assertFalse("was given to Bitcoin nodes" in waiting, waiting)
+        assertTrue("not be published yet" in waiting, waiting)
+        assertTrue("was given to Bitcoin nodes" in openSendExplainer(signed = true, published = true))
     }
 }
