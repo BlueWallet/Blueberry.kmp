@@ -29,6 +29,15 @@ fun forgetBroadcast(
 /** Plain-language status for the broadcast snapshot. Peers and attempts stay out of the main line. */
 fun broadcastStatus(snap: BroadcastSnapshot): BroadcastStatusUi =
     when {
+        snap.phase == "success" && snap.refusedByAll ->
+            BroadcastStatusUi(
+                "Not accepted",
+                snap.detail?.takeIf { it.isNotBlank() } ?: "Every node that got it refused it.",
+                "Its coins stay locked, since it may have been published before. " +
+                    "Broadcast again gives the same transaction to other nodes.",
+                BroadcastTone.Failed,
+                resend = true,
+            )
         snap.phase == "success" && !snap.acknowledged ->
             BroadcastStatusUi(
                 "Sent",

@@ -133,4 +133,30 @@ class SendBroadcastTest {
         assertFalse(broadcastOwns(BroadcastSnapshot(txHex = "bb", phase = "starting"), "aa"))
         assertFalse(broadcastOwns(BroadcastSnapshot(), null))
     }
+
+    /** A signed PSBT or Broadcast again starts held: every node refusing keeps the coins but must not read as Sent. */
+    @Test
+    fun a_held_run_every_node_refused_shows_the_refusal() {
+        val store = createBroadcastStore()
+        store.start("1", "deadbeef", before = PriorRun.Held)
+        store.applyDone(BroadcastDonePayload.Error("1", "Every node that got it refused it.", refused = true))
+        val snap = store.get("1")!!
+        assertEquals("success", snap.phase)
+        assertFalse(snap.acknowledged)
+        val status = broadcastStatus(snap)
+        assertEquals(BroadcastTone.Failed, status.tone)
+        assertEquals("Every node that got it refused it.", status.line)
+        assertTrue(status.resend)
+        assertFalse(broadcastCanBeForgotten(snap.phase))
+    }
+
+    @Test
+    fun a_held_run_that_reached_no_node_still_reads_as_sent() {
+        val store = createBroadcastStore()
+        store.start("1", "deadbeef", before = PriorRun.Held)
+        store.applyDone(BroadcastDonePayload.Error("1", "timed out"))
+        val status = broadcastStatus(store.get("1")!!)
+        assertEquals(BroadcastTone.Sent, status.tone)
+        assertEquals("Given to Bitcoin nodes", status.line)
+    }
 }

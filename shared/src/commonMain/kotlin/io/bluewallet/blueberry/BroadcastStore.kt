@@ -31,6 +31,11 @@ data class BroadcastSnapshot(
     val heldBefore: Boolean = false,
     /** A node confirmed taking this transaction in an earlier run, so this run cannot make it unconfirmed. */
     val ackedBefore: Boolean = false,
+    /**
+     * Every node this held run gave it to refused it. It stays "success" (an earlier run or the signing device
+     * may have published it, so its coins stay locked), but must not read as Sent; [detail] holds the reason.
+     */
+    val refusedByAll: Boolean = false,
 )
 
 /** What an earlier run of the same transaction got, which a new run cannot take back. */
@@ -159,6 +164,7 @@ private class BroadcastStoreImpl : BroadcastStore {
                                     error = null,
                                     detail = payload.error,
                                     acknowledged = cur.snapshot.ackedBefore,
+                                    refusedByAll = payload.refused && !cur.snapshot.ackedBefore,
                                 )
                             else -> cur.snapshot.copy(phase = "error", error = payload.error)
                         }
