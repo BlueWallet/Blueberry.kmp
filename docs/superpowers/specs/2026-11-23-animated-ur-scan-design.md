@@ -36,9 +36,8 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
 6. **Check against what we asked to sign.** `finalizeSignedPsbt(unsignedPsbtHex, signedBytes)`:
    1. parses the scanned PSBT (bitcoin-kmp `Psbt.read`),
    2. requires its unsigned transaction txid to equal ours. Same unsigned txid means the same inputs, outputs, amounts and fee, so nothing on the review can differ from what was built,
-   3. combines it with our unsigned PSBT (`Psbt.combine`), so a signer that strips UTXOs, redeem scripts or derivation data still finalizes,
-   4. finalizes each input that the signer left partially signed: P2WPKH `[sig, pubkey]` witness, P2SH-P2WPKH same witness plus the redeem script `0014<hash160(pubkey)>`, P2PKH `<sig> <pubkey>` scriptSig, P2TR key path `[schnorr sig]` witness. Inputs the signer already finalized are kept,
-   5. extracts the transaction. bitcoin-kmp's `extract()` runs `Transaction.correctlySpends` with standard flags, so a wrong or missing signature fails here.
+   3. builds each input's final scriptSig/witness: the signer's own final fields when it finalized the input, otherwise from its single-sig signature: P2WPKH `[sig, pubkey]` witness, P2SH-P2WPKH the same witness plus the redeem script `0014<hash160(pubkey)>`, P2PKH `<sig> <pubkey>` scriptSig, P2TR key path `[schnorr sig]` witness. The spent coins always come from our unsigned PSBT, so a signer that strips UTXOs, redeem scripts or derivation data still works. (`Psbt.combine` is not used: bitcoin-kmp treats a finalized input merged with our derivation data as not finalized.)
+   4. verifies every input with `Transaction.correctlySpends` and standard script flags, so a wrong or missing signature fails here.
    Errors (never echo PSBT bytes):
    - `This QR isn't a PSBT.`
    - `This PSBT is for a different transaction.`
