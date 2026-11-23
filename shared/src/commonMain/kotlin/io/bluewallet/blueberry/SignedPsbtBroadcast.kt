@@ -100,7 +100,8 @@ suspend fun broadcastSignedPsbt(
         runCatching {
             val stored = withContext(Dispatchers.Default) { storeSignedPsbt(db, runtime, storedTxid, signed) }
             when {
-                !stored -> SignedPsbtSent.Refused(SIGNED_PSBT_GONE)
+                // Hydrating may have found the stored row confirmed: it holds the signed payment, so Back leaves to it.
+                !stored -> SignedPsbtSent.Refused(SIGNED_PSBT_GONE, signedRowStored(db, signed))
                 else ->
                     when (val sent = startSignedPsbtBroadcast(runtime, db, signed, receipt)) {
                         is SignedPsbtSent.Refused -> sent.copy(stored = true)
@@ -108,7 +109,12 @@ suspend fun broadcastSignedPsbt(
                     }
             }
         }.getOrElse {
-            val stored = runCatching { openSend(db, signed.txid)?.txHex == signed.txHex }.getOrDefault(false)
-            SignedPsbtSent.Refused(SIGNED_PSBT_NOT_STORED, stored)
+            SignedPsbtSent.Refused(SIGNED_PSBT_NOT_STORED, runCatching { signedRowStored(db, signed) }.getOrDefault(false))
         }
     }
+
+/** The signed payment's row exists on its txid, open or already confirmed. */
+private fun signedRowStored(
+    db: Database,
+    signed: SignedPsbt,
+): Boolean = db.sends.get(signed.txid)?.txHex == signed.txHex

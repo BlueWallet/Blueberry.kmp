@@ -111,6 +111,24 @@ class SignedPsbtBroadcastTest {
         }
 
     @Test
+    fun a_segwit_spend_found_in_a_block_on_broadcast_says_it_was_stored() = storedOnceInABlock(unsignedTxid)
+
+    @Test
+    fun a_legacy_spend_found_in_a_block_on_broadcast_says_it_was_stored() = storedOnceInABlock("ef".repeat(32))
+
+    /** Storing wrote (or moved) the row before hydrating found it confirmed, so Back must leave to the signed txid. */
+    private fun storedOnceInABlock(signedTxid: String) =
+        runFlow { db, runtime, _ ->
+            storeUnsignedSend(db, runtime, unsignedRow).join()
+            val signed = signedPsbt(signedTxid)
+            db.transactions.upsert(StoredTx(signedTxid, 300, 0, "33".repeat(32), hexToBytes(signed.txHex), -1_141L))
+            val receipt = BroadcastReceipt(unsignedTxid, ADDRESS, "", 50_000, 141)
+            val refused = assertIs<SignedPsbtSent.Refused>(broadcastSignedPsbt(db, runtime, unsignedTxid, signed, receipt))
+            assertEquals(SIGNED_PSBT_GONE, refused.reason)
+            assertTrue(refused.stored)
+        }
+
+    @Test
     fun the_broadcast_starts_held_and_the_payment_can_go_again() =
         runFlow { db, runtime, _ ->
             val requests = listenForRequests(runtime)
