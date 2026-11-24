@@ -253,9 +253,9 @@ Test first, watch it fail, minimal fix, watch it pass.
 
 Spec: "Review round 4 decisions". Test first, watch it fail, minimal fix, watch it pass.
 
-- [ ] `SignedPsbtBroadcastTest`: a signed PSBT's hand-off writes its Tor record (through the runtime's hand-off hook); a run every node then refuses deletes it and the next run starts as a first run; a failing hand-off write stays due.
-- [ ] `SignedPsbtBroadcastTest`: the done hook keeps a Tor note due when persisting the send throws.
-- [ ] `SendHoldsTest`: the broadcast screen's Forget watcher recomputes when the wallet store refreshes, so a row dropped after the failure shows Forget.
-- [ ] `SignedPsbtBroadcastTest`: a throw after the row commits whose status read also fails still says it was saved.
-- [ ] Review loop, full checks, push, reply to and resolve threads, re-request review.
+- [x] `SignedPsbtBroadcastTest`: a signed PSBT's hand-off writes its Tor record (through the runtime's hand-off hook); a run every node then refuses deletes it and the next run starts as a first run; a failing hand-off write stays due.
+- [x] `SignedPsbtBroadcastTest`: the done hook keeps a Tor note due when persisting the send throws.
+- [x] `SendHoldsTest`: the broadcast screen's Forget watcher recomputes when the wallet store refreshes, so a row dropped after the failure shows Forget.
+- [x] `SignedPsbtBroadcastTest`: a throw after the row commits whose status read also fails still says it was saved.
+- [x] Review loop, full checks, push, reply to and resolve threads, re-request review.
 
