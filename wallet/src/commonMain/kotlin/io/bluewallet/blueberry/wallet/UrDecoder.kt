@@ -10,6 +10,7 @@ const val UR_WRONG_TYPE = "This QR code isn't a PSBT."
 const val UR_OTHER_ANIMATION = "This QR code is from a different animation."
 const val UR_CORRUPT = "Couldn't read this QR frame."
 const val UR_CHECKSUM_FAILED = "The scanned parts don't fit together. Start over."
+const val UR_TOO_LARGE = "This QR code is too large."
 
 // 175 KB at our own 175-byte fragments, far past any single-sig PSBT. Each mixed frame shuffles this many
 // indexes on the camera thread, so it stays small.
@@ -19,6 +20,15 @@ private const val MAX_FRAGMENT_COUNT = 1_000
 // A pasted UR isn't held to that, so bigger fragments are refused; with the count cap the message stays small.
 private const val MAX_FRAGMENT_LENGTH = 2_148
 private const val MAX_MESSAGE_LENGTH = MAX_FRAGMENT_COUNT * MAX_FRAGMENT_LENGTH
+
+// Part sizes are checked on the text before decoding, two minimal-bytewords characters per byte. A fountain body
+// is the CBOR array header, four uints of at most five bytes each and the fragment's byte-string header (three
+// bytes up to 2,148), then the fragment; both bodies end in a 4-byte CRC.
+private const val BYTEWORD_CHARS = 2
+private const val CRC_LENGTH = 4
+private const val MAX_FOUNTAIN_HEADER = 24
+private const val MAX_FOUNTAIN_BODY = (MAX_FRAGMENT_LENGTH + MAX_FOUNTAIN_HEADER + CRC_LENGTH) * BYTEWORD_CHARS
+private const val MAX_SINGLE_BODY = (MAX_MESSAGE_LENGTH + CRC_LENGTH) * BYTEWORD_CHARS
 private const val PERCENT = 100
 private const val MAX_ESTIMATE = 0.99
 private const val FOUNTAIN_OVERHEAD = 1.75
@@ -96,6 +106,7 @@ class UrDecoder internal constructor(
         return when {
             part == null -> UrReceive.Ignored(UR_NOT_UR)
             part.type !in acceptedTypes || (type != null && part.type != type) -> UrReceive.Ignored(UR_WRONG_TYPE)
+            part.body.length > (if (seqNum == null) MAX_SINGLE_BODY else MAX_FOUNTAIN_BODY) -> UrReceive.Ignored(UR_TOO_LARGE)
             seqNum == null -> receiveSingle(part)
             else -> receiveFountain(part, seqNum)
         }

@@ -107,13 +107,12 @@ class UrDecoderTest {
 
     @Test
     fun a_message_longer_than_an_int_is_ignored() {
-        val fragment = ByteArray(215_000)
+        val fragment = ByteArray(2_000)
         val messageLength = Int.MAX_VALUE.toLong() + 5
-        val size = fragment.size.toLong()
         val cbor =
-            byteArrayOf(0x85.toByte()) + cborUInt(1) + cborUInt(10_000) + cborUInt(messageLength) + cborUInt(1) +
-                byteArrayOf(0x5a, (size shr 24).toByte(), (size shr 16).toByte(), (size shr 8).toByte(), size.toByte()) + fragment
-        assertEquals(UrReceive.Ignored(UR_CORRUPT), psbtDecoder().receive("ur:crypto-psbt/1-10000/${bytewordsEncodeMinimal(cbor)}"))
+            byteArrayOf(0x85.toByte()) + cborUInt(1) + cborUInt(1_000) + cborUInt(messageLength) + cborUInt(1) +
+                cborBytesHeader(fragment.size) + fragment
+        assertEquals(UrReceive.Ignored(UR_CORRUPT), psbtDecoder().receive("ur:crypto-psbt/1-1000/${bytewordsEncodeMinimal(cbor)}"))
     }
 
     /** A mixed frame makes the decoder shuffle fragment indexes on the camera thread, so the count is capped. */
@@ -157,7 +156,32 @@ class UrDecoderTest {
         assertIs<UrReceive.Progress>(psbtDecoder().receive(claimed(seqLength = 2, fragmentLength = 2_148)))
         assertIs<UrReceive.Progress>(psbtDecoder().receive(claimed(seqLength = 1_000, fragmentLength = 2_148)))
         assertEquals(UrReceive.Ignored(UR_CORRUPT), psbtDecoder().receive(claimed(seqLength = 2, fragmentLength = 2_149)))
-        assertEquals(UrReceive.Ignored(UR_CORRUPT), psbtDecoder().receive(claimed(seqLength = 1, fragmentLength = 100_000)))
+        assertEquals(UrReceive.Ignored(UR_TOO_LARGE), psbtDecoder().receive(claimed(seqLength = 1, fragmentLength = 100_000)))
+    }
+
+    /**
+     * A part's size is checked on its text, before anything is decoded: a fountain body holds at most a 2,148-byte
+     * fragment, a 24-byte header and the CRC, two characters a byte. An undecodable body one byte past that says
+     * too large rather than corrupt, so it was never decoded; one at the limit is decoded (and found corrupt).
+     */
+    @Test
+    fun a_fountain_part_too_long_for_a_capped_fragment_is_ignored_before_it_is_decoded() {
+        val limit = (2_148 + 24 + 4) * 2
+        assertEquals(UrReceive.Ignored(UR_CORRUPT), psbtDecoder().receive("ur:crypto-psbt/3-2/${"ae".repeat(limit / 2)}"))
+        assertEquals(UrReceive.Ignored(UR_TOO_LARGE), psbtDecoder().receive("ur:crypto-psbt/3-2/${"ae".repeat(limit / 2 + 1)}"))
+        assertEquals(UrReceive.Ignored(UR_TOO_LARGE), psbtDecoder().receive("ur:psbt/3-2/${"!".repeat(1_000_000)}"))
+    }
+
+    /** A single-part UR is held to the same 2,148,000-byte message cap as an animation, checked before decoding. */
+    @Test
+    fun a_single_part_message_past_the_cap_is_ignored_before_it_is_decoded() {
+        val atCap = ByteArray(2_148_000) { it.toByte() }
+        assertIs<UrReceive.Complete>(psbtDecoder().receive("ur:crypto-psbt/${bytewordsEncodeMinimal(atCap)}"))
+        val pastCap = ByteArray(2_148_001) { it.toByte() }
+        assertEquals(UrReceive.Ignored(UR_TOO_LARGE), psbtDecoder().receive("ur:crypto-psbt/${bytewordsEncodeMinimal(pastCap)}"))
+        val limit = (2_148_000 + 4) * 2
+        assertEquals(UrReceive.Ignored(UR_CORRUPT), psbtDecoder().receive("ur:psbt/${"ae".repeat(limit / 2)}"))
+        assertEquals(UrReceive.Ignored(UR_TOO_LARGE), psbtDecoder().receive("ur:psbt/${"ae".repeat(limit / 2 + 1)}"))
     }
 
     /** The scan runs on the UI thread: whatever the fountain decoder throws must not escape [UrDecoder.receive]. */
