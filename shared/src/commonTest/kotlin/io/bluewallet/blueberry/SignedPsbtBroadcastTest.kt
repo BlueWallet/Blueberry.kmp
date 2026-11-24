@@ -13,6 +13,8 @@ import io.bluewallet.blueberry.bus.WalletTxsPayload
 import io.bluewallet.blueberry.storage.BroadcastViaRepository
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
+import io.bluewallet.blueberry.storage.PrivateSendRow
+import io.bluewallet.blueberry.storage.PrivateSendsRepository
 import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.storage.SendsRepository
 import io.bluewallet.blueberry.storage.StoredTx
@@ -135,417 +137,51 @@ class SignedPsbtBroadcastTest {
             assertTrue(refused.stored)
         }
 
-    /** No run of ours has given nodes this transaction yet, so the job is a first run and claims nothing at start. */
+    /** Owner decision: a signed PSBT is persisted like a hot send, its Tor record written with its row. */
     @Test
-    fun the_broadcast_starts_as_a_first_run_and_the_payment_can_go_again() =
+    fun storing_a_segwit_spend_records_tor_like_a_hot_send() =
+        runFlow { db, runtime, _ ->
+            storeUnsignedSend(db, runtime, unsignedRow).join()
+            assertNull(db.broadcastVia.get(unsignedTxid), "an unsigned PSBT has no broadcast yet")
+            assertTrue(storeSignedPsbt(db, runtime, unsignedTxid, signedPsbt(unsignedTxid)))
+            assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(unsignedTxid))
+        }
+
+    @Test
+    fun storing_a_legacy_spend_records_tor_on_the_signed_txid() =
+        runFlow { db, runtime, _ ->
+            val (signed, _) = startMoved(db, runtime)
+            assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
+            assertNull(db.broadcastVia.get(unsignedTxid))
+        }
+
+    /** The broadcast is Broadcast again on a stored send, so it starts held as a hot send's does on master. */
+    @Test
+    fun the_broadcast_starts_held_like_a_hot_sends_broadcast_again() =
         runFlow { db, runtime, _ ->
             val requests = listenForRequests(runtime)
             val (signed, id) = startMoved(db, runtime)
             val session = runtime.broadcastStore.sessions().single { it.snapshot.id == id }
-            assertFalse(session.snapshot.heldBefore)
-            assertTrue(broadcastCanBeStopped(session.snapshot))
+            assertTrue(session.snapshot.heldBefore)
+            assertFalse(broadcastCanBeStopped(session.snapshot))
             assertEquals(signed.txid, session.receipt?.txid)
             assertEquals(signed.txHex, requests.single().txHex)
             assertTrue(storedSendCanGoAgain(db, signed.txid))
-            assertNull(db.broadcastVia.get(signed.txid))
-            assertNull(db.broadcastVia.get(unsignedTxid))
         }
 
-    /** Device QA: offline, every Tor dial failed and no node got it. It must not read as Sent or record Tor. */
+    /** A run that reaches no node ends as a hot send's Broadcast again does: held, row and Tor record kept. */
     @Test
-    fun a_broadcast_that_reaches_no_node_is_not_sent_and_records_nothing() =
+    fun a_broadcast_that_reaches_no_node_ends_like_a_hot_sends_broadcast_again() =
         runFlow { db, runtime, _ ->
             val (signed, id) = startMoved(db, runtime)
             runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(id, "broadcast failed after 60 attempts: tor connection closed"))
-            recordStoredSendBroadcast(db, runtime.broadcastStore, id)
             val snap = runtime.broadcastStore.get(id)!!
-            assertEquals("error", snap.phase)
-            assertEquals("Not sent yet", broadcastStatus(snap).title)
-            assertNull(db.broadcastVia.get(signed.txid))
-            assertTrue(storedSendCanGoAgain(db, signed.txid), "the payment stays and can go again")
-            assertFalse(broadcastJobCanBeForgotten(runtime, id), "only its details forget the stored payment")
+            assertEquals("success", snap.phase)
             assertEquals(signed.txHex, db.sends.get(signed.txid)?.txHex)
-        }
-
-    @Test
-    fun a_broadcast_every_node_refuses_is_not_sent_and_records_nothing() =
-        runFlow { db, runtime, _ ->
-            val (signed, id) = startMoved(db, runtime)
-            runtime.broadcastStore.markHandedOff(id)
-            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(id, BROADCAST_REFUSED, refused = true))
-            recordStoredSendBroadcast(db, runtime.broadcastStore, id)
-            assertEquals("Not sent yet", broadcastStatus(runtime.broadcastStore.get(id)!!).title)
-            assertNull(db.broadcastVia.get(signed.txid))
-        }
-
-    @Test
-    fun a_broadcast_a_node_holds_records_tor_on_the_signed_txid() =
-        runFlow { db, runtime, _ ->
-            val (signed, id) = startMoved(db, runtime)
-            runtime.broadcastStore.markHandedOff(id)
-            runtime.broadcastStore.applyDone(BroadcastDonePayload.Ok(id, "1.1.1.1:8333", acknowledged = false))
-            recordStoredSendBroadcast(db, runtime.broadcastStore, id)
-            assertEquals("Sent", broadcastStatus(runtime.broadcastStore.get(id)!!).title)
             assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
-            assertNull(db.broadcastVia.get(unsignedTxid))
-        }
-
-    /**
-     * A hot-wallet send of the same transaction wrote Tor at hand-off, then every node refused it and its row was
-     * dropped as unsent. Its Tor note must go with it, or the next run of that txid starts held and reads as Sent.
-     */
-    @Test
-    fun a_tor_note_from_a_send_every_node_refused_does_not_make_the_next_run_held() =
-        runFlow { db, runtime, _ ->
-            val txid = "ef".repeat(32)
-            val hex = spending(signed = true)
-            runtime.armSendPersist("hot", SendRow(txid, hex, ADDRESS, listOf(PrivateSendCoin(c.txid, c.vout, c.valueSats))))
-            runtime.broadcastStore.start("hot", hex)
-            runtime.broadcastStore.markHandedOff("hot")
-            runtime.persistArmedBroadcast("hot", handedOff = true)
-            assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(txid))
-            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("hot", BROADCAST_REFUSED, refused = true))
-            runtime.persistArmedBroadcast("hot")
-            runtime.broadcastStore.dismiss("hot")
-            assertNull(db.sends.get(txid))
-            assertNull(db.broadcastVia.get(txid))
-            val (_, id) = startMoved(db, runtime)
-            assertFalse(runtime.broadcastStore.get(id)!!.heldBefore)
-        }
-
-    /**
-     * A hot send handed off but its Tor note didn't land, so the note is due; then every node refused this first run.
-     * A wallet refresh landing while the refused send is dropped must not write the note back after it was deleted.
-     */
-    @Test
-    fun a_refresh_while_a_refused_send_is_dropped_does_not_leave_its_tor_note() =
-        runFlow { db, _, _ ->
-            var upsertBroken = true
-            var onSendDelete: () -> Unit = {}
-            val hooked =
-                object : Database by db {
-                    override val broadcastVia =
-                        object : BroadcastViaRepository by db.broadcastVia {
-                            override fun upsert(
-                                txid: String,
-                                via: String,
-                            ) {
-                                if (upsertBroken) error("database is locked")
-                                db.broadcastVia.upsert(txid, via)
-                            }
-                        }
-                    override val sends =
-                        object : SendsRepository by db.sends {
-                            override fun delete(txid: String) {
-                                onSendDelete()
-                                db.sends.delete(txid)
-                            }
-                        }
-                }
-            val runtime = PeersRuntime(hooked)
-            try {
-                val txid = "ef".repeat(32)
-                val hex = spending(signed = true)
-                runtime.armSendPersist("hot", SendRow(txid, hex, ADDRESS, listOf(PrivateSendCoin(c.txid, c.vout, c.valueSats))))
-                runtime.broadcastStore.start("hot", hex, receipt = BroadcastReceipt(txid, ADDRESS, "Rent", 50_000, 141))
-                runtime.broadcastStore.markHandedOff("hot")
-                runCatching { runtime.broadcastHandedOff("hot") }
-                assertNull(db.broadcastVia.get(txid))
-                upsertBroken = false
-                onSendDelete = { runtime.dueTorNotes.write() }
-                runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("hot", BROADCAST_REFUSED, refused = true))
-                runtime.broadcastDone("hot")
-                assertNull(db.sends.get(txid))
-                assertNull(db.broadcastVia.get(txid), "the refused send keeps no Tor note")
-                assertFalse(runtime.dueTorNotes.recorded(txid))
-            } finally {
-                runtime.stop()
-            }
-        }
-
-    /** The Tor note is the only durable proof a node holds it, so a write that fails once is tried again. */
-    @Test
-    fun a_tor_note_that_fails_to_write_once_is_written_on_retry() =
-        runFlow { db, runtime, _ ->
-            val (signed, id) = startMoved(db, runtime)
-            runtime.broadcastStore.markHandedOff(id)
-            runtime.broadcastStore.applyDone(BroadcastDonePayload.Ok(id, "1.1.1.1:8333", acknowledged = false))
-            var failures = 1
-            val flaky =
-                object : Database by db {
-                    override val broadcastVia =
-                        object : BroadcastViaRepository by db.broadcastVia {
-                            override fun upsert(
-                                txid: String,
-                                via: String,
-                            ) {
-                                if (failures-- > 0) error("database is locked")
-                                db.broadcastVia.upsert(txid, via)
-                            }
-                        }
-                }
-            recordStoredSendBroadcast(flaky, runtime.broadcastStore, id)
-            assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
-        }
-
-    /**
-     * A Tor note that still fails after its retries is not dropped: the runtime keeps it due and writes it on the
-     * next wallet refresh, since it's the only proof that survives a restart that a node holds the payment.
-     */
-    @Test
-    fun a_tor_note_that_keeps_failing_is_written_on_the_next_wallet_refresh() =
-        runFlow { db, _, _ ->
-            var broken = true
-            val flaky =
-                object : Database by db {
-                    override val broadcastVia =
-                        object : BroadcastViaRepository by db.broadcastVia {
-                            override fun upsert(
-                                txid: String,
-                                via: String,
-                            ) {
-                                if (broken) error("database is locked")
-                                db.broadcastVia.upsert(txid, via)
-                            }
-                        }
-                }
-            val runtime = PeersRuntime(flaky)
-            try {
-                val (signed, id) = startMoved(db, runtime)
-                runtime.broadcastStore.markHandedOff(id)
-                runtime.broadcastStore.applyDone(BroadcastDonePayload.Ok(id, "1.1.1.1:8333", acknowledged = true))
-                runtime.noteStoredSendBroadcast(id)
-                assertNull(db.broadcastVia.get(signed.txid))
-                broken = false
-                runtime.bus.emit(Event.WalletTxs, WalletTxsPayload(at = 1))
-                assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
-            } finally {
-                runtime.stop()
-            }
-        }
-
-    /**
-     * The app can die while a node already holds the raw transaction, so the Tor note is written at hand-off, as a
-     * hot-wallet send's is. After a restart details then say it was given to nodes and offer no Forget.
-     */
-    @Test
-    fun a_signed_psbt_hand_off_records_tor_before_the_run_ends() =
-        runFlow { db, runtime, _ ->
-            listenForRequests(runtime)
-            val (signed, id) = startMoved(db, runtime)
-            runtime.broadcastStore.markHandedOff(id)
-            runtime.broadcastHandedOff(id)
-            assertEquals("starting", runtime.broadcastStore.get(id)?.phase)
-            assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
-            assertTrue(openSendPublished(db.broadcastVia.get(signed.txid) != null, null))
-        }
-
-    /** A first run every node refused drops the note its hand-off wrote, keeping the row, so the next run isn't held. */
-    @Test
-    fun a_hand_off_note_goes_when_every_node_refuses_a_first_run() =
-        runFlow { db, runtime, _ ->
-            listenForRequests(runtime)
-            val (signed, id) = startMoved(db, runtime)
-            runtime.broadcastStore.markHandedOff(id)
-            runtime.broadcastHandedOff(id)
-            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(id, BROADCAST_REFUSED, refused = true))
-            runtime.broadcastDone(id)
-            assertEquals("Not sent yet", broadcastStatus(runtime.broadcastStore.get(id)!!).title)
-            assertNull(db.broadcastVia.get(signed.txid))
-            assertEquals(signed.txHex, db.sends.get(signed.txid)?.txHex)
-            val receipt = BroadcastReceipt(signed.txid, ADDRESS, "Rent", 50_000, 141)
-            assertNull(sendStoredAgain(runtime, db, signed.txid, receipt))
-            assertFalse(storedSendSession(runtime.broadcastStore, signed.txid)!!.snapshot.heldBefore)
-        }
-
-    /**
-     * A refused first run whose note delete fails leaves the row in SQL. Broadcast again must still start as a first
-     * run, and details must not say nodes were given it, or a run that then reaches no node would read as Sent.
-     */
-    @Test
-    fun a_refused_first_run_whose_note_delete_fails_does_not_make_the_next_run_held() {
-        val db = createSqliteDatabase(":memory:")
-        val noDeletes =
-            object : Database by db {
-                override val broadcastVia =
-                    object : BroadcastViaRepository by db.broadcastVia {
-                        override fun delete(txid: String): Unit = error("database is locked")
-                    }
-            }
-        val runtime = PeersRuntime(noDeletes)
-        try {
-            runBlocking {
-                listenForRequests(runtime)
-                val (signed, id) = startMoved(noDeletes, runtime)
-                runtime.broadcastStore.markHandedOff(id)
-                runtime.broadcastHandedOff(id)
-                runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(id, BROADCAST_REFUSED, refused = true))
-                runtime.broadcastDone(id)
-                assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
-                assertFalse(openSendPublished(runtime.dueTorNotes.recorded(signed.txid), runtime.broadcastStore.get(id)))
-                val receipt = BroadcastReceipt(signed.txid, ADDRESS, "Rent", 50_000, 141)
-                assertNull(sendStoredAgain(runtime, noDeletes, signed.txid, receipt))
-                assertFalse(storedSendSession(runtime.broadcastStore, signed.txid)!!.snapshot.heldBefore)
-            }
-        } finally {
-            runtime.stop()
-            db.close()
-        }
-    }
-
-    /** A note from an earlier run that a node held stays when a later run is refused: that run started held. */
-    @Test
-    fun an_earlier_runs_note_stays_when_a_later_run_is_refused() =
-        runFlow { db, runtime, _ ->
-            listenForRequests(runtime)
-            val (signed, id) = startMoved(db, runtime)
-            runtime.broadcastStore.markHandedOff(id)
-            runtime.broadcastHandedOff(id)
-            runtime.broadcastStore.applyDone(BroadcastDonePayload.Ok(id, "1.1.1.1:8333", acknowledged = false))
-            runtime.broadcastDone(id)
-            val receipt = BroadcastReceipt(signed.txid, ADDRESS, "Rent", 50_000, 141)
-            assertNull(sendStoredAgain(runtime, db, signed.txid, receipt))
-            val again = storedSendSession(runtime.broadcastStore, signed.txid)!!.snapshot.id!!
-            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(again, BROADCAST_REFUSED, refused = true))
-            runtime.broadcastDone(again)
-            assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
-        }
-
-    /** A hand-off note that fails to write stays due; if every node then refuses, it leaves the due set unwritten. */
-    @Test
-    fun a_failed_hand_off_note_stays_due_until_written_or_refused() =
-        runFlow { db, _, _ ->
-            var broken = true
-            val flaky =
-                object : Database by db {
-                    override val broadcastVia =
-                        object : BroadcastViaRepository by db.broadcastVia {
-                            override fun upsert(
-                                txid: String,
-                                via: String,
-                            ) {
-                                if (broken) error("database is locked")
-                                db.broadcastVia.upsert(txid, via)
-                            }
-                        }
-                }
-            val runtime = PeersRuntime(flaky)
-            try {
-                listenForRequests(runtime)
-                val (signed, id) = startMoved(db, runtime)
-                runtime.broadcastStore.markHandedOff(id)
-                runtime.broadcastHandedOff(id)
-                assertNull(db.broadcastVia.get(signed.txid))
-                runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(id, BROADCAST_REFUSED, refused = true))
-                runtime.broadcastDone(id)
-                broken = false
-                runtime.bus.emit(Event.WalletTxs, WalletTxsPayload(at = 1))
-                assertNull(db.broadcastVia.get(signed.txid), "a refused run's note is no longer due")
-                broken = true
-                val receipt = BroadcastReceipt(signed.txid, ADDRESS, "Rent", 50_000, 141)
-                assertNull(sendStoredAgain(runtime, db, signed.txid, receipt))
-                val again = storedSendSession(runtime.broadcastStore, signed.txid)!!.snapshot.id!!
-                runtime.broadcastStore.markHandedOff(again)
-                runtime.broadcastHandedOff(again)
-                broken = false
-                runtime.bus.emit(Event.WalletTxs, WalletTxsPayload(at = 2))
-                assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid), "a held run's note is written on refresh")
-            } finally {
-                runtime.stop()
-            }
-        }
-
-    /**
-     * A node took the payment but its hand-off note never landed, then the app died. After the restart details still
-     * say nodes were given it, Broadcast again starts held, and a run that reaches no node can't drop the note.
-     */
-    @Test
-    fun a_hand_off_note_that_never_landed_survives_a_restart_and_a_run_that_reaches_no_node() =
-        runFlow { db, _, _ ->
-            var broken = true
-            val flaky =
-                object : Database by db {
-                    override val broadcastVia =
-                        object : BroadcastViaRepository by db.broadcastVia {
-                            override fun upsert(
-                                txid: String,
-                                via: String,
-                            ) {
-                                if (broken) error("database is locked")
-                                db.broadcastVia.upsert(txid, via)
-                            }
-                        }
-                }
-            val before = PeersRuntime(flaky)
-            val signed =
-                try {
-                    listenForRequests(before)
-                    val (signed, id) = startMoved(db, before)
-                    before.broadcastStore.markHandedOff(id)
-                    before.broadcastHandedOff(id)
-                    before.broadcastStore.applyDone(BroadcastDonePayload.Ok(id, "1.1.1.1:8333", acknowledged = true))
-                    before.broadcastDone(id)
-                    assertNull(db.broadcastVia.get(signed.txid))
-                    signed
-                } finally {
-                    before.stop()
-                }
-            val runtime = PeersRuntime(flaky)
-            try {
-                listenForRequests(runtime)
-                runtime.walletTxsStore.update { it.copy(utxos = listOf(c), utxosReady = true) }
-                assertTrue(openSendPublished(runtime.dueTorNotes.recorded(signed.txid), null), "details say nodes were given it")
-                val receipt = BroadcastReceipt(signed.txid, ADDRESS, "Rent", 50_000, 141)
-                assertNull(sendStoredAgain(runtime, flaky, signed.txid, receipt))
-                val again = storedSendSession(runtime.broadcastStore, signed.txid)!!.snapshot
-                assertTrue(again.heldBefore, "Broadcast again starts held")
-                runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(again.id!!, "timed out"))
-                runtime.broadcastDone(again.id!!)
-                broken = false
-                runtime.bus.emit(Event.WalletTxs, WalletTxsPayload(at = 1))
-                assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid), "the note is still written")
-            } finally {
-                runtime.stop()
-            }
-        }
-
-    /**
-     * Persisting a hot-wallet send can throw after its row is written (here its own Tor write fails). The done hook
-     * still makes the note due, so the next wallet refresh writes it.
-     */
-    @Test
-    fun the_done_hook_keeps_the_tor_note_due_when_persisting_the_send_throws() =
-        runFlow { db, _, _ ->
-            var broken = true
-            val flaky =
-                object : Database by db {
-                    override val broadcastVia =
-                        object : BroadcastViaRepository by db.broadcastVia {
-                            override fun upsert(
-                                txid: String,
-                                via: String,
-                            ) {
-                                if (broken) error("database is locked")
-                                db.broadcastVia.upsert(txid, via)
-                            }
-                        }
-                }
-            val runtime = PeersRuntime(flaky)
-            try {
-                val txid = "ef".repeat(32)
-                val hex = spending(signed = true)
-                runtime.armSendPersist("hot", SendRow(txid, hex, ADDRESS, listOf(PrivateSendCoin(c.txid, c.vout, c.valueSats))))
-                runtime.broadcastStore.start("hot", hex, receipt = BroadcastReceipt(txid, ADDRESS, "Rent", 50_000, 141))
-                runtime.broadcastStore.markHandedOff("hot")
-                runtime.broadcastStore.applyDone(BroadcastDonePayload.Ok("hot", "1.1.1.1:8333", acknowledged = true))
-                assertTrue(runCatching { runtime.broadcastDone("hot") }.isFailure)
-                assertEquals(hex, db.sends.get(txid)?.txHex)
-                broken = false
-                runtime.bus.emit(Event.WalletTxs, WalletTxsPayload(at = 1))
-                assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(txid))
-            } finally {
-                runtime.stop()
-            }
+            assertTrue(storedSendCanGoAgain(db, signed.txid))
+            assertNull(sendStoredAgain(runtime, db, signed.txid, BroadcastReceipt(signed.txid, ADDRESS, "", 50_000, 141)))
+            assertTrue(storedSendSession(runtime.broadcastStore, signed.txid)!!.snapshot.heldBefore)
         }
 
     /** Stores a legacy spend (its row moves to the signed txid) and starts its broadcast. */
@@ -615,9 +251,9 @@ class SignedPsbtBroadcastTest {
         }
     }
 
-    /** Starting never depends on the Tor record, so a database that can't write it still reports a started payment. */
+    /** The Tor record is written with the row, as a hot send's is; one that fails leaves the row saved but not started. */
     @Test
-    fun a_failed_route_write_after_the_start_still_reports_started() =
+    fun a_failed_tor_write_after_storing_says_saved_but_not_started() =
         runFlow { db, runtime, _ ->
             val requests = listenForRequests(runtime)
             storeUnsignedSend(db, runtime, unsignedRow).join()
@@ -634,9 +270,11 @@ class SignedPsbtBroadcastTest {
                             ): Unit = error("disk full")
                         }
                 }
-            val started = assertIs<SignedPsbtSent.Started>(broadcastSignedPsbt(failingRoute, runtime, unsignedTxid, signed, receipt))
-            assertTrue(runtime.broadcastStore.sessions().any { it.snapshot.id == started.id })
-            assertEquals(signed.txHex, requests.single().txHex)
+            val refused = assertIs<SignedPsbtSent.Refused>(broadcastSignedPsbt(failingRoute, runtime, unsignedTxid, signed, receipt))
+            assertEquals(SIGNED_PSBT_NOT_STARTED, refused.reason)
+            assertTrue(refused.stored)
+            assertEquals(signed.txHex, db.sends.get(signed.txid)?.txHex)
+            assertTrue(requests.isEmpty())
         }
 
     /**
@@ -648,9 +286,9 @@ class SignedPsbtBroadcastTest {
         runFlow { db, _, _ ->
             val failingRead =
                 object : Database by db {
-                    override val broadcastVia =
-                        object : BroadcastViaRepository by db.broadcastVia {
-                            override fun get(txid: String): String? = error("disk I/O error")
+                    override val privateSends =
+                        object : PrivateSendsRepository by db.privateSends {
+                            override fun get(txid: String): PrivateSendRow? = error("disk I/O error")
                         }
                 }
             val runtime = PeersRuntime(failingRead)

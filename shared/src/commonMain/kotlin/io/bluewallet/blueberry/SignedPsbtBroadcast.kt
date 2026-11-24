@@ -27,7 +27,8 @@ sealed class SignedPsbtSent {
 }
 
 /**
- * Replaces the stored unsigned send [storedTxid] with its signed transaction, keeping its coins held.
+ * Replaces the stored unsigned send [storedTxid] with its signed transaction, keeping its coins held, and records
+ * Tor as its broadcast method, as a hot send's persist does.
  * Segwit-only spends keep their txid. Legacy and nested-segwit signatures change it, so the row and its
  * note move to the signed txid. False when the payment is gone (forgotten or confirmed), including when the
  * signed transaction turns out to be in a block already. [onStored] runs once the signed row has committed, before
@@ -55,6 +56,8 @@ fun storeSignedPsbt(
         }
     }
     onStored()
+    // Persisted as a hot send is (persistSendIfBroadcast): the Tor record goes with the row.
+    db.broadcastVia.upsert(signed.txid, BROADCAST_VIA_TOR)
     runtime.storedHolds.clear()
     hydrateWallet(db, runtime.walletTxsStore, runtime.wallet, nowMillis())
     // Hydrating settles the row when the signed txid is already in a block, so it's no longer waiting.
@@ -67,9 +70,8 @@ private fun openSend(
 ): SendRow? = db.sends.get(txid)?.takeIf { it.confirmedInBlock == 0L }
 
 /**
- * Broadcasts a payment [storeSignedPsbt] stored, through the same path as Broadcast again. Its stored row holds
- * its coins whatever the job hears, since the signing device may have published it too. No run of ours has
- * given nodes it yet, so a run that reaches none ends as not sent.
+ * Broadcasts a payment [storeSignedPsbt] stored, through Broadcast again, so it behaves as a stored hot send does:
+ * the job starts held, and its stored row holds its coins whatever the job hears.
  */
 fun startSignedPsbtBroadcast(
     runtime: PeersRuntime,
@@ -82,7 +84,6 @@ fun startSignedPsbtBroadcast(
     return when {
         blocked != null -> SignedPsbtSent.Refused(blocked)
         id == null -> SignedPsbtSent.Refused(BROADCAST_BUSY)
-        // Tor is recorded once a node is given it (the runtime's hand-off hook), not here: this run may reach none.
         else -> SignedPsbtSent.Started(id)
     }
 }

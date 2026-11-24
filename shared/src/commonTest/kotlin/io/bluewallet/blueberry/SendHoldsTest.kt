@@ -315,30 +315,6 @@ class SendHoldsTest {
             assertEquals(id, storedSendSession(runtime.broadcastStore, txid)?.snapshot?.id)
         }
 
-    /** Nothing shows a run of ours ever gave nodes this one, so a run that reaches none must not read as sent. */
-    @Test
-    fun a_stored_send_no_node_was_given_goes_again_as_a_first_run() =
-        runFlow { db, runtime, _ ->
-            val c = coin("ab", 100_000_000)
-            val txid = "cd".repeat(32)
-            storeStored(db, runtime, SendRow(txid, spending(c, signed = true), ADDRESS, listOf(PrivateSendCoin(c.txid, c.vout, c.valueSats))))
-            runtime.walletTxsStore.update { it.copy(utxos = listOf(c), utxosReady = true) }
-            assertNull(sendStoredAgain(runtime, db, txid, BroadcastReceipt(txid, ADDRESS, "", 1_000, 0)))
-            val first = storedSendSession(runtime.broadcastStore, txid)!!.snapshot
-            assertFalse(first.heldBefore)
-            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(first.id!!, "broadcast failed: no alive peers"))
-            assertEquals("error", runtime.broadcastStore.get(first.id!!)?.phase)
-            assertNull(sendStoredAgain(runtime, db, txid, BroadcastReceipt(txid, ADDRESS, "", 1_000, 0)))
-            val second = storedSendSession(runtime.broadcastStore, txid)!!.snapshot
-            assertFalse(second.heldBefore, "a failed run is no evidence a node has it")
-            runtime.broadcastStore.applyDone(BroadcastDonePayload.Ok(second.id!!, "1.1.1.1:8333", acknowledged = false))
-            assertNull(sendStoredAgain(runtime, db, txid, BroadcastReceipt(txid, ADDRESS, "", 1_000, 0)))
-            val third = storedSendSession(runtime.broadcastStore, txid)!!.snapshot
-            assertTrue(third.heldBefore, "a run that finished as sent is")
-            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(third.id!!, "broadcast failed: no alive peers"))
-            assertEquals("success", runtime.broadcastStore.get(third.id!!)?.phase)
-        }
-
     @Test
     fun a_psbt_made_after_an_edit_keeps_the_one_shown_before() =
         runFlow { db, runtime, flow ->
