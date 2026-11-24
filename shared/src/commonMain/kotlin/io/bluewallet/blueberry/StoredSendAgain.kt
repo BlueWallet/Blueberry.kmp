@@ -92,3 +92,9 @@ private fun priorRun(
         else -> PriorRun.None
     }
 }
+
+/** Payment details may say nodes were given it: its Tor record, or a job of it that finished with a node holding it. */
+internal fun openSendPublished(
+    viaRecorded: Boolean,
+    snap: BroadcastSnapshot?,
+): Boolean = viaRecorded || (snap?.phase == "success" && !snap.refusedByAll)
