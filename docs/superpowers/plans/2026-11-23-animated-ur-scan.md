@@ -316,6 +316,6 @@ Spec: "Review round 8 decisions". Test first, watch it fail, minimal fix, watch 
 
 Spec: "Review round 9 decisions". Test first, watch it fail, minimal fix, watch it pass.
 
-- [ ] `UrDecoderTest`: a fountain part whose text is longer than a capped fragment's is ignored as too large without being decoded (an undecodable oversize body says too large, not corrupt); the largest capped part still decodes.
-- [ ] `UrDecoderTest`: a single-part UR whose message is past the cap is ignored as too large; one at the cap completes.
-- [ ] Review loop, full checks, push, reply to and resolve threads, re-request review.
+- [x] `UrDecoderTest`: a fountain part whose text is longer than a capped fragment's is ignored as too large without being decoded (an undecodable oversize body says too large, not corrupt); the largest capped part still decodes.
+- [x] `UrDecoderTest`: a single-part UR whose message is past the cap is ignored as too large; one at the cap completes.
+- [x] Review loop, full checks, push, reply to and resolve threads, re-request review.
