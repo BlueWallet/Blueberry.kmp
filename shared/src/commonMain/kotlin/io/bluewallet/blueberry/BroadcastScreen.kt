@@ -4,6 +4,7 @@ package io.bluewallet.blueberry
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,7 +55,8 @@ fun BroadcastScreen(
     val receipt = SendReceipt(SendRecipient(stored.destination, stored.label), stored.paidSats, stored.feeSats, stored.txid)
     val status = ownedBroadcastStatus(snap, snap.txHex ?: stored.txid)
     val retryable = status.tone == BroadcastTone.Failed || status.resend
-    val forgettable = remember(id, snap.phase, holdsSeen) { broadcastJobCanBeForgotten(runtime, id) }
+    var forgettable by remember(id) { mutableStateOf(false) }
+    LaunchedEffect(id, snap.phase, holdsSeen) { forgettable = broadcastJobForgettable(runtime, id) }
     val shown = if (retryNote != null && retryable) status.copy(line = retryNote!!) else status
     SendBroadcastStep(
         receipt = receipt,

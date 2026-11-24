@@ -90,6 +90,7 @@ fun startSignedPsbtBroadcast(
 /**
  * Stores the signed payment, then starts its broadcast, as one step its caller can't cancel halfway: a stored
  * (possibly moved) row always reaches the start. A throw becomes a refusal that says whether the row was stored.
+ * Both run on [Dispatchers.Default]: they read SQLite and decode the transaction, and the caller is the UI.
  */
 suspend fun broadcastSignedPsbt(
     db: Database,
@@ -99,24 +100,27 @@ suspend fun broadcastSignedPsbt(
     receipt: BroadcastReceipt,
 ): SignedPsbtSent =
     withContext(NonCancellable) {
-        var committed = false
-        runCatching {
-            val stored = withContext(Dispatchers.Default) { storeSignedPsbt(db, runtime, storedTxid, signed) { committed = true } }
-            when {
-                // Hydrating may have found the stored row confirmed: it holds the signed payment, so Back leaves to it.
-                !stored -> SignedPsbtSent.Refused(SIGNED_PSBT_GONE, signedRowStored(db, signed))
-                else ->
-                    when (val sent = startSignedPsbtBroadcast(runtime, db, signed, receipt)) {
-                        is SignedPsbtSent.Refused -> sent.copy(stored = true)
-                        is SignedPsbtSent.Started -> sent
-                    }
+        // NonCancellable outside Default, so the resume onto a cancelled caller's dispatcher still hands back the result.
+        withContext(Dispatchers.Default) {
+            var committed = false
+            runCatching {
+                val stored = storeSignedPsbt(db, runtime, storedTxid, signed) { committed = true }
+                when {
+                    // Hydrating may have found the stored row confirmed: it holds the signed payment, so Back leaves to it.
+                    !stored -> SignedPsbtSent.Refused(SIGNED_PSBT_GONE, signedRowStored(db, signed))
+                    else ->
+                        when (val sent = startSignedPsbtBroadcast(runtime, db, signed, receipt)) {
+                            is SignedPsbtSent.Refused -> sent.copy(stored = true)
+                            is SignedPsbtSent.Started -> sent
+                        }
+                }
+            }.getOrElse { e ->
+                if (e is CancellationException) throw e
+                // The row commits before hydrating and starting, so a later throw leaves it stored: say so, and Back leaves.
+                // A read that fails after the commit is not a rollback, so the commit alone says it was stored.
+                val stored = committed || runCatching { signedRowStored(db, signed) }.getOrDefault(false)
+                SignedPsbtSent.Refused(if (stored) SIGNED_PSBT_NOT_STARTED else SIGNED_PSBT_NOT_STORED, stored)
             }
-        }.getOrElse { e ->
-            if (e is CancellationException) throw e
-            // The row commits before hydrating and starting, so a later throw leaves it stored: say so, and Back leaves.
-            // A read that fails after the commit is not a rollback, so the commit alone says it was stored.
-            val stored = committed || runCatching { signedRowStored(db, signed) }.getOrDefault(false)
-            SignedPsbtSent.Refused(if (stored) SIGNED_PSBT_NOT_STARTED else SIGNED_PSBT_NOT_STORED, stored)
         }
     }
 

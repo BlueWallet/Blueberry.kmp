@@ -483,6 +483,34 @@ class SignedPsbtBroadcastTest {
             assertEquals(signed.txHex, requests.single().txHex)
         }
 
+    /** The review's Broadcast runs on the UI dispatcher, so storing and starting must read SQLite off it. */
+    @Test
+    fun storing_and_starting_read_no_sqlite_on_the_callers_dispatcher() {
+        val db = createSqliteDatabase(":memory:")
+        var ui: UiDispatcher? = null
+        val spy = UiReadSpy(db) { ui }
+        val runtime = PeersRuntime(spy.store)
+        try {
+            runBlocking {
+                listenForRequests(runtime)
+                storeUnsignedSend(spy.store, runtime, unsignedRow).join()
+                runtime.walletTxsStore.update { it.copy(utxos = listOf(c), utxosReady = true) }
+                val signed = signedPsbt(unsignedTxid)
+                val receipt = BroadcastReceipt(unsignedTxid, ADDRESS, "Rent", 50_000, 141)
+                val sent =
+                    onUiDispatcher {
+                        ui = it
+                        broadcastSignedPsbt(spy.store, runtime, unsignedTxid, signed, receipt)
+                    }
+                assertIs<SignedPsbtSent.Started>(sent)
+                assertEquals(emptyList(), spy.uiReads)
+            }
+        } finally {
+            runtime.stop()
+            db.close()
+        }
+    }
+
     /** Starting never depends on the Tor record, so a database that can't write it still reports a started payment. */
     @Test
     fun a_failed_route_write_after_the_start_still_reports_started() =

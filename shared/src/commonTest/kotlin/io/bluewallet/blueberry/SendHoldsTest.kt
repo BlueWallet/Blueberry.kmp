@@ -11,10 +11,12 @@ import io.bluewallet.blueberry.bus.BroadcastDonePayload
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
 import io.bluewallet.blueberry.storage.SendRow
+import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.PsbtSendResult
 import io.bluewallet.blueberry.wallet.hexToBytes
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -124,6 +126,33 @@ class SendHoldsTest {
             assertNull(db.sends.get(txid))
             assertTrue(runtime.reservedOutpoints().isEmpty())
         }
+
+    /** The broadcast screen asks on the UI dispatcher; filling the stored-holds cache must read SQLite off it. */
+    @Test
+    fun forget_is_asked_without_reading_sqlite_on_the_callers_dispatcher() {
+        val db = createSqliteDatabase(":memory:")
+        var ui: UiDispatcher? = null
+        val spy = UiReadSpy(db) { ui }
+        val runtime = PeersRuntime(spy.store)
+        try {
+            runBlocking {
+                val txid = "ab".repeat(32)
+                runtime.broadcastStore.start("1", "aa", receipt = BroadcastReceipt(txid, ADDRESS, "", 1_000, 141))
+                runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("1", "refused", refused = true))
+                runtime.storedHolds.clear()
+                val forgettable =
+                    onUiDispatcher {
+                        ui = it
+                        broadcastJobForgettable(runtime, "1")
+                    }
+                assertTrue(forgettable)
+                assertEquals(emptyList(), spy.uiReads)
+            }
+        } finally {
+            runtime.stop()
+            db.close()
+        }
+    }
 
     /**
      * The open broadcast screen can score the failure before the refused send's row is dropped (row still held, so
