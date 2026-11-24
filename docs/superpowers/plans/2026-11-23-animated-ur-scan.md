@@ -263,7 +263,7 @@ Spec: "Review round 4 decisions". Test first, watch it fail, minimal fix, watch 
 
 Spec: "Review round 5 decisions". Test first, watch it fail, minimal fix, watch it pass.
 
-- [ ] `DueTorNotesTest`: a dropped note whose delete throws is deleted on the next refresh.
-- [ ] `DueTorNotesTest`: a refresh already writing a due note when a drop arrives on another thread doesn't leave the note written.
-- [ ] `DueTorNotesTest`: a note made due again after a failed delete stays written.
-- [ ] Review loop, full checks, push, reply to and resolve threads, re-request review.
+- [x] `DueTorNotesTest`: a dropped note whose delete throws is deleted on the next refresh.
+- [x] `DueTorNotesTest`: a refresh already writing a due note when a drop arrives on another thread doesn't leave the note written.
+- [x] `DueTorNotesTest`: a note made due again after a failed delete stays written.
+- [x] Review loop, full checks, push, reply to and resolve threads, re-request review.
