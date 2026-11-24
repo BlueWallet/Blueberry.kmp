@@ -208,6 +208,31 @@ class SignedPsbtBroadcastTest {
             assertFalse(runtime.broadcastStore.get(id)!!.heldBefore)
         }
 
+    /** The Tor note is the only durable proof a node holds it, so a write that fails once is tried again. */
+    @Test
+    fun a_tor_note_that_fails_to_write_once_is_written_on_retry() =
+        runFlow { db, runtime, _ ->
+            val (signed, id) = startMoved(db, runtime)
+            runtime.broadcastStore.markHandedOff(id)
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Ok(id, "1.1.1.1:8333", acknowledged = false))
+            var failures = 1
+            val flaky =
+                object : Database by db {
+                    override val broadcastVia =
+                        object : BroadcastViaRepository by db.broadcastVia {
+                            override fun upsert(
+                                txid: String,
+                                via: String,
+                            ) {
+                                if (failures-- > 0) error("database is locked")
+                                db.broadcastVia.upsert(txid, via)
+                            }
+                        }
+                }
+            recordStoredSendBroadcast(flaky, runtime.broadcastStore, id)
+            assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
+        }
+
     /** Stores a legacy spend (its row moves to the signed txid) and starts its broadcast. */
     private suspend fun startMoved(
         db: Database,

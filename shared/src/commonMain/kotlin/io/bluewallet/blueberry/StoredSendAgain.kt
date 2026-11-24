@@ -63,6 +63,7 @@ fun sendStoredAgain(
 /**
  * Notes that job [id] went over Tor, on its stored payment, once it finished with a node holding it. Written here
  * rather than at the start, so a run that reached no node (or that every node refused) never claims Tor.
+ * It is the only durable proof a node holds the payment, so a failed write is tried again before giving up.
  */
 fun recordStoredSendBroadcast(
     db: Database,
@@ -72,7 +73,17 @@ fun recordStoredSendBroadcast(
     val session = store.sessions().find { it.snapshot.id == id } ?: return
     val txid = session.receipt?.txid ?: return
     val sent = session.snapshot.phase == "success" && !session.snapshot.refusedByAll
-    if (sent && unconfirmedSendOpen(db, txid)) db.broadcastVia.upsert(txid, BROADCAST_VIA_TOR)
+    if (sent && unconfirmedSendOpen(db, txid)) retryWrite { db.broadcastVia.upsert(txid, BROADCAST_VIA_TOR) }
+}
+
+private const val ROUTE_WRITE_ATTEMPTS = 3
+
+/** Runs [write], again on a throw, up to [ROUTE_WRITE_ATTEMPTS] times; the last failure is rethrown. */
+private fun retryWrite(write: () -> Unit) {
+    repeat(ROUTE_WRITE_ATTEMPTS - 1) {
+        if (runCatching(write).isSuccess) return
+    }
+    write()
 }
 
 /**
