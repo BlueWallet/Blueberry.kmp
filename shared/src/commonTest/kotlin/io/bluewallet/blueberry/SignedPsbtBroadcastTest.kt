@@ -11,6 +11,7 @@ import io.bluewallet.blueberry.bus.BroadcastDonePayload
 import io.bluewallet.blueberry.storage.BroadcastViaRepository
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
+import io.bluewallet.blueberry.storage.SendsRepository
 import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.storage.TxPaymentLabelRow
@@ -294,6 +295,49 @@ class SignedPsbtBroadcastTest {
             val started = assertIs<SignedPsbtSent.Started>(broadcastSignedPsbt(failingRoute, runtime, unsignedTxid, signed, receipt))
             assertTrue(runtime.broadcastStore.sessions().any { it.snapshot.id == started.id })
             assertEquals(signed.txHex, requests.single().txHex)
+        }
+
+    /**
+     * The signed row committed before the start threw, so the review must not say it couldn't be saved: it says
+     * the start failed and, being stored, Back leaves to the signed txid.
+     */
+    @Test
+    fun a_start_that_throws_after_storing_says_the_payment_was_saved() =
+        runFlow { db, runtime, _ ->
+            storeUnsignedSend(db, runtime, unsignedRow).join()
+            runtime.walletTxsStore.update { it.copy(utxos = listOf(c), utxosReady = true) }
+            val signed = signedPsbt(unsignedTxid)
+            val receipt = BroadcastReceipt(unsignedTxid, ADDRESS, "Rent", 50_000, 141)
+            val failingRead =
+                object : Database by db {
+                    override val broadcastVia =
+                        object : BroadcastViaRepository by db.broadcastVia {
+                            override fun get(txid: String): String? = error("disk I/O error")
+                        }
+                }
+            val refused = assertIs<SignedPsbtSent.Refused>(broadcastSignedPsbt(failingRead, runtime, unsignedTxid, signed, receipt))
+            assertEquals(SIGNED_PSBT_NOT_STARTED, refused.reason)
+            assertTrue(refused.stored)
+            assertEquals(signed.txHex, db.sends.get(signed.txid)?.txHex)
+        }
+
+    /** Nothing was stored, so the review keeps the unsaved text and Back stays in the flow. */
+    @Test
+    fun a_store_that_throws_before_the_row_commits_says_it_was_not_saved() =
+        runFlow { db, runtime, _ ->
+            storeUnsignedSend(db, runtime, unsignedRow).join()
+            val signed = signedPsbt(unsignedTxid)
+            val receipt = BroadcastReceipt(unsignedTxid, ADDRESS, "Rent", 50_000, 141)
+            val failingWrite =
+                object : Database by db {
+                    override val sends =
+                        object : SendsRepository by db.sends {
+                            override fun upsert(row: SendRow): Unit = error("disk full")
+                        }
+                }
+            val refused = assertIs<SignedPsbtSent.Refused>(broadcastSignedPsbt(failingWrite, runtime, unsignedTxid, signed, receipt))
+            assertEquals(SIGNED_PSBT_NOT_STORED, refused.reason)
+            assertFalse(refused.stored)
         }
 
     /** The review leaves to the signed txid after this, since the payment is no longer waiting to be signed. */

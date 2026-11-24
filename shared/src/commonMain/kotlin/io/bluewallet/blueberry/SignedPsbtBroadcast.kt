@@ -5,12 +5,14 @@ import io.bluewallet.blueberry.parse.movePaymentLabel
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.wallet.SignedPsbt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 const val SIGNED_PSBT_GONE = "This payment is no longer waiting to be signed."
 const val SIGNED_PSBT_NOT_STORED = "The signed payment couldn't be saved. Try again."
+const val SIGNED_PSBT_NOT_STARTED = "The signed payment is saved, but its broadcast couldn't start. Try again."
 
 sealed class SignedPsbtSent {
     data class Started(
@@ -84,7 +86,7 @@ fun startSignedPsbtBroadcast(
 
 /**
  * Stores the signed payment, then starts its broadcast, as one step its caller can't cancel halfway: a stored
- * (possibly moved) row always reaches the start. A throw becomes a refusal.
+ * (possibly moved) row always reaches the start. A throw becomes a refusal that says whether the row was stored.
  */
 suspend fun broadcastSignedPsbt(
     db: Database,
@@ -105,8 +107,11 @@ suspend fun broadcastSignedPsbt(
                         is SignedPsbtSent.Started -> sent
                     }
             }
-        }.getOrElse {
-            SignedPsbtSent.Refused(SIGNED_PSBT_NOT_STORED, runCatching { signedRowStored(db, signed) }.getOrDefault(false))
+        }.getOrElse { e ->
+            if (e is CancellationException) throw e
+            // The row commits before hydrating and starting, so a later throw leaves it stored: say so, and Back leaves.
+            val stored = runCatching { signedRowStored(db, signed) }.getOrDefault(false)
+            SignedPsbtSent.Refused(if (stored) SIGNED_PSBT_NOT_STARTED else SIGNED_PSBT_NOT_STORED, stored)
         }
     }
 
