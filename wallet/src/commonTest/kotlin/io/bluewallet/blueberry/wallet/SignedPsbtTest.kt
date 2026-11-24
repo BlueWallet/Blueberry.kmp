@@ -278,6 +278,27 @@ class SignedPsbtTest {
         }
     }
 
+    /** Both signatures are valid, each for the other input: every input must carry the signature made for it. */
+    @Test
+    fun rejects_a_two_input_psbt_whose_signatures_are_swapped_between_inputs() {
+        for (case in listOf(p2pkh, p2shP2wpkh, p2wpkh, p2tr)) {
+            val (built, keyOf) = buildTwoInputs(case)
+            var psbt = Psbt.read(hexToBytes(built.psbtHex)).right!!
+            psbt.global.tx.txIn.forEachIndexed { input, txIn ->
+                val keyIndex = keyOf.getValue(txIn.outPoint.txid.toString())
+                val priv = master.derivePrivateKey(KeyPath("m/${case.purpose}'/0'/0'/0/$keyIndex")).privateKey
+                psbt = psbt.sign(priv, input).right!!.psbt
+            }
+            val signedBytes = psbt.bytes()
+            val sigs = (0..1).map { input -> inputEntries(signedBytes, input).single { it.first[0] == signatureKey(case.type) }.second }
+            val swapped =
+                rewriteInputs(signedBytes, count = 2) { input, entries ->
+                    entries.map { (k, v) -> if (k[0] == signatureKey(case.type)) k to sigs[1 - input] else k to v }
+                }
+            assertEquals(SignedPsbtCheck.Failed(PSBT_BAD_SIGNATURES), finalizeSignedPsbt(built.psbtHex, swapped), case.type.name)
+        }
+    }
+
     @Test
     fun rejects_a_signature_from_the_wrong_key() {
         for (case in listOf(p2pkh, p2wpkh, p2tr)) {
@@ -386,6 +407,23 @@ class SignedPsbtTest {
         fun rewriteFirstInput(
             psbt: ByteArray,
             edit: (List<Pair<ByteArray, ByteArray>>) -> List<Pair<ByteArray, ByteArray>>,
+        ): ByteArray = rewriteInputs(psbt, count = 1) { _, entries -> edit(entries) }
+
+        /** The key-value map of input [index] of a raw PSBT. */
+        fun inputEntries(
+            psbt: ByteArray,
+            index: Int,
+        ): List<Pair<ByteArray, ByteArray>> {
+            var found = emptyList<Pair<ByteArray, ByteArray>>()
+            rewriteInputs(psbt, count = index + 1) { input, entries -> entries.also { if (input == index) found = it } }
+            return found
+        }
+
+        /** Rewrites the key-value maps of the first [count] inputs of a raw PSBT, leaving every other byte as it was. */
+        fun rewriteInputs(
+            psbt: ByteArray,
+            count: Int,
+            edit: (Int, List<Pair<ByteArray, ByteArray>>) -> List<Pair<ByteArray, ByteArray>>,
         ): ByteArray {
             var at = 5
 
@@ -410,11 +448,12 @@ class SignedPsbtTest {
             }
             entries()
             val inputStart = at
-            val input = entries()
 
             fun writeCompact(n: Int): ByteArray = if (n < 0xfd) byteArrayOf(n.toByte()) else byteArrayOf(0xfd.toByte(), n.toByte(), (n shr 8).toByte())
             val rewritten =
-                edit(input).fold(ByteArray(0)) { acc, (k, v) -> acc + writeCompact(k.size) + k + writeCompact(v.size) + v } + byteArrayOf(0)
+                (0 until count).fold(ByteArray(0)) { out, input ->
+                    edit(input, entries()).fold(out) { acc, (k, v) -> acc + writeCompact(k.size) + k + writeCompact(v.size) + v } + byteArrayOf(0)
+                }
             return psbt.copyOfRange(0, inputStart) + rewritten + psbt.copyOfRange(at, psbt.size)
         }
     }
