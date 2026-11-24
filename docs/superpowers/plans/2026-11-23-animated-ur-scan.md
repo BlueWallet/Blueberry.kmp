@@ -307,7 +307,7 @@ watch it fail, minimal fix, watch it pass.
 
 Spec: "Review round 8 decisions". Test first, watch it fail, minimal fix, watch it pass.
 
-- [ ] `SignedPsbtReviewTest`: a second Broadcast tap while a run is in flight starts nothing (`OneBroadcast`).
-- [ ] `UrDecoderTest`: a fountain part whose fragment is longer than a QR holds is ignored; the message is capped at 1,000 such fragments.
-- [ ] `UrDecoderTest`: a throw from the fountain decoder fails the scan instead of escaping `receive`.
-- [ ] Review loop, full checks, push, reply to and resolve threads, re-request review.
+- [x] `SignedPsbtReviewTest`: a second Broadcast tap while a run is in flight starts nothing (`OneBroadcast`).
+- [x] `UrDecoderTest`: a fountain part whose fragment is longer than a QR holds is ignored; the message is capped at 1,000 such fragments.
+- [x] `UrDecoderTest`: a throw from the fountain decoder fails the scan instead of escaping `receive`.
+- [x] Review loop, full checks, push, reply to and resolve threads, re-request review.
