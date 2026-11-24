@@ -290,3 +290,15 @@ Spec: "Review round 7 decisions". Test first, watch it fail, minimal fix, watch 
 - [x] `DueTorNotesTest`: a pending drop whose send was forgotten is still deleted, and a due note whose send closed is still written.
 - [x] `SignedPsbtBroadcastTest`/`SendHoldsTest`: `dropRefusedSend` deletes through `DueTorNotes.drop`, so a refresh can't write the note back.
 - [x] Review loop, full checks, push, reply to and resolve threads, re-request review.
+
+### Task 14: Owner decision, hot-send parity (2026-11-24)
+
+Spec: "Owner decision: hot-send parity". The owner chose hot-send parity over offline accuracy. The Tor-note
+bookkeeping of tasks 8 to 13 goes; the scan, check, finalize, store, Back and threading work stays. Test first,
+watch it fail, minimal fix, watch it pass.
+
+- [ ] `SignedPsbtBroadcastTest`: storing a signed PSBT writes its Tor record with the row (segwit and moved legacy txid), as `persistSendIfBroadcast` does for a hot send.
+- [ ] `SignedPsbtBroadcastTest`: the signed PSBT's broadcast starts held like a hot send's Broadcast again, and a run that reaches no node stays held with its row and Tor record. `sendStoredAgain` back to master.
+- [ ] Remove `DueTorNotes`/`StoredSendTorNote.kt`, the runtime's Tor-note hooks, `dropRefusedSend`, `BroadcastViaRepository.delete`, and their tests.
+- [ ] Remove `refusedByAll` ("Not accepted"), the details' `openSendPublished`/"may not be published yet" explainer, and the broadcast screen's stored-payment Forget check and watchers, with their tests.
+- [ ] Review loop, full checks, push, PR comment on the decision, resolve moot threads, re-request review.
