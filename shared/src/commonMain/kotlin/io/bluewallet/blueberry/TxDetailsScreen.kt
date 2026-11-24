@@ -309,7 +309,7 @@ private fun OpenSendActions(
     val txid = row.txid
     val open = remember(txid, snap) { unconfirmedSendOpen(db, txid) }
     val signed = remember(txid, snap) { storedSendCanGoAgain(db, txid) }
-    val (psbt, viaRecorded) = remember(txid, snap) { storedSendIsPsbt(db, txid) to (db.broadcastVia.get(txid) != null) }
+    val (psbt, viaRecorded) = remember(txid, snap) { storedSendIsPsbt(db, txid) to runtime.dueTorNotes.recorded(txid) }
     var confirming by remember(txid) { mutableStateOf(false) }
     var note by remember(txid) { mutableStateOf<String?>(null) }
     var forgetting by remember(txid) { mutableStateOf(false) }

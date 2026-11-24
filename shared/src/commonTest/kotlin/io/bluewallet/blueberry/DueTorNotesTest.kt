@@ -12,7 +12,9 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** The due set and the `broadcast_via` row move together, so a dropped note can't come back or be left behind. */
 class DueTorNotesTest {
@@ -107,6 +109,49 @@ class DueTorNotesTest {
             flaky.deleteBroken = false
             notes.write()
             assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(txid))
+        }
+
+    /** A drop whose delete fails is no Tor record, though its row is still there: no node holds the payment. */
+    @Test
+    fun a_pending_drop_reads_as_no_tor_record() =
+        withOpenSend { db, flaky ->
+            val notes = DueTorNotes(flaky.store)
+            notes.add(txid)
+            assertTrue(notes.recorded(txid))
+            flaky.deleteBroken = true
+            notes.drop(txid)
+            assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(txid))
+            assertFalse(notes.recorded(txid))
+        }
+
+    /** A restart can't bring the dropped note back: the pending drop is stored, and the next refresh deletes it. */
+    @Test
+    fun a_pending_drop_survives_a_restart_until_its_delete_lands() =
+        withOpenSend { db, flaky ->
+            val before = DueTorNotes(flaky.store)
+            before.add(txid)
+            flaky.deleteBroken = true
+            before.drop(txid)
+            val restarted = DueTorNotes(flaky.store)
+            assertFalse(restarted.recorded(txid), "the row still stands, but reads as no record")
+            flaky.deleteBroken = false
+            restarted.write()
+            assertNull(db.broadcastVia.get(txid))
+            db.broadcastVia.upsert(txid, BROADCAST_VIA_TOR)
+            assertTrue(DueTorNotes(flaky.store).recorded(txid), "a landed delete leaves no stored drop behind")
+        }
+
+    /** A later run a node holds cancels the pending drop for good, so a restart doesn't hide its note. */
+    @Test
+    fun a_held_run_cancels_a_pending_drop_across_a_restart() =
+        withOpenSend { db, flaky ->
+            val before = DueTorNotes(flaky.store)
+            before.add(txid)
+            flaky.deleteBroken = true
+            before.drop(txid)
+            before.add(txid)
+            assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(txid))
+            assertTrue(DueTorNotes(flaky.store).recorded(txid))
         }
 
     private companion object {

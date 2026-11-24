@@ -17,11 +17,13 @@ import io.bluewallet.blueberry.storage.SendRow
 import io.bluewallet.blueberry.storage.SendsRepository
 import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.storage.TxPaymentLabelRow
+import io.bluewallet.blueberry.storage.createSqliteDatabase
 import io.bluewallet.blueberry.wallet.SignedPsbt
 import io.bluewallet.blueberry.wallet.hexToBytes
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -305,6 +307,41 @@ class SignedPsbtBroadcastTest {
             assertNull(sendStoredAgain(runtime, db, signed.txid, receipt))
             assertFalse(storedSendSession(runtime.broadcastStore, signed.txid)!!.snapshot.heldBefore)
         }
+
+    /**
+     * A refused first run whose note delete fails leaves the row in SQL. Broadcast again must still start as a first
+     * run, and details must not say nodes were given it, or a run that then reaches no node would read as Sent.
+     */
+    @Test
+    fun a_refused_first_run_whose_note_delete_fails_does_not_make_the_next_run_held() {
+        val db = createSqliteDatabase(":memory:")
+        val noDeletes =
+            object : Database by db {
+                override val broadcastVia =
+                    object : BroadcastViaRepository by db.broadcastVia {
+                        override fun delete(txid: String): Unit = error("database is locked")
+                    }
+            }
+        val runtime = PeersRuntime(noDeletes)
+        try {
+            runBlocking {
+                listenForRequests(runtime)
+                val (signed, id) = startMoved(noDeletes, runtime)
+                runtime.broadcastStore.markHandedOff(id)
+                runtime.broadcastHandedOff(id)
+                runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(id, BROADCAST_REFUSED, refused = true))
+                runtime.broadcastDone(id)
+                assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
+                assertFalse(openSendPublished(runtime.dueTorNotes.recorded(signed.txid), runtime.broadcastStore.get(id)))
+                val receipt = BroadcastReceipt(signed.txid, ADDRESS, "Rent", 50_000, 141)
+                assertNull(sendStoredAgain(runtime, noDeletes, signed.txid, receipt))
+                assertFalse(storedSendSession(runtime.broadcastStore, signed.txid)!!.snapshot.heldBefore)
+            }
+        } finally {
+            runtime.stop()
+            db.close()
+        }
+    }
 
     /** A note from an earlier run that a node held stays when a later run is refused: that run started held. */
     @Test
