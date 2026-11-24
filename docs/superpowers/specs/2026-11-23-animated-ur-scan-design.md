@@ -76,6 +76,22 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
     PSBT), and the fountain decoder keeps at most 4 × fragment-count mixed parts, so one frame's work stays small
     enough for the camera thread.
   - An unexpected throw while checking a scanned PSBT shows `This QR isn't a PSBT.` instead of the exception text.
+- **Device QA decisions (GLaDOS, 2026-11-24).** Offline, a signed-PSBT broadcast that reached no node
+  (`given=0/3`, every Tor dial failed) showed "Sent · Given to Bitcoin nodes", and details said "Broadcast over
+  Tor". Cause: `sendStoredAgain` started every stored payment with no live job as `PriorRun.Held`, so a run that
+  failed without a hand-off became `success`/unacknowledged, and the Tor record was written as soon as the job started.
+  - `sendStoredAgain` starts a run as held only on evidence that one of our runs gave nodes the transaction: an
+    earlier job of it that finished as sent, or its Tor record. Otherwise (a signed PSBT's first broadcast, or one
+    that never reached a node) it is an ordinary first run: Stop shows until a node has it, and a run that reaches
+    no node, or that every node refuses, ends as "Not sent yet". The stored row, not the job, holds the coins, so
+    that outcome frees nothing and Broadcast again stays.
+  - A stored payment's Tor record is written when a run finishes with a node holding it, not when it starts. This
+    replaces the round-2 decision above.
+  - Details say a signed payment "was given to Bitcoin nodes" on its Tor record or a job of it that finished as
+    sent; a running or failed job no longer counts.
+  - Back on the review leaves the flow to the PSBT QR (decision 11), instead of returning to the scanner.
+  - Not changed here: after a restart Home showed a pending self-send as −0.00010000 while details said
+    −0.00000423. That row comes from `pendingWalletRows`/`inferPendingSendNetDelta` on master, not from this change.
 
 ## Units
 

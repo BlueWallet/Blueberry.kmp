@@ -29,7 +29,8 @@ private fun storedSignedHex(
 
 /**
  * Gives a stored unconfirmed payment to nodes again, from the transaction rather than the closed send screen.
- * The job starts handed off: earlier nodes may hold it, so nothing this run hears makes it unsent.
+ * Once one of our runs gave nodes it, the job starts handed off: those nodes may hold it, so nothing this run
+ * hears makes it unsent. Otherwise it is a first run, and one that reaches no node is not sent.
  * Null when it started or is already running; otherwise why it did not.
  */
 fun sendStoredAgain(
@@ -53,9 +54,41 @@ fun sendStoredAgain(
         val tried = existing?.snapshot?.triedPeers ?: emptySet()
         existing?.snapshot?.id?.let { store.dismiss(it) }
         val id = nextUiBroadcastId()
-        val acked = existing?.snapshot?.let { it.phase == "success" && it.acknowledged } == true
-        store.start(id, hex, tried, existing?.receipt ?: receipt, if (acked) PriorRun.Acked else PriorRun.Held)
+        store.start(id, hex, tried, existing?.receipt ?: receipt, priorRun(db, txid, existing))
         requestBroadcast(runtime, BroadcastRequestPayload(id, hex, tried))
     }
     return blocked
+}
+
+/**
+ * Notes that job [id] went over Tor, on its stored payment, once it finished with a node holding it. Written here
+ * rather than at the start, so a run that reached no node (or that every node refused) never claims Tor.
+ */
+fun recordStoredSendBroadcast(
+    db: Database,
+    store: BroadcastStore,
+    id: String,
+) {
+    val session = store.sessions().find { it.snapshot.id == id } ?: return
+    val txid = session.receipt?.txid ?: return
+    val sent = session.snapshot.phase == "success" && !session.snapshot.refusedByAll
+    if (sent && unconfirmedSendOpen(db, txid)) db.broadcastVia.upsert(txid, BROADCAST_VIA_TOR)
+}
+
+/**
+ * What earlier runs of stored payment [txid] got: held only on evidence that one of ours gave nodes it, a job that
+ * finished as sent or its Tor record. A signed PSBT is stored before its first run, so a stored row alone is not.
+ */
+private fun priorRun(
+    db: Database,
+    txid: String,
+    existing: BroadcastSession?,
+): PriorRun {
+    val snap = existing?.snapshot
+    val sent = snap?.phase == "success"
+    return when {
+        sent && snap.acknowledged -> PriorRun.Acked
+        sent || db.broadcastVia.get(txid) != null -> PriorRun.Held
+        else -> PriorRun.None
+    }
 }

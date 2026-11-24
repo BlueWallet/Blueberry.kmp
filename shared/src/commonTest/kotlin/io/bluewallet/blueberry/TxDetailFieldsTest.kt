@@ -193,4 +193,15 @@ class TxDetailFieldsTest {
         assertTrue("not be published yet" in waiting, waiting)
         assertTrue("was given to Bitcoin nodes" in openSendExplainer(signed = true, published = true))
     }
+
+    @Test
+    fun only_a_tor_record_or_a_sent_job_counts_as_published() {
+        val job = { phase: String -> BroadcastSnapshot(id = "1", phase = phase) }
+        assertTrue(openSendPublished(viaRecorded = true, snap = null))
+        assertTrue(openSendPublished(viaRecorded = false, snap = job("success")))
+        assertFalse(openSendPublished(viaRecorded = false, snap = null))
+        assertFalse(openSendPublished(viaRecorded = false, snap = job("error")), "a job that reached no node")
+        assertFalse(openSendPublished(viaRecorded = false, snap = job("attempt")), "a job still running")
+        assertFalse(openSendPublished(viaRecorded = false, snap = job("success").copy(refusedByAll = true)))
+    }
 }

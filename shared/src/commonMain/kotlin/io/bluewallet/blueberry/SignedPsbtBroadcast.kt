@@ -62,8 +62,9 @@ private fun openSend(
 ): SendRow? = db.sends.get(txid)?.takeIf { it.confirmedInBlock == 0L }
 
 /**
- * Broadcasts a payment [storeSignedPsbt] stored, through the same path as Broadcast again: the job starts
- * handed off, since the signing device may have published it too, so no outcome frees its coins.
+ * Broadcasts a payment [storeSignedPsbt] stored, through the same path as Broadcast again. Its stored row holds
+ * its coins whatever the job hears, since the signing device may have published it too. No run of ours has
+ * given nodes it yet, so a run that reaches none ends as not sent.
  */
 fun startSignedPsbtBroadcast(
     runtime: PeersRuntime,
@@ -76,12 +77,8 @@ fun startSignedPsbtBroadcast(
     return when {
         blocked != null -> SignedPsbtSent.Refused(blocked)
         id == null -> SignedPsbtSent.Refused(BROADCAST_BUSY)
-        else -> {
-            // Like a hot-wallet send, so transaction details name Tor as how it was published. The job has started,
-            // so a failed note only loses that line; it must not turn a started payment into a refusal.
-            runCatching { db.broadcastVia.upsert(signed.txid, BROADCAST_VIA_TOR) }
-            SignedPsbtSent.Started(id)
-        }
+        // Tor is recorded once a node holds it (recordStoredSendBroadcast), not here: this run may reach none.
+        else -> SignedPsbtSent.Started(id)
     }
 }
 

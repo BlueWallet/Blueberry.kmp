@@ -6,6 +6,8 @@ import io.bluewallet.bip324.TxInput
 import io.bluewallet.bip324.TxOutput
 import io.bluewallet.bip324.bytesToHex
 import io.bluewallet.bip324.encodeTransaction
+import io.bluewallet.blueberry.broadcast.BROADCAST_REFUSED
+import io.bluewallet.blueberry.bus.BroadcastDonePayload
 import io.bluewallet.blueberry.storage.BroadcastViaRepository
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
@@ -128,24 +130,72 @@ class SignedPsbtBroadcastTest {
             assertTrue(refused.stored)
         }
 
+    /** No run of ours has given nodes this transaction yet, so the job is a first run and claims nothing at start. */
     @Test
-    fun the_broadcast_starts_held_and_the_payment_can_go_again() =
+    fun the_broadcast_starts_as_a_first_run_and_the_payment_can_go_again() =
         runFlow { db, runtime, _ ->
             val requests = listenForRequests(runtime)
-            storeUnsignedSend(db, runtime, unsignedRow).join()
-            val signed = signedPsbt("ef".repeat(32))
-            assertTrue(storeSignedPsbt(db, runtime, unsignedTxid, signed))
-            runtime.walletTxsStore.update { it.copy(utxos = listOf(c), utxosReady = true) }
-            val receipt = BroadcastReceipt(unsignedTxid, ADDRESS, "Rent", 50_000, 141)
-            val started = assertIs<SignedPsbtSent.Started>(startSignedPsbtBroadcast(runtime, db, signed, receipt))
-            val session = runtime.broadcastStore.sessions().single { it.snapshot.id == started.id }
-            assertTrue(session.snapshot.heldBefore)
+            val (signed, id) = startMoved(db, runtime)
+            val session = runtime.broadcastStore.sessions().single { it.snapshot.id == id }
+            assertFalse(session.snapshot.heldBefore)
+            assertTrue(broadcastCanBeStopped(session.snapshot))
             assertEquals(signed.txid, session.receipt?.txid)
             assertEquals(signed.txHex, requests.single().txHex)
             assertTrue(storedSendCanGoAgain(db, signed.txid))
+            assertNull(db.broadcastVia.get(signed.txid))
+            assertNull(db.broadcastVia.get(unsignedTxid))
+        }
+
+    /** Device QA: offline, every Tor dial failed and no node got it. It must not read as Sent or record Tor. */
+    @Test
+    fun a_broadcast_that_reaches_no_node_is_not_sent_and_records_nothing() =
+        runFlow { db, runtime, _ ->
+            val (signed, id) = startMoved(db, runtime)
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(id, "broadcast failed after 60 attempts: tor connection closed"))
+            recordStoredSendBroadcast(db, runtime.broadcastStore, id)
+            val snap = runtime.broadcastStore.get(id)!!
+            assertEquals("error", snap.phase)
+            assertEquals("Not sent yet", broadcastStatus(snap).title)
+            assertNull(db.broadcastVia.get(signed.txid))
+            assertTrue(storedSendCanGoAgain(db, signed.txid), "the payment stays and can go again")
+            assertEquals(signed.txHex, db.sends.get(signed.txid)?.txHex)
+        }
+
+    @Test
+    fun a_broadcast_every_node_refuses_is_not_sent_and_records_nothing() =
+        runFlow { db, runtime, _ ->
+            val (signed, id) = startMoved(db, runtime)
+            runtime.broadcastStore.markHandedOff(id)
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(id, BROADCAST_REFUSED, refused = true))
+            recordStoredSendBroadcast(db, runtime.broadcastStore, id)
+            assertEquals("Not sent yet", broadcastStatus(runtime.broadcastStore.get(id)!!).title)
+            assertNull(db.broadcastVia.get(signed.txid))
+        }
+
+    @Test
+    fun a_broadcast_a_node_holds_records_tor_on_the_signed_txid() =
+        runFlow { db, runtime, _ ->
+            val (signed, id) = startMoved(db, runtime)
+            runtime.broadcastStore.markHandedOff(id)
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Ok(id, "1.1.1.1:8333", acknowledged = false))
+            recordStoredSendBroadcast(db, runtime.broadcastStore, id)
+            assertEquals("Sent", broadcastStatus(runtime.broadcastStore.get(id)!!).title)
             assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
             assertNull(db.broadcastVia.get(unsignedTxid))
         }
+
+    /** Stores a legacy spend (its row moves to the signed txid) and starts its broadcast. */
+    private suspend fun startMoved(
+        db: Database,
+        runtime: PeersRuntime,
+    ): Pair<SignedPsbt, String> {
+        storeUnsignedSend(db, runtime, unsignedRow).join()
+        val signed = signedPsbt("ef".repeat(32))
+        assertTrue(storeSignedPsbt(db, runtime, unsignedTxid, signed))
+        runtime.walletTxsStore.update { it.copy(utxos = listOf(c), utxosReady = true) }
+        val receipt = BroadcastReceipt(unsignedTxid, ADDRESS, "Rent", 50_000, 141)
+        return signed to assertIs<SignedPsbtSent.Started>(startSignedPsbtBroadcast(runtime, db, signed, receipt)).id
+    }
 
     /**
      * Back during Broadcast cancels the review's scope; the store and the start must still run as one step.
@@ -169,11 +219,11 @@ class SignedPsbtBroadcastTest {
             assertEquals(signed.txHex, db.sends.get(signed.txid)?.txHex)
             val started = assertIs<SignedPsbtSent.Started>(result)
             val session = runtime.broadcastStore.sessions().single { it.snapshot.id == started.id }
-            assertTrue(session.snapshot.heldBefore)
+            assertEquals("starting", session.snapshot.phase)
             assertEquals(signed.txHex, requests.single().txHex)
         }
 
-    /** The route is noted after the job starts; failing to note it must not report a started payment as unsaved. */
+    /** Starting never depends on the Tor record, so a database that can't write it still reports a started payment. */
     @Test
     fun a_failed_route_write_after_the_start_still_reports_started() =
         runFlow { db, runtime, _ ->

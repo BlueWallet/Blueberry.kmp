@@ -332,7 +332,7 @@ private fun OpenSendActions(
     Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
         session?.let { BroadcastStatusCard(broadcastStatus(it.snapshot)) }
         Text(
-            text = note ?: openSendExplainer(signed, published = viaRecorded || session != null),
+            text = note ?: openSendExplainer(signed, published = openSendPublished(viaRecorded, session?.snapshot)),
             color = BwColors.InkMuted,
             fontFamily = BwFontFamily,
             fontSize = BwType.LabelSize,
@@ -408,6 +408,12 @@ private fun toggleLabelEdit(
         update(true, saved)
     }
 }
+
+/** A broadcast of it was recorded: its Tor record, or a job of it that finished with a node holding it. */
+internal fun openSendPublished(
+    viaRecorded: Boolean,
+    snap: BroadcastSnapshot?,
+): Boolean = viaRecorded || (snap?.phase == "success" && !snap.refusedByAll)
 
 /** [published]: a broadcast of it was recorded. A signed PSBT is stored before its broadcast starts. */
 internal fun openSendExplainer(

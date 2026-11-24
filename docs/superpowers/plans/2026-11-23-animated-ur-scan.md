@@ -226,3 +226,15 @@ One commit per fix, each test first (watch it fail, minimal fix, watch it pass).
 - [ ] `SignedPsbtScanTest`: an unexpected throw while checking maps to `PSBT_NOT_A_PSBT`.
 - [ ] `SignedPsbtBroadcastTest`: `broadcastSignedPsbt` finishes storing and starting when its caller is cancelled, and turns a throw into a refusal. Screens disable Back while it runs and exit to the signed txid once stored.
 - [ ] Review loop, full checks, push, reply to and resolve threads.
+
+### Task 8: Device QA round (2026-11-24)
+
+Spec: "Device QA decisions". Test first, watch it fail, minimal fix, watch it pass.
+
+- [ ] `SignedPsbtBroadcastTest`: a signed PSBT's broadcast starts as a first run (not held, Stop offered) and writes no Tor record at start; a run that reaches no node ends "Not sent yet" with no Tor record; a run a node holds records Tor on the signed txid (`recordStoredSendBroadcast`).
+- [ ] `SendHoldsTest`: a stored send with a Tor record goes again held; one with neither a record nor a sent job starts as a first run; a job that finished as sent makes the next run held.
+- [ ] `TxDetailFieldsTest`: `openSendPublished` is true for a Tor record or a finished sent job, false for a running or failed one.
+- [ ] Wire `recordStoredSendBroadcast` into the runtime's broadcast done hook; drop the start-time Tor write.
+- [ ] Review Back leaves to the PSBT QR (Compose wiring; compile check).
+- [ ] Review loop, full checks (`check`, `ktlintCheck`, `detekt`, Android compile), push, threads, QA reply, re-request review.
+

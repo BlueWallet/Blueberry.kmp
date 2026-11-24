@@ -253,7 +253,10 @@ class PeersRuntime(
                 bus,
                 broadcastStore,
                 onHandedOff = { id -> persistArmedBroadcast(id, handedOff = true) },
-                onDone = { id -> persistArmedBroadcast(id) },
+                onDone = { id ->
+                    persistArmedBroadcast(id)
+                    runCatching { recordStoredSendBroadcast(db, broadcastStore, id) }
+                },
             )
         unbind = {
             unbindPeers()
