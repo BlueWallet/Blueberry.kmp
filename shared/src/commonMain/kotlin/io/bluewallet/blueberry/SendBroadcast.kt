@@ -134,6 +134,7 @@ fun broadcastListRows(
             status =
                 when {
                     snap.phase == "error" -> "Not sent"
+                    snap.phase == "success" && snap.refusedByAll -> "Not accepted"
                     snap.phase == "success" -> "Sent"
                     else -> "Broadcasting"
                 },

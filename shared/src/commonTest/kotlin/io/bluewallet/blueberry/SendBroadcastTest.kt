@@ -150,6 +150,16 @@ class SendBroadcastTest {
         assertFalse(broadcastCanBeForgotten(snap.phase))
     }
 
+    /** Home's row must agree with the broadcast screen: a held run every node refused is not Sent. */
+    @Test
+    fun a_held_run_every_node_refused_is_listed_as_not_accepted() {
+        val store = createBroadcastStore()
+        store.start("1", "deadbeef", receipt = BroadcastReceipt("txid-held", "bc1qheld", "", 1, 1), before = PriorRun.Held)
+        store.applyDone(BroadcastDonePayload.Error("1", "Every node that got it refused it.", refused = true))
+        assertEquals("Not accepted", broadcastStatus(store.get("1")!!).title)
+        assertEquals("Not accepted", broadcastListRows(store.sessions(), emptySet()).single().status)
+    }
+
     @Test
     fun a_held_run_that_reached_no_node_still_reads_as_sent() {
         val store = createBroadcastStore()
