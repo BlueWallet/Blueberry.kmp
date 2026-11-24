@@ -95,6 +95,17 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
   - Back on the review leaves the flow to the PSBT QR (decision 11), instead of returning to the scanner.
   - Not changed here: after a restart Home showed a pending self-send as −0.00010000 while details said
     −0.00000423. That row comes from `pendingWalletRows`/`inferPendingSendNetDelta` on master, not from this change.
+- **Review round 4 decisions (GLaDOS and CodeRabbit, 2026-11-24).**
+  - A stored payment's Tor record is written at hand-off, as a hot-wallet send's is, since the app can die while a
+    node already holds the raw transaction; after a restart details then say it was given to nodes and offer no
+    Forget. This replaces the Device QA decision above. A write that fails stays due like the one at the end. If the
+    run then ends with no node holding it (every node refused, or none reached) and it started as a first run, so no
+    earlier record existed, the record is deleted and leaves the due set, so the next run doesn't start held.
+  - The runtime's hand-off and done hooks note the Tor record even when persisting the send throws.
+  - The broadcast screen recomputes whether Forget shows whenever the wallet store refreshes, not only when the job
+    phase changes, so a hot send's row dropped just after its failure is shown on the screen already open.
+  - `broadcastSignedPsbt` remembers that the signed row committed, so a later throw whose status read also fails
+    still says the payment was saved (`SIGNED_PSBT_NOT_STARTED`, `stored = true`).
 
 ## Units
 

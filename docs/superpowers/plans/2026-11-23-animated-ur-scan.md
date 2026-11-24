@@ -248,3 +248,14 @@ Test first, watch it fail, minimal fix, watch it pass.
 - [x] `SignedPsbtBroadcastTest`: a Tor note whose write still fails after its retries stays due in the runtime and is written on the next `WalletTxs` refresh.
 - [x] Spec testing bullet: the signed PSBT's broadcast starts as a first run, not held.
 - [x] Review loop, full checks, push, reply to and resolve threads, re-request review.
+
+### Task 10: GLaDOS and CodeRabbit review round 4 (2026-11-24)
+
+Spec: "Review round 4 decisions". Test first, watch it fail, minimal fix, watch it pass.
+
+- [ ] `SignedPsbtBroadcastTest`: a signed PSBT's hand-off writes its Tor record (through the runtime's hand-off hook); a run every node then refuses deletes it and the next run starts as a first run; a failing hand-off write stays due.
+- [ ] `SignedPsbtBroadcastTest`: the done hook keeps a Tor note due when persisting the send throws.
+- [ ] `SendHoldsTest`: the broadcast screen's Forget watcher recomputes when the wallet store refreshes, so a row dropped after the failure shows Forget.
+- [ ] `SignedPsbtBroadcastTest`: a throw after the row commits whose status read also fails still says it was saved.
+- [ ] Review loop, full checks, push, reply to and resolve threads, re-request review.
+
