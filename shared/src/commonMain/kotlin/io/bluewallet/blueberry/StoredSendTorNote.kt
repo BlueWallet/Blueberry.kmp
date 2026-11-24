@@ -6,9 +6,9 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.concurrent.atomics.update
 
 /**
- * Notes that job [id] went over Tor, on its stored payment, once it finished with a node holding it. Written here
- * rather than at the start, so a run that reached no node (or that every node refused) never claims Tor.
- * It is the only durable proof a node holds the payment, so a failed write is tried again before giving up.
+ * Notes that job [id] went over Tor, on its stored payment, once it finished with a node holding it. Never at the
+ * start, so a run that reached no node never claims Tor. It is the only durable proof a node holds the payment, so a
+ * failed write is tried again before giving up.
  */
 fun recordStoredSendBroadcast(
     db: Database,
@@ -37,11 +37,35 @@ internal fun writeStoredSendTorNote(
 }
 
 /**
+ * The runtime's hook for a node being given job [id]'s transaction. A stored payment (a signed PSBT) is not armed,
+ * so its Tor note is written here, as a hot-wallet send's is: the app can die while a node holds the transaction.
+ */
+internal fun PeersRuntime.broadcastHandedOff(id: String) {
+    persistArmedBroadcast(id, handedOff = true)
+    val session = broadcastStore.sessions().find { it.snapshot.id == id } ?: return
+    val txid = session.receipt?.txid ?: return
+    if (session.snapshot.handedOff) dueTorNotes.add(txid)
+}
+
+/** The runtime's hook for job [id] finishing. */
+internal fun PeersRuntime.broadcastDone(id: String) {
+    persistArmedBroadcast(id)
+    noteStoredSendBroadcast(id)
+}
+
+/**
  * Writes the Tor note of job [id] once it finished with a node holding it. A note whose write still fails stays
- * due and is written again on every wallet refresh until it lands.
+ * due and is written again on every wallet refresh until it lands. A first run that ended with no node holding it
+ * (every node refused, or none was reached) started with no note, so the one its hand-off wrote is deleted.
  */
 internal fun PeersRuntime.noteStoredSendBroadcast(id: String) {
-    storedSendHeldTxid(broadcastStore, id)?.let(dueTorNotes::add)
+    val held = storedSendHeldTxid(broadcastStore, id)
+    val session = broadcastStore.sessions().find { it.snapshot.id == id }
+    val txid = session?.receipt?.txid
+    when {
+        held != null -> dueTorNotes.add(held)
+        txid != null && session.snapshot.phase == "error" && !session.snapshot.heldBefore -> dueTorNotes.drop(txid)
+    }
 }
 
 /**
@@ -63,8 +87,15 @@ internal class DueTorNotes(
     /** Writes every due note; a note whose payment is no longer open is dropped as written. */
     fun write() {
         for (txid in due.load()) {
+            if (txid !in due.load()) continue
             if (runCatching { writeStoredSendTorNote(db, txid) }.isSuccess) due.update { it - txid }
         }
+    }
+
+    /** No node holds [txid] after all: its note is no longer due, and the one written is deleted while it's open. */
+    fun drop(txid: String) {
+        due.update { it - txid }
+        if (unconfirmedSendOpen(db, txid)) db.broadcastVia.delete(txid)
     }
 }
 

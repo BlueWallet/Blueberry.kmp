@@ -79,7 +79,7 @@ fun startSignedPsbtBroadcast(
     return when {
         blocked != null -> SignedPsbtSent.Refused(blocked)
         id == null -> SignedPsbtSent.Refused(BROADCAST_BUSY)
-        // Tor is recorded once a node holds it (recordStoredSendBroadcast), not here: this run may reach none.
+        // Tor is recorded once a node is given it (the runtime's hand-off hook), not here: this run may reach none.
         else -> SignedPsbtSent.Started(id)
     }
 }

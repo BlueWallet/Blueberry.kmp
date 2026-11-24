@@ -256,11 +256,8 @@ class PeersRuntime(
             bindBroadcastEvents(
                 bus,
                 broadcastStore,
-                onHandedOff = { id -> persistArmedBroadcast(id, handedOff = true) },
-                onDone = { id ->
-                    persistArmedBroadcast(id)
-                    noteStoredSendBroadcast(id)
-                },
+                onHandedOff = ::broadcastHandedOff,
+                onDone = ::broadcastDone,
             )
         unbind = {
             unbindPeers()
