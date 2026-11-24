@@ -113,6 +113,20 @@ fun dropUnsentSend(
     hydrateWallet(db, store, wallet, nowMillis())
 }
 
+/**
+ * Drops a send no node holds: its unconfirmed rows and the Tor note its hand-off wrote, so no later run of [txid]
+ * starts held on it. Forgetting goes through [dropUnsentSend] and keeps the note, since nodes may hold that one.
+ */
+fun dropRefusedSend(
+    db: Database,
+    store: WalletTxsStore,
+    wallet: Wallet?,
+    txid: String,
+) {
+    if (unconfirmedSendOpen(db, txid)) db.broadcastVia.delete(txid)
+    dropUnsentSend(db, store, wallet, txid)
+}
+
 fun persistSendAndRefresh(
     db: Database,
     store: WalletTxsStore,

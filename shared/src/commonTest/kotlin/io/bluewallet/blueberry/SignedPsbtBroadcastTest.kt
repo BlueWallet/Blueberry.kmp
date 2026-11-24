@@ -185,6 +185,29 @@ class SignedPsbtBroadcastTest {
             assertNull(db.broadcastVia.get(unsignedTxid))
         }
 
+    /**
+     * A hot-wallet send of the same transaction wrote Tor at hand-off, then every node refused it and its row was
+     * dropped as unsent. Its Tor note must go with it, or the next run of that txid starts held and reads as Sent.
+     */
+    @Test
+    fun a_tor_note_from_a_send_every_node_refused_does_not_make_the_next_run_held() =
+        runFlow { db, runtime, _ ->
+            val txid = "ef".repeat(32)
+            val hex = spending(signed = true)
+            runtime.armSendPersist("hot", SendRow(txid, hex, ADDRESS, listOf(PrivateSendCoin(c.txid, c.vout, c.valueSats))))
+            runtime.broadcastStore.start("hot", hex)
+            runtime.broadcastStore.markHandedOff("hot")
+            runtime.persistArmedBroadcast("hot", handedOff = true)
+            assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(txid))
+            runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("hot", BROADCAST_REFUSED, refused = true))
+            runtime.persistArmedBroadcast("hot")
+            runtime.broadcastStore.dismiss("hot")
+            assertNull(db.sends.get(txid))
+            assertNull(db.broadcastVia.get(txid))
+            val (_, id) = startMoved(db, runtime)
+            assertFalse(runtime.broadcastStore.get(id)!!.heldBefore)
+        }
+
     /** Stores a legacy spend (its row moves to the signed txid) and starts its broadcast. */
     private suspend fun startMoved(
         db: Database,

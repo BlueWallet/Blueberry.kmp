@@ -354,6 +354,8 @@ interface BroadcastViaRepository {
         via: String,
     )
 
+    fun delete(txid: String)
+
     fun list(): List<BroadcastViaRow>
 }
 
