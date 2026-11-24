@@ -110,14 +110,16 @@ class SignedPsbtTest {
 
     @Test
     fun keeps_inputs_the_signer_finalized_and_stripped() {
-        for (case in listOf(p2shP2wpkh, p2wpkh)) {
+        for (case in listOf(p2shP2wpkh, p2wpkh, p2tr)) {
             val built = build(case)
             val partial = signed(case, built.psbtHex)
-            val (pub, sig) =
-                partial.inputs[0]
-                    .partialSigs.entries
-                    .single()
-            val finalized = partial.finalizeWitnessInput(0, ScriptWitness(listOf(sig, pub.value))).right!!
+            val signedInput = partial.inputs[0]
+            val witness =
+                signedInput.taprootKeySignature?.let { ScriptWitness(listOf(it)) }
+                    ?: signedInput.partialSigs.entries
+                        .single()
+                        .let { (pub, sig) -> ScriptWitness(listOf(sig, pub.value)) }
+            val finalized = partial.finalizeWitnessInput(0, witness).right!!
             val input = finalized.inputs[0]
             val stripped =
                 finalized.copy(
@@ -125,6 +127,7 @@ class SignedPsbtTest {
                 )
             val ok = assertIs<SignedPsbtCheck.Ok>(finalizeSignedPsbt(built.psbtHex, stripped.bytes()), case.type.name)
             assertEquals(unsignedTxid(hexToBytes(built.unsignedTxHex)), unsignedTxid(hexToBytes(ok.signed.txHex)))
+            assertEquals(true, isSignedTxHex(ok.signed.txHex), case.type.name)
         }
     }
 
@@ -143,21 +146,18 @@ class SignedPsbtTest {
 
     @Test
     fun reads_final_scripts_the_signer_left_beside_other_fields() {
-        for (case in listOf(p2pkh, p2shP2wpkh, p2wpkh)) {
+        for (case in listOf(p2pkh, p2shP2wpkh, p2wpkh, p2tr)) {
             for (keepCoins in listOf(true, false)) {
                 val built = build(case)
                 val signedBytes = signed(case, built.psbtHex).bytes()
                 val finalized =
                     rewriteFirstInput(signedBytes) { entries ->
-                        val partial = entries.single { it.first[0] == PSBT_IN_PARTIAL_SIG }
-                        val sig = partial.second
-                        val pub = partial.first.copyOfRange(1, partial.first.size)
                         val kept =
                             entries.filter {
-                                it.first[0] != PSBT_IN_PARTIAL_SIG &&
+                                it.first[0] != signatureKey(case.type) &&
                                     (keepCoins || (it.first[0] != PSBT_IN_NON_WITNESS_UTXO && it.first[0] != PSBT_IN_WITNESS_UTXO))
                             }
-                        kept + finalScripts(case.type, pub, sig)
+                        kept + signerFinalized(case.type, entries)
                     }
                 val ok = assertIs<SignedPsbtCheck.Ok>(finalizeSignedPsbt(built.psbtHex, finalized), "${case.type.name} coins=$keepCoins")
                 assertEquals(true, isSignedTxHex(ok.signed.txHex), case.type.name)
@@ -173,13 +173,26 @@ class SignedPsbtTest {
         assertNull(inputSignatures(magic + byteArrayOf(0x00, 0x01, 0x02), 1))
     }
 
-    /** BIP174 final scriptSig (0x07) / final witness (0x08) entries for a single-sig spend. */
+    /** The entry type a signer leaves its signature under: a tap key sig (0x13) for P2TR, a partial sig (0x02) otherwise. */
+    private fun signatureKey(type: AddressScriptType): Byte = if (type == AddressScriptType.P2TR) PSBT_IN_TAP_KEY_SIG else PSBT_IN_PARTIAL_SIG
+
+    /** The final scripts a signer that finalizes leaves in place of the signature in [entries]. */
+    private fun signerFinalized(
+        type: AddressScriptType,
+        entries: List<Pair<ByteArray, ByteArray>>,
+    ): List<Pair<ByteArray, ByteArray>> {
+        val signature = entries.single { it.first[0] == signatureKey(type) }
+        return finalScripts(type, signature.first.copyOfRange(1, signature.first.size), signature.second)
+    }
+
+    /** BIP174 final scriptSig (0x07) / final witness (0x08) entries for a single-sig spend; a P2TR key path has no [pub]. */
     private fun finalScripts(
         type: AddressScriptType,
         pub: ByteArray,
         sig: ByteArray,
     ): List<Pair<ByteArray, ByteArray>> {
         val witness = byteArrayOf(2, sig.size.toByte()) + sig + byteArrayOf(pub.size.toByte()) + pub
+        if (type == AddressScriptType.P2TR) return listOf(byteArrayOf(PSBT_IN_FINAL_WITNESS) to byteArrayOf(1, sig.size.toByte()) + sig)
         val redeem = Script.write(Script.pay2wpkh(fr.acinq.bitcoin.PublicKey(ByteVector(pub))))
         return when (type) {
             AddressScriptType.P2WPKH -> listOf(byteArrayOf(PSBT_IN_FINAL_WITNESS) to witness)
@@ -261,13 +274,11 @@ class SignedPsbtTest {
 
     @Test
     fun rejects_a_signer_finalized_input_whose_signature_does_not_commit_to_the_outputs() {
-        for (case in listOf(p2pkh, p2shP2wpkh, p2wpkh)) {
+        for (case in listOf(p2pkh, p2shP2wpkh, p2wpkh, p2tr)) {
             val built = build(case)
             val finalized =
                 rewriteFirstInput(signedWithSighash(case, built.psbtHex, SIGHASH_NONE)) { entries ->
-                    val partial = entries.single { it.first[0] == PSBT_IN_PARTIAL_SIG }
-                    val pub = partial.first.copyOfRange(1, partial.first.size)
-                    entries.filter { it.first[0] != PSBT_IN_PARTIAL_SIG } + finalScripts(case.type, pub, partial.second)
+                    entries.filter { it.first[0] != signatureKey(case.type) } + signerFinalized(case.type, entries)
                 }
             assertEquals(SignedPsbtCheck.Failed(PSBT_BAD_SIGNATURES), finalizeSignedPsbt(built.psbtHex, finalized), case.type.name)
         }
@@ -331,6 +342,7 @@ class SignedPsbtTest {
         const val PSBT_IN_SIGHASH_TYPE: Byte = 0x03
         const val PSBT_IN_FINAL_SCRIPTSIG: Byte = 0x07
         const val PSBT_IN_FINAL_WITNESS: Byte = 0x08
+        const val PSBT_IN_TAP_KEY_SIG: Byte = 0x13
         const val SIGHASH_ALL = 0x01
         const val SIGHASH_NONE = 0x02
         const val SIGHASH_SINGLE = 0x03
