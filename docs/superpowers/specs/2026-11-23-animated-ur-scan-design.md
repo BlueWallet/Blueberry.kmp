@@ -86,7 +86,8 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
     no node, or that every node refuses, ends as "Not sent yet". The stored row, not the job, holds the coins, so
     that outcome frees nothing and Broadcast again stays.
   - A stored payment's Tor record is written when a run finishes with a node holding it, not when it starts. This
-    replaces the round-2 decision above.
+    replaces the round-2 decision above. It is the only proof that survives a restart that a node holds the payment,
+    so a write that still fails after its retries stays due in the runtime and is written on the next wallet refresh.
   - Details say a signed payment "was given to Bitcoin nodes" on its Tor record or a job of it that finished as
     sent; a running or failed job no longer counts.
   - The broadcast screen offers no "Forget this transaction" for a failed run of a payment that is still stored:
