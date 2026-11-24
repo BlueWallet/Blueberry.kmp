@@ -154,6 +154,23 @@ class DueTorNotesTest {
             assertTrue(DueTorNotes(flaky.store).recorded(txid))
         }
 
+    /** A due note is proof a node holds the payment: a restart keeps it due and recorded until its write lands. */
+    @Test
+    fun a_due_note_whose_write_fails_survives_a_restart_as_recorded() =
+        withOpenSend { db, flaky ->
+            flaky.upsertBroken = true
+            val before = DueTorNotes(flaky.store)
+            before.add(txid)
+            assertNull(db.broadcastVia.get(txid))
+            assertTrue(before.recorded(txid), "a due note is a record before its row lands")
+            val restarted = DueTorNotes(flaky.store)
+            assertTrue(restarted.recorded(txid), "and after a restart")
+            flaky.upsertBroken = false
+            restarted.write()
+            assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(txid))
+            assertNull(db.keyValue.get(TOR_NOTE_DUE_KEY), "a landed write leaves no stored due note behind")
+        }
+
     private companion object {
         const val ADDRESS = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
         const val RACE_WAIT_MS = 300L

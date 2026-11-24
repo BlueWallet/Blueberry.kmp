@@ -406,6 +406,60 @@ class SignedPsbtBroadcastTest {
         }
 
     /**
+     * A node took the payment but its hand-off note never landed, then the app died. After the restart details still
+     * say nodes were given it, Broadcast again starts held, and a run that reaches no node can't drop the note.
+     */
+    @Test
+    fun a_hand_off_note_that_never_landed_survives_a_restart_and_a_run_that_reaches_no_node() =
+        runFlow { db, _, _ ->
+            var broken = true
+            val flaky =
+                object : Database by db {
+                    override val broadcastVia =
+                        object : BroadcastViaRepository by db.broadcastVia {
+                            override fun upsert(
+                                txid: String,
+                                via: String,
+                            ) {
+                                if (broken) error("database is locked")
+                                db.broadcastVia.upsert(txid, via)
+                            }
+                        }
+                }
+            val before = PeersRuntime(flaky)
+            val signed =
+                try {
+                    listenForRequests(before)
+                    val (signed, id) = startMoved(db, before)
+                    before.broadcastStore.markHandedOff(id)
+                    before.broadcastHandedOff(id)
+                    before.broadcastStore.applyDone(BroadcastDonePayload.Ok(id, "1.1.1.1:8333", acknowledged = true))
+                    before.broadcastDone(id)
+                    assertNull(db.broadcastVia.get(signed.txid))
+                    signed
+                } finally {
+                    before.stop()
+                }
+            val runtime = PeersRuntime(flaky)
+            try {
+                listenForRequests(runtime)
+                runtime.walletTxsStore.update { it.copy(utxos = listOf(c), utxosReady = true) }
+                assertTrue(openSendPublished(runtime.dueTorNotes.recorded(signed.txid), null), "details say nodes were given it")
+                val receipt = BroadcastReceipt(signed.txid, ADDRESS, "Rent", 50_000, 141)
+                assertNull(sendStoredAgain(runtime, flaky, signed.txid, receipt))
+                val again = storedSendSession(runtime.broadcastStore, signed.txid)!!.snapshot
+                assertTrue(again.heldBefore, "Broadcast again starts held")
+                runtime.broadcastStore.applyDone(BroadcastDonePayload.Error(again.id!!, "timed out"))
+                runtime.broadcastDone(again.id!!)
+                broken = false
+                runtime.bus.emit(Event.WalletTxs, WalletTxsPayload(at = 1))
+                assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid), "the note is still written")
+            } finally {
+                runtime.stop()
+            }
+        }
+
+    /**
      * Persisting a hot-wallet send can throw after its row is written (here its own Tor write fails). The done hook
      * still makes the note due, so the next wallet refresh writes it.
      */
@@ -541,11 +595,7 @@ class SignedPsbtBroadcastTest {
      */
     @Test
     fun a_start_that_throws_after_storing_says_the_payment_was_saved() =
-        runFlow { db, runtime, _ ->
-            storeUnsignedSend(db, runtime, unsignedRow).join()
-            runtime.walletTxsStore.update { it.copy(utxos = listOf(c), utxosReady = true) }
-            val signed = signedPsbt(unsignedTxid)
-            val receipt = BroadcastReceipt(unsignedTxid, ADDRESS, "Rent", 50_000, 141)
+        runFlow { db, _, _ ->
             val failingRead =
                 object : Database by db {
                     override val broadcastVia =
@@ -553,10 +603,19 @@ class SignedPsbtBroadcastTest {
                             override fun get(txid: String): String? = error("disk I/O error")
                         }
                 }
-            val refused = assertIs<SignedPsbtSent.Refused>(broadcastSignedPsbt(failingRead, runtime, unsignedTxid, signed, receipt))
-            assertEquals(SIGNED_PSBT_NOT_STARTED, refused.reason)
-            assertTrue(refused.stored)
-            assertEquals(signed.txHex, db.sends.get(signed.txid)?.txHex)
+            val runtime = PeersRuntime(failingRead)
+            try {
+                storeUnsignedSend(db, runtime, unsignedRow).join()
+                runtime.walletTxsStore.update { it.copy(utxos = listOf(c), utxosReady = true) }
+                val signed = signedPsbt(unsignedTxid)
+                val receipt = BroadcastReceipt(unsignedTxid, ADDRESS, "Rent", 50_000, 141)
+                val refused = assertIs<SignedPsbtSent.Refused>(broadcastSignedPsbt(failingRead, runtime, unsignedTxid, signed, receipt))
+                assertEquals(SIGNED_PSBT_NOT_STARTED, refused.reason)
+                assertTrue(refused.stored)
+                assertEquals(signed.txHex, db.sends.get(signed.txid)?.txHex)
+            } finally {
+                runtime.stop()
+            }
         }
 
     /** The row committed, then every read fails: a failed read is not a rollback, so it still says it was saved. */

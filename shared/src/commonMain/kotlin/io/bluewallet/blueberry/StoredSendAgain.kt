@@ -54,7 +54,7 @@ fun sendStoredAgain(
         val tried = existing?.snapshot?.triedPeers ?: emptySet()
         existing?.snapshot?.id?.let { store.dismiss(it) }
         val id = nextUiBroadcastId()
-        store.start(id, hex, tried, existing?.receipt ?: receipt, priorRun(db, runtime.dueTorNotes, txid, existing))
+        store.start(id, hex, tried, existing?.receipt ?: receipt, priorRun(runtime.dueTorNotes, txid, existing))
         requestBroadcast(runtime, BroadcastRequestPayload(id, hex, tried))
     }
     return blocked
@@ -62,11 +62,10 @@ fun sendStoredAgain(
 
 /**
  * What earlier runs of stored payment [txid] got: held only on evidence that one of ours gave nodes it, a job that
- * finished as sent or its Tor record. A signed PSBT is stored before its first run, so a stored row alone is not,
- * and neither is a note a refused first run dropped whose delete hasn't landed.
+ * finished as sent or its Tor record ([DueTorNotes.recorded], also one still due). A signed PSBT is stored before its
+ * first run, so a stored row alone is not, and neither is a note a refused first run dropped whose delete hasn't landed.
  */
 private fun priorRun(
-    db: Database,
     notes: DueTorNotes,
     txid: String,
     existing: BroadcastSession?,
@@ -75,7 +74,7 @@ private fun priorRun(
     val sent = snap?.phase == "success"
     return when {
         sent && snap.acknowledged -> PriorRun.Acked
-        sent || (!notes.dropPending(txid) && db.broadcastVia.get(txid) != null) -> PriorRun.Held
+        sent || notes.recorded(txid) -> PriorRun.Held
         else -> PriorRun.None
     }
 }
