@@ -302,3 +302,12 @@ watch it fail, minimal fix, watch it pass.
 - [x] Remove `DueTorNotes`/`StoredSendTorNote.kt`, the runtime's Tor-note hooks, `dropRefusedSend`, `BroadcastViaRepository.delete`, and their tests.
 - [x] Remove `refusedByAll` ("Not accepted"), the details' `openSendPublished`/"may not be published yet" explainer, and the broadcast screen's stored-payment Forget check and watchers, with their tests.
 - [ ] Review loop, full checks, push, PR comment on the decision, resolve moot threads, re-request review.
+
+### Task 15: GLaDOS review round 8 (2026-11-24)
+
+Spec: "Review round 8 decisions". Test first, watch it fail, minimal fix, watch it pass.
+
+- [ ] `SignedPsbtReviewTest`: a second Broadcast tap while a run is in flight starts nothing (`OneBroadcast`).
+- [ ] `UrDecoderTest`: a fountain part whose fragment is longer than a QR holds is ignored; the message is capped at 1,000 such fragments.
+- [ ] `UrDecoderTest`: a throw from the fountain decoder fails the scan instead of escaping `receive`.
+- [ ] Review loop, full checks, push, reply to and resolve threads, re-request review.

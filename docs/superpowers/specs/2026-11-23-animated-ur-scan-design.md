@@ -91,6 +91,18 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
     the broadcast screen or to the details explainer.
   - Not changed here: after a restart Home showed a pending self-send as −0.00010000 while details said
     −0.00000423. That row comes from `pendingWalletRows`/`inferPendingSendNetDelta` on master.
+- **Review round 8 decisions (GLaDOS, 2026-11-24).**
+  - Broadcast on the review starts one run at a time: a second tap that lands before the button disables (the
+    next composition) does nothing, so two held runs with two ids can't start. The guard is UI-thread state
+    (`OneBroadcast`), read and set in the click handler, cleared when the run ends or the screen leaves.
+  - A fountain part's fragment is at most 2,148 bytes, what one QR can carry (a version 40 QR holds 4,296
+    alphanumeric characters, two per byte in minimal bytewords), and the message at most 1,000 such fragments.
+    A pasted UR with bigger fragments is ignored as corrupt, so the decoder can't be made to allocate past that.
+  - A throw from the fountain decoder never escapes `UrDecoder.receive`: the scan fails with "The scanned parts
+    don't fit together. Start over." and resets, as a checksum failure does.
+  - Decoding stays on the thread that feeds the scan (the UI thread). With the caps above one frame's work is
+    bounded, and moving it would need Start over and the signature-check rejection serialised with a background
+    feed; not worth the race risk here.
 
 ## Units
 
@@ -105,8 +117,9 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
 
 ## Testing
 
-- `UrDecoderTest`: BlueWallet's 2-part `crypto-psbt` vector in order, reversed, with duplicates; a fountain-only vector generated with `@ngraveio/bc-ur` (parts 7..19 of a 6-fragment animation) decodes without any simple part; uppercase QR alphanumeric form; single-part; `ur:psbt`; foreign type, mixed type, other animation, corrupt frame are ignored without losing progress; progress grows and hits 100; reset; round trips with our encoder at several capacities in shuffled order.
+- `UrDecoderTest`: BlueWallet's 2-part `crypto-psbt` vector in order, reversed, with duplicates; a fountain-only vector generated with `@ngraveio/bc-ur` (parts 7..19 of a 6-fragment animation) decodes without any simple part; uppercase QR alphanumeric form; single-part; `ur:psbt`; foreign type, mixed type, other animation, corrupt frame are ignored without losing progress; progress grows and hits 100; reset; a fragment longer than a QR holds is ignored; a decoder throw fails the scan instead of escaping; round trips with our encoder at several capacities in shuffled order.
 - `SignedPsbtTest`: watch-only PSBTs for the `abandon … about` xpub (P2PKH), ypub (P2SH-P2WPKH), zpub (P2WPKH) and BIP86 tr (P2TR) are signed with the matching private keys through bitcoin-kmp (`Psbt.sign`, partial signatures), round-tripped through UR, finalized and extracted; a signer-finalized PSBT (P2TR key path included) also passes; different transaction, unsigned, half-signed, wrong-key and non-`SIGHASH_ALL` (partial or signer-finalized) cases give the errors above; base64 (padded or not) and hex text parse; non-PSBT text is rejected.
 - `SignedPsbtScanTest`: UR frames reach 100 and yield the PSBT; base64 text completes at once; ignored text keeps progress; reset.
 - `SignedPsbtBroadcastTest`: a segwit spend keeps its row key with the signed hex and gets its Tor record; a legacy spend moves to the new txid with its note and its Tor record is on the signed txid; a missing row is refused; a signed txid already in a block (segwit and legacy) is refused after storing and says it was stored; the broadcast job starts held, as Broadcast again does for a hot send, and stays held when it reaches no node; storing and starting finish when the caller is cancelled and read no SQLite on its dispatcher; a start or store that throws says whether the payment was saved.
+- `SignedPsbtReviewTest`: a second Broadcast while one runs starts nothing; the next one starts once it ends.
 - Compose screens are not unit tested (repo convention); they are thin over the units above.
