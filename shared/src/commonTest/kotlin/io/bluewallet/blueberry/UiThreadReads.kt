@@ -62,7 +62,7 @@ internal suspend fun <T> onUiDispatcher(block: suspend (UiDispatcher) -> T): T {
     return withContext(ui) { block(ui) }
 }
 
-/** [db] whose payment and Tor-note reads are counted in [uiReads] when they run while [ui] says so. */
+/** [db] whose payment and broadcast-route reads are counted in [uiReads] when they run while [ui] says so. */
 internal class UiReadSpy(
     db: Database,
     private val ui: () -> UiDispatcher?,

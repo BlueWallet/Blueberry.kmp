@@ -4,16 +4,13 @@ package io.bluewallet.blueberry
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.backhandler.BackHandler
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /** The broadcast screen opened from the transaction list, with no send wizard under it. */
 @Composable
@@ -30,13 +27,6 @@ fun BroadcastScreen(
             runtime.broadcastStore.subscribe {
                 scope.launch { session = runtime.broadcastStore.sessions().find { it.snapshot.id == id } }
             }
-        onDispose { off() }
-    }
-    // Forget is asked again on wallet refreshes too: a refused send's row can be dropped after its failure showed.
-    var holdsSeen by remember(id) { mutableStateOf(0) }
-    DisposableEffect(runtime, id) {
-        val off = watchBroadcastForgettable(runtime, id) { scope.launch { holdsSeen++ } }
-        holdsSeen++ // a drop between the first composition and this subscription is not missed
         onDispose { off() }
     }
     val current = session
@@ -57,10 +47,6 @@ fun BroadcastScreen(
     val receipt = SendReceipt(SendRecipient(stored.destination, stored.label), stored.paidSats, stored.feeSats, stored.txid)
     val status = ownedBroadcastStatus(snap, snap.txHex ?: stored.txid)
     val retryable = status.tone == BroadcastTone.Failed || status.resend
-    // Asked off the UI thread; until the answer for this phase lands, a job that left "error" shows no Forget.
-    var forgettableAsked by remember(id) { mutableStateOf(false) }
-    LaunchedEffect(id, snap.phase, holdsSeen) { forgettableAsked = broadcastJobForgettable(runtime, id) }
-    val forgettable = forgettableAsked && broadcastCanBeForgotten(snap.phase)
     val shown = if (retryNote != null && retryable) status.copy(line = retryNote!!) else status
     SendBroadcastStep(
         receipt = receipt,
@@ -75,7 +61,7 @@ fun BroadcastScreen(
                     ),
                 onClose = { leave() },
                 onForget =
-                    if (forgettable) {
+                    if (broadcastCanBeForgotten(snap.phase)) {
                         {
                             forgetBroadcast(runtime, id)
                             onClose()
@@ -85,36 +71,6 @@ fun BroadcastScreen(
                     },
             ),
     )
-}
-
-/**
- * [broadcastJobCanBeForgotten] off the caller's dispatcher: a cleared stored-holds cache is filled from SQLite, which
- * the broadcast screen must not do during composition.
- */
-suspend fun broadcastJobForgettable(
-    runtime: PeersRuntime,
-    id: String,
-): Boolean = withContext(Dispatchers.Default) { broadcastJobCanBeForgotten(runtime, id) }
-
-/**
- * Calls [onChange] whenever [broadcastJobCanBeForgotten] for job [id] may have changed: the job changed, or the wallet
- * store refreshed while the job had failed. A refused send's row is dropped, and that refresh lands, after its
- * failure did. Returns the unsubscribe.
- */
-fun watchBroadcastForgettable(
-    runtime: PeersRuntime,
-    id: String,
-    onChange: () -> Unit,
-): () -> Unit {
-    val offJob = runtime.broadcastStore.subscribe(onChange)
-    val offWallet =
-        runtime.walletTxsStore.subscribe {
-            if (broadcastCanBeForgotten(runtime.broadcastStore.get(id)?.phase)) onChange()
-        }
-    return {
-        offJob()
-        offWallet()
-    }
 }
 
 /** Null when the same transaction is published again. A string is why Retry stopped. */

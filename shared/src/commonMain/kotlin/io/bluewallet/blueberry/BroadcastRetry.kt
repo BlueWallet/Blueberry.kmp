@@ -24,19 +24,6 @@ fun dismissConfirmedBroadcast(
 /** Any finished failure can leave the list. A live or sent job stays. */
 fun broadcastCanBeForgotten(phase: String?): Boolean = phase == "error"
 
-/**
- * [broadcastCanBeForgotten] for job [id] on its screen. A failed run of a payment still stored (a signed PSBT that
- * reached no node) keeps its row and coins, so only the payment's own Forget in its details may drop it.
- */
-fun broadcastJobCanBeForgotten(
-    runtime: PeersRuntime,
-    id: String,
-): Boolean {
-    val session = runtime.broadcastStore.sessions().find { it.snapshot.id == id } ?: return false
-    val txid = session.receipt?.txid
-    return broadcastCanBeForgotten(session.snapshot.phase) && (txid == null || runtime.storedHolds.get().none { it.first == txid })
-}
-
 fun liveBroadcastIds(store: BroadcastStore): Set<String> =
     store
         .sessions()
