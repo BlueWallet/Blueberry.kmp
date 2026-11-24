@@ -128,6 +128,19 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
     caller's (UI) dispatcher.
   - `SignedPsbtTest` finalizes a two-input PSBT with both inputs signed for every script type and checks the
     extracted transaction spends both coins; a signature put on the wrong input fails it.
+- **Review round 7 decisions (GLaDOS, 2026-11-24).**
+  - Due Tor notes are durable like drops: `add` stores the txid in the `stored_send_tor_due` key-value entry before
+    writing the row, and the entry is rewritten once writes land or a drop cancels them. A new `DueTorNotes` (a
+    restart) loads it and writes the note on the next refresh. A due txid counts as recorded (`recorded`), so after
+    a restart and Done, details say it was given to nodes, and Broadcast again starts held, so a later run that
+    reaches no node can't `drop` it.
+  - Writing and deleting a note no longer depend on the send row still being open. A note stays due until its row
+    exists and a drop stays pending until its row is gone, also after Forget or confirmation removed the send, so a
+    closed send can't count as a finished write or delete. `priorRun` asks `DueTorNotes.recorded`.
+  - `dropRefusedSend` deletes the note through `DueTorNotes.drop`, under the same lock as refresh writes.
+  - The Home list row for a held run every node refused says "Not accepted", as `broadcastStatus` does.
+  - `SignedPsbtTest` swaps the two valid signatures between the inputs of a two-input PSBT for each script type and
+    checks it is rejected.
 
 ## Units
 

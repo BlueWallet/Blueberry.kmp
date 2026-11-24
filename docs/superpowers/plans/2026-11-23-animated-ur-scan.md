@@ -278,3 +278,15 @@ Spec: "Review round 6 decisions". Test first, watch it fail, minimal fix, watch 
 - [x] `SignedPsbtBroadcastTest`: `broadcastSignedPsbt` reads no SQLite on the caller's dispatcher.
 - [x] `SendHoldsTest`: `broadcastJobForgettable` fills the holds cache off the caller's dispatcher; the broadcast screen uses it from a `LaunchedEffect`.
 - [x] Review loop, full checks, push, reply to and resolve threads, re-request review.
+
+### Task 13: GLaDOS review round 7 (2026-11-24)
+
+Spec: "Review round 7 decisions". Test first, watch it fail, minimal fix, watch it pass.
+
+- [ ] `SendBroadcastTest`: a held run every node refused is listed as "Not accepted", not "Sent".
+- [ ] `SignedPsbtTest`: a two-input PSBT with the two valid signatures swapped between inputs is rejected, for every script type.
+- [ ] `DueTorNotesTest`: a due note whose write fails survives a restart, reads as recorded, and is written on the next refresh.
+- [ ] `SignedPsbtBroadcastTest`: after a failed hand-off write, a restart and Done, Broadcast again starts held and a run that reaches no node keeps the note due.
+- [ ] `DueTorNotesTest`: a pending drop whose send was forgotten is still deleted, and a due note whose send closed is still written.
+- [ ] `SignedPsbtBroadcastTest`/`SendHoldsTest`: `dropRefusedSend` deletes through `DueTorNotes.drop`, so a refresh can't write the note back.
+- [ ] Review loop, full checks, push, reply to and resolve threads, re-request review.
