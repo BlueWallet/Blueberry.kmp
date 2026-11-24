@@ -120,6 +120,7 @@ class SendHoldsTest {
             val snap = runtime.broadcastStore.get("1")
             assertEquals("error", snap?.phase)
             assertTrue(broadcastCanBeForgotten(snap?.phase))
+            assertTrue(broadcastJobCanBeForgotten(runtime, "1"))
             assertNull(db.sends.get(txid))
             assertTrue(runtime.reservedOutpoints().isEmpty())
         }

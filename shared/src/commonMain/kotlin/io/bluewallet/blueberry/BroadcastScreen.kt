@@ -47,6 +47,7 @@ fun BroadcastScreen(
     val receipt = SendReceipt(SendRecipient(stored.destination, stored.label), stored.paidSats, stored.feeSats, stored.txid)
     val status = ownedBroadcastStatus(snap, snap.txHex ?: stored.txid)
     val retryable = status.tone == BroadcastTone.Failed || status.resend
+    val forgettable = remember(id, snap.phase) { broadcastJobCanBeForgotten(runtime, id) }
     val shown = if (retryNote != null && retryable) status.copy(line = retryNote!!) else status
     SendBroadcastStep(
         receipt = receipt,
@@ -61,7 +62,7 @@ fun BroadcastScreen(
                     ),
                 onClose = { leave() },
                 onForget =
-                    if (broadcastCanBeForgotten(snap.phase)) {
+                    if (forgettable) {
                         {
                             forgetBroadcast(runtime, id)
                             onClose()

@@ -158,6 +158,7 @@ class SignedPsbtBroadcastTest {
             assertEquals("Not sent yet", broadcastStatus(snap).title)
             assertNull(db.broadcastVia.get(signed.txid))
             assertTrue(storedSendCanGoAgain(db, signed.txid), "the payment stays and can go again")
+            assertFalse(broadcastJobCanBeForgotten(runtime, id), "only its details forget the stored payment")
             assertEquals(signed.txHex, db.sends.get(signed.txid)?.txHex)
         }
 
