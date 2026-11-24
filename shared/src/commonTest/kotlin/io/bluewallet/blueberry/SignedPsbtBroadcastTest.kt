@@ -8,6 +8,8 @@ import io.bluewallet.bip324.bytesToHex
 import io.bluewallet.bip324.encodeTransaction
 import io.bluewallet.blueberry.broadcast.BROADCAST_REFUSED
 import io.bluewallet.blueberry.bus.BroadcastDonePayload
+import io.bluewallet.blueberry.bus.Event
+import io.bluewallet.blueberry.bus.WalletTxsPayload
 import io.bluewallet.blueberry.storage.BroadcastViaRepository
 import io.bluewallet.blueberry.storage.Database
 import io.bluewallet.blueberry.storage.PrivateSendCoin
@@ -232,6 +234,42 @@ class SignedPsbtBroadcastTest {
                 }
             recordStoredSendBroadcast(flaky, runtime.broadcastStore, id)
             assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
+        }
+
+    /**
+     * A Tor note that still fails after its retries is not dropped: the runtime keeps it due and writes it on the
+     * next wallet refresh, since it's the only proof that survives a restart that a node holds the payment.
+     */
+    @Test
+    fun a_tor_note_that_keeps_failing_is_written_on_the_next_wallet_refresh() =
+        runFlow { db, _, _ ->
+            var broken = true
+            val flaky =
+                object : Database by db {
+                    override val broadcastVia =
+                        object : BroadcastViaRepository by db.broadcastVia {
+                            override fun upsert(
+                                txid: String,
+                                via: String,
+                            ) {
+                                if (broken) error("database is locked")
+                                db.broadcastVia.upsert(txid, via)
+                            }
+                        }
+                }
+            val runtime = PeersRuntime(flaky)
+            try {
+                val (signed, id) = startMoved(db, runtime)
+                runtime.broadcastStore.markHandedOff(id)
+                runtime.broadcastStore.applyDone(BroadcastDonePayload.Ok(id, "1.1.1.1:8333", acknowledged = true))
+                runtime.noteStoredSendBroadcast(id)
+                assertNull(db.broadcastVia.get(signed.txid))
+                broken = false
+                runtime.bus.emit(Event.WalletTxs, WalletTxsPayload(at = 1))
+                assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(signed.txid))
+            } finally {
+                runtime.stop()
+            }
         }
 
     /** Stores a legacy spend (its row moves to the signed txid) and starts its broadcast. */

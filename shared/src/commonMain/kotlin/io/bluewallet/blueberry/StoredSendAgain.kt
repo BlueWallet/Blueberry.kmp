@@ -70,10 +70,25 @@ fun recordStoredSendBroadcast(
     store: BroadcastStore,
     id: String,
 ) {
-    val session = store.sessions().find { it.snapshot.id == id } ?: return
-    val txid = session.receipt?.txid ?: return
+    storedSendHeldTxid(store, id)?.let { writeStoredSendTorNote(db, it) }
+}
+
+/** The stored payment job [id] gave nodes, once it finished with a node holding it; null otherwise. */
+internal fun storedSendHeldTxid(
+    store: BroadcastStore,
+    id: String,
+): String? {
+    val session = store.sessions().find { it.snapshot.id == id } ?: return null
     val sent = session.snapshot.phase == "success" && !session.snapshot.refusedByAll
-    if (sent && unconfirmedSendOpen(db, txid)) retryWrite { db.broadcastVia.upsert(txid, BROADCAST_VIA_TOR) }
+    return session.receipt?.txid?.takeIf { sent }
+}
+
+/** Writes the Tor note of stored payment [txid] while it is still unconfirmed; the last failed attempt rethrows. */
+internal fun writeStoredSendTorNote(
+    db: Database,
+    txid: String,
+) {
+    if (unconfirmedSendOpen(db, txid)) retryWrite { db.broadcastVia.upsert(txid, BROADCAST_VIA_TOR) }
 }
 
 private const val ROUTE_WRITE_ATTEMPTS = 3

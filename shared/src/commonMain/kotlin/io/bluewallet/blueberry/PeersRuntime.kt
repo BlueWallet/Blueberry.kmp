@@ -43,6 +43,7 @@ import kotlinx.coroutines.withContext
 import kotlin.concurrent.Volatile
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.update
 
 fun bindPeerSocketEvents(
     bus: MessageBus,
@@ -174,6 +175,29 @@ class PeersRuntime(
         storedHolds.clear()
     }
 
+    /** Txids a node holds whose Tor note hasn't been written yet. */
+    @OptIn(ExperimentalAtomicApi::class)
+    private val dueTorNotes = AtomicReference<Set<String>>(emptySet())
+
+    /**
+     * Writes the Tor note of job [id] once it finished with a node holding it. It is the only proof that survives
+     * a restart that a node holds the payment, so a note whose write still fails stays due and is written again on
+     * every wallet refresh until it lands.
+     */
+    @OptIn(ExperimentalAtomicApi::class)
+    internal fun noteStoredSendBroadcast(id: String) {
+        val txid = storedSendHeldTxid(broadcastStore, id) ?: return
+        dueTorNotes.update { it + txid }
+        writeDueTorNotes()
+    }
+
+    @OptIn(ExperimentalAtomicApi::class)
+    private fun writeDueTorNotes() {
+        for (txid in dueTorNotes.load()) {
+            if (runCatching { writeStoredSendTorNote(db, txid) }.isSuccess) dueTorNotes.update { it - txid }
+        }
+    }
+
     private val net = createPlatformNet()
     private val discovery: Module =
         createPeersDiscoveryModule(
@@ -195,6 +219,7 @@ class PeersRuntime(
 
     init {
         walletTxsStore.subscribe { storedHolds.clear() }
+        bus.on(Event.WalletTxs) { writeDueTorNotes() }
         hydratePeers(db, store)
         hydrateHeaders(db, headersStore)
         hydrateFilters(db, filtersStore)
@@ -255,7 +280,7 @@ class PeersRuntime(
                 onHandedOff = { id -> persistArmedBroadcast(id, handedOff = true) },
                 onDone = { id ->
                     persistArmedBroadcast(id)
-                    runCatching { recordStoredSendBroadcast(db, broadcastStore, id) }
+                    noteStoredSendBroadcast(id)
                 },
             )
         unbind = {
