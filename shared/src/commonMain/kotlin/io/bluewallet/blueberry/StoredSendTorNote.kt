@@ -1,9 +1,9 @@
 package io.bluewallet.blueberry
 
 import io.bluewallet.blueberry.storage.Database
-import kotlin.concurrent.atomics.AtomicReference
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.concurrent.atomics.update
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Notes that job [id] went over Tor, on its stored payment, once it finished with a node holding it. Never at the
@@ -80,34 +80,56 @@ internal fun PeersRuntime.noteStoredSendBroadcast(id: String) {
 }
 
 /**
- * Tor notes of stored payments a node holds that haven't been written yet. The note is the only proof that
- * survives a restart that a node holds the payment, so one whose write still fails stays due until a later write lands.
+ * Tor notes of stored payments a node holds that haven't been written yet, and notes of refused first runs that
+ * haven't been deleted yet. The note is the only proof that survives a restart that a node holds the payment, so one
+ * whose write still fails stays due until a later write lands, and one whose delete fails stays dropped until a
+ * later delete lands. One lock covers both sets and the SQL, so a refresh writing a due note can't race a drop and
+ * write the note back after it was deleted. Broadcast and wallet-refresh events arrive on different threads.
  */
-@OptIn(ExperimentalAtomicApi::class)
 internal class DueTorNotes(
     private val db: Database,
 ) {
-    private val due = AtomicReference<Set<String>>(emptySet())
+    private val lock = Mutex()
+    private var due = emptySet<String>()
+    private var dropped = emptySet<String>()
 
-    /** Makes [txid]'s note due and writes every due note. */
-    fun add(txid: String) {
-        due.update { it + txid }
-        write()
-    }
+    /** Makes [txid]'s note due (cancelling a pending delete) and settles every pending note. */
+    fun add(txid: String) =
+        locked {
+            due = due + txid
+            dropped = dropped - txid
+            settle()
+        }
 
-    /** Writes every due note; a note whose payment is no longer open is dropped as written. */
-    fun write() {
-        for (txid in due.load()) {
-            if (txid !in due.load()) continue
-            if (runCatching { writeStoredSendTorNote(db, txid) }.isSuccess) due.update { it - txid }
+    /** Settles every pending note: writes the due ones, deletes the dropped ones. A failure stays pending. */
+    fun write() = locked { settle() }
+
+    /** No node holds [txid] after all: its note is no longer due, and the one written is deleted while it's open. */
+    fun drop(txid: String) =
+        locked {
+            due = due - txid
+            dropped = dropped + txid
+            settle()
+        }
+
+    private fun settle() {
+        for (txid in due) {
+            if (runCatching { writeStoredSendTorNote(db, txid) }.isSuccess) due = due - txid
+        }
+        for (txid in dropped) {
+            if (runCatching { deleteStoredSendTorNote(db, txid) }.isSuccess) dropped = dropped - txid
         }
     }
 
-    /** No node holds [txid] after all: its note is no longer due, and the one written is deleted while it's open. */
-    fun drop(txid: String) {
-        due.update { it - txid }
-        if (unconfirmedSendOpen(db, txid)) db.broadcastVia.delete(txid)
-    }
+    private fun locked(block: () -> Unit) = runBlocking { lock.withLock { block() } }
+}
+
+/** Deletes the Tor note of stored payment [txid] while it is still unconfirmed. */
+private fun deleteStoredSendTorNote(
+    db: Database,
+    txid: String,
+) {
+    if (unconfirmedSendOpen(db, txid)) db.broadcastVia.delete(txid)
 }
 
 private const val ROUTE_WRITE_ATTEMPTS = 3
