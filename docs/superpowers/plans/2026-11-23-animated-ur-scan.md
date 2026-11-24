@@ -239,3 +239,12 @@ Spec: "Device QA decisions". Test first, watch it fail, minimal fix, watch it pa
 - [ ] Review Back leaves to the PSBT QR (Compose wiring; compile check).
 - [ ] Review loop, full checks (`check`, `ktlintCheck`, `detekt`, Android compile), push, threads, QA reply, re-request review.
 
+### Task 9: GLaDOS review round 3 (2026-11-24)
+
+Test first, watch it fail, minimal fix, watch it pass.
+
+- [x] `SignedPsbtTest`: signer-finalized cases include a P2TR key-path witness (finalized and stripped, final scripts beside other fields, non-`SIGHASH_ALL` rejected).
+- [x] `SignedPsbtBroadcastTest`: a start that throws after the row is stored refuses with `SIGNED_PSBT_NOT_STARTED` and `stored = true`; a store that throws before it keeps `SIGNED_PSBT_NOT_STORED`.
+- [x] `SignedPsbtBroadcastTest`: a Tor note whose write still fails after its retries stays due in the runtime and is written on the next `WalletTxs` refresh.
+- [x] Spec testing bullet: the signed PSBT's broadcast starts as a first run, not held.
+- [x] Review loop, full checks, push, reply to and resolve threads, re-request review.
