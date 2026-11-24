@@ -297,8 +297,8 @@ Spec: "Owner decision: hot-send parity". The owner chose hot-send parity over of
 bookkeeping of tasks 8 to 13 goes; the scan, check, finalize, store, Back and threading work stays. Test first,
 watch it fail, minimal fix, watch it pass.
 
-- [ ] `SignedPsbtBroadcastTest`: storing a signed PSBT writes its Tor record with the row (segwit and moved legacy txid), as `persistSendIfBroadcast` does for a hot send.
-- [ ] `SignedPsbtBroadcastTest`: the signed PSBT's broadcast starts held like a hot send's Broadcast again, and a run that reaches no node stays held with its row and Tor record. `sendStoredAgain` back to master.
-- [ ] Remove `DueTorNotes`/`StoredSendTorNote.kt`, the runtime's Tor-note hooks, `dropRefusedSend`, `BroadcastViaRepository.delete`, and their tests.
-- [ ] Remove `refusedByAll` ("Not accepted"), the details' `openSendPublished`/"may not be published yet" explainer, and the broadcast screen's stored-payment Forget check and watchers, with their tests.
+- [x] `SignedPsbtBroadcastTest`: storing a signed PSBT writes its Tor record with the row (segwit and moved legacy txid), as `persistSendIfBroadcast` does for a hot send.
+- [x] `SignedPsbtBroadcastTest`: the signed PSBT's broadcast starts held like a hot send's Broadcast again, and a run that reaches no node stays held with its row and Tor record. `sendStoredAgain` back to master.
+- [x] Remove `DueTorNotes`/`StoredSendTorNote.kt`, the runtime's Tor-note hooks, `dropRefusedSend`, `BroadcastViaRepository.delete`, and their tests.
+- [x] Remove `refusedByAll` ("Not accepted"), the details' `openSendPublished`/"may not be published yet" explainer, and the broadcast screen's stored-payment Forget check and watchers, with their tests.
 - [ ] Review loop, full checks, push, PR comment on the decision, resolve moot threads, re-request review.

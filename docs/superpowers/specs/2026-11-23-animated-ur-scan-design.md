@@ -78,8 +78,8 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
 - **Owner decision: hot-send parity (2026-11-24).** Device QA saw a signed-PSBT broadcast that reached no node
   (offline, every Tor dial failed) show "Sent · Given to Bitcoin nodes" with a Tor record. Rounds 2 to 7 then grew
   Blueberry's own bookkeeping to tell such a run apart (`DueTorNotes`, a Tor record written at hand-off and deleted
-  after a refused first run, durable due and drop sets, "Not sent yet" and "Not accepted" states, Forget hidden on
-  the failed broadcast screen). The owner chose hot-send parity over offline accuracy ("Simplify it, behave the same
+  after a refused first run, durable due and drop sets, a first run that could end "Not sent yet", a "Not
+  accepted" state, Forget hidden on the failed broadcast screen). The owner chose hot-send parity over offline accuracy ("Simplify it, behave the same
   as hot sends"; the original requirement was "no new behavior here, keep same as existing (if broadcast fails)").
   All of that is removed, and decision 8 holds as written:
   - Storing the signed payment writes its `broadcast_via` Tor record with the row, at persist time, as
