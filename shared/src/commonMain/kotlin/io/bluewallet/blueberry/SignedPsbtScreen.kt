@@ -37,6 +37,7 @@ import io.bluewallet.blueberry.ui.TintedPillButton
 import io.bluewallet.blueberry.ui.ToPill
 import io.bluewallet.blueberry.wallet.SignedPsbt
 import io.bluewallet.blueberry.wallet.SignedPsbtCheck
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -200,6 +201,30 @@ private fun ScanProgress(
     scanning?.note?.let { HelperText(it, error = true) }
 }
 
+/**
+ * The review's broadcast run, one at a time. A second tap can land before [running] disables the button (that
+ * takes a composition), so [launchIn] checks it too. Used from the UI thread only, so no atomics are needed.
+ */
+internal class OneBroadcast {
+    var running by mutableStateOf(false)
+        private set
+
+    fun launchIn(
+        scope: CoroutineScope,
+        block: suspend () -> Unit,
+    ): Job? {
+        if (running) return null
+        running = true
+        return scope.launch {
+            try {
+                block()
+            } finally {
+                running = false
+            }
+        }
+    }
+}
+
 @Composable
 @Suppress("LongParameterList")
 private fun SignedPsbtReview(
@@ -213,23 +238,22 @@ private fun SignedPsbtReview(
 ) {
     val scope = rememberCoroutineScope()
     var error by remember(signed) { mutableStateOf<String?>(null) }
-    var sending by remember(signed) { mutableStateOf(false) }
+    val run = remember(signed) { OneBroadcast() }
     // Once stored, the payment no longer waits to be signed (and may have moved txid): leaving exits the flow.
     var stored by remember(signed) { mutableStateOf(false) }
     val paid = remember(signed) { signed.paidTo(target.to.address) }
 
     fun leave() {
         when {
-            sending -> Unit
+            run.running -> Unit
             stored -> onExit()
             else -> onBack()
         }
     }
 
     fun broadcast() {
-        sending = true
-        error = null
-        scope.launch {
+        run.launchIn(scope) {
+            error = null
             val receipt = BroadcastReceipt(signed.txid, target.to.address, target.to.label, paid, signed.feeSats)
             when (val sent = broadcastSignedPsbt(db, runtime, target.storedTxid, signed, receipt)) {
                 is SignedPsbtSent.Started -> onStarted(sent.id)
@@ -238,13 +262,12 @@ private fun SignedPsbtReview(
                     error = sent.reason
                 }
             }
-            sending = false
         }
     }
 
     // Enabled throughout so Back is swallowed, not passed to the screen below, while the broadcast is starting.
     OverlayBackEffects(enabled = true, onDismiss = ::leave) {
-        SignedPsbtReviewBody(target, signed, paid, sending, error, onBroadcast = ::broadcast, onBack = ::leave)
+        SignedPsbtReviewBody(target, signed, paid, run.running, error, onBroadcast = ::broadcast, onBack = ::leave)
     }
 }
 
