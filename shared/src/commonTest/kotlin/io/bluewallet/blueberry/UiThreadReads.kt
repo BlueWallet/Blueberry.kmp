@@ -16,10 +16,14 @@ import kotlin.concurrent.atomics.decrementAndFetch
 import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.coroutines.ContinuationInterceptor
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeSource
 
 /**
- * Stands in for the UI dispatcher: it runs on the test's event loop and knows while one of its tasks runs, so a
- * database read made then is a read on the UI thread.
+ * Stands in for the UI dispatcher: it runs on the test's event loop and knows while one of its tasks runs. Common
+ * code can't name threads, so [readOnUi] tells a read on the UI thread from a worker's by waiting: a read inside a
+ * UI task holds that task open, while a worker read that overlaps the end of the task that dispatched it sees the
+ * task finish at once.
  */
 @OptIn(ExperimentalAtomicApi::class)
 internal class UiDispatcher(
@@ -27,7 +31,14 @@ internal class UiDispatcher(
 ) : CoroutineDispatcher() {
     private val running = AtomicInt(0)
 
-    val onUi: Boolean get() = running.load() > 0
+    /** Whether the calling read runs inside a UI task. Only for reads made while the UI side waits on a worker. */
+    fun readOnUi(): Boolean {
+        val asked = TimeSource.Monotonic.markNow()
+        while (running.load() > 0) {
+            if (asked.elapsedNow() > UI_TASK_SETTLE) return true
+        }
+        return false
+    }
 
     override fun dispatch(
         context: CoroutineContext,
@@ -59,7 +70,7 @@ internal class UiReadSpy(
     val uiReads = mutableListOf<String>()
 
     private fun read(what: String) {
-        if (ui()?.onUi == true) uiReads += what
+        if (ui()?.readOnUi() == true) uiReads += what
     }
 
     val store: Database =
@@ -82,3 +93,6 @@ internal class UiReadSpy(
                 }
         }
 }
+
+/** Longer than any UI task here takes to return after handing work to a worker. */
+private val UI_TASK_SETTLE = 200.milliseconds
