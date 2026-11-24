@@ -29,6 +29,13 @@ fun BroadcastScreen(
             }
         onDispose { off() }
     }
+    // Forget is asked again on wallet refreshes too: a refused send's row can be dropped after its failure showed.
+    var holdsSeen by remember(id) { mutableStateOf(0) }
+    DisposableEffect(runtime, id) {
+        val off = watchBroadcastForgettable(runtime, id) { scope.launch { holdsSeen++ } }
+        holdsSeen++ // a drop between the first composition and this subscription is not missed
+        onDispose { off() }
+    }
     val current = session
     val stored = current?.receipt
     val snap = current?.snapshot
@@ -47,7 +54,7 @@ fun BroadcastScreen(
     val receipt = SendReceipt(SendRecipient(stored.destination, stored.label), stored.paidSats, stored.feeSats, stored.txid)
     val status = ownedBroadcastStatus(snap, snap.txHex ?: stored.txid)
     val retryable = status.tone == BroadcastTone.Failed || status.resend
-    val forgettable = remember(id, snap.phase) { broadcastJobCanBeForgotten(runtime, id) }
+    val forgettable = remember(id, snap.phase, holdsSeen) { broadcastJobCanBeForgotten(runtime, id) }
     val shown = if (retryNote != null && retryable) status.copy(line = retryNote!!) else status
     SendBroadcastStep(
         receipt = receipt,

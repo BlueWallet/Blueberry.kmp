@@ -125,6 +125,40 @@ class SendHoldsTest {
             assertTrue(runtime.reservedOutpoints().isEmpty())
         }
 
+    /**
+     * The open broadcast screen can score the failure before the refused send's row is dropped (row still held, so
+     * no Forget). Its watcher asks again when the wallet store refreshes after the drop, and then offers Forget.
+     */
+    @Test
+    fun the_forget_watcher_offers_forget_once_a_refused_sends_row_is_dropped() =
+        runFlow { db, runtime, _ ->
+            val held = coin("11", 100_000_000)
+            val txid = "ab".repeat(32)
+            runtime.armSendPersist(
+                "1",
+                SendRow(
+                    txid = txid,
+                    txHex = "aa",
+                    destination = ADDRESS,
+                    coins = listOf(PrivateSendCoin(held.txid, held.vout, held.valueSats)),
+                ),
+            )
+            runtime.broadcastStore.start("1", "aa", receipt = BroadcastReceipt(txid, ADDRESS, "", 1_000, 141))
+            runtime.broadcastStore.markHandedOff("1")
+            runtime.persistArmedBroadcast("1", handedOff = true)
+            val seen = mutableListOf<Boolean>()
+            val off = watchBroadcastForgettable(runtime, "1") { seen += broadcastJobCanBeForgotten(runtime, "1") }
+            try {
+                runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("1", "refused", refused = true))
+                assertEquals(false, seen.lastOrNull(), "the row is still held when the failure lands")
+                runtime.persistArmedBroadcast("1")
+                assertNull(db.sends.get(txid))
+                assertEquals(true, seen.lastOrNull())
+            } finally {
+                off()
+            }
+        }
+
     @Test
     fun a_hand_off_no_node_confirmed_is_sent_but_says_so() =
         runFlow { _, runtime, _ ->

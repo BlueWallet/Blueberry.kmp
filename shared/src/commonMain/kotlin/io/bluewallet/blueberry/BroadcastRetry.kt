@@ -37,6 +37,27 @@ fun broadcastJobCanBeForgotten(
     return broadcastCanBeForgotten(session.snapshot.phase) && (txid == null || runtime.storedHolds.get().none { it.first == txid })
 }
 
+/**
+ * Calls [onChange] whenever [broadcastJobCanBeForgotten] for job [id] may have changed: the job changed, or the wallet
+ * store refreshed while the job had failed. A refused send's row is dropped, and that refresh lands, after its
+ * failure did. Returns the unsubscribe.
+ */
+fun watchBroadcastForgettable(
+    runtime: PeersRuntime,
+    id: String,
+    onChange: () -> Unit,
+): () -> Unit {
+    val offJob = runtime.broadcastStore.subscribe(onChange)
+    val offWallet =
+        runtime.walletTxsStore.subscribe {
+            if (broadcastCanBeForgotten(runtime.broadcastStore.get(id)?.phase)) onChange()
+        }
+    return {
+        offJob()
+        offWallet()
+    }
+}
+
 fun liveBroadcastIds(store: BroadcastStore): Set<String> =
     store
         .sessions()
