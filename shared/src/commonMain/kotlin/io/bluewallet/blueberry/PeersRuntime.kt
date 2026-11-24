@@ -163,7 +163,7 @@ class PeersRuntime(
         val priv = pendingPrivateSends.load()[id]
         storedHolds.clear()
         if (snap.phase == "error" && !snap.handedOff) {
-            (send?.txid ?: priv?.txid)?.let { dropRefusedSend(db, dueTorNotes, walletTxsStore, wallet, it) }
+            (send?.txid ?: priv?.txid)?.let { dropUnsentSend(db, walletTxsStore, wallet, it) }
         } else {
             val sent = if (handedOff || snap.phase == "error") snap.copy(phase = "success") else snap
             val wroteSend = send != null && persistSendAndRefresh(db, walletTxsStore, wallet, send, sent)
@@ -173,9 +173,6 @@ class PeersRuntime(
         }
         storedHolds.clear()
     }
-
-    /** Tor notes of stored payments a node holds, kept due until written ([noteStoredSendBroadcast]). */
-    internal val dueTorNotes = DueTorNotes(db)
 
     private val net = createPlatformNet()
     private val discovery: Module =
@@ -198,7 +195,6 @@ class PeersRuntime(
 
     init {
         walletTxsStore.subscribe { storedHolds.clear() }
-        bus.on(Event.WalletTxs) { dueTorNotes.write() }
         hydratePeers(db, store)
         hydrateHeaders(db, headersStore)
         hydrateFilters(db, filtersStore)
@@ -256,8 +252,8 @@ class PeersRuntime(
             bindBroadcastEvents(
                 bus,
                 broadcastStore,
-                onHandedOff = ::broadcastHandedOff,
-                onDone = ::broadcastDone,
+                onHandedOff = { id -> persistArmedBroadcast(id, handedOff = true) },
+                onDone = { id -> persistArmedBroadcast(id) },
             )
         unbind = {
             unbindPeers()

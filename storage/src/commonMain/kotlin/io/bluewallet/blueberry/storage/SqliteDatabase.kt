@@ -215,10 +215,6 @@ internal class SqliteDatabase(
                 storageDb.broadcastViaQueries.upsert(txid, via)
             }
 
-            override fun delete(txid: String) {
-                storageDb.broadcastViaQueries.delete(txid)
-            }
-
             override fun list(): List<BroadcastViaRow> =
                 storageDb.broadcastViaQueries
                     .list()

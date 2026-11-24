@@ -12,8 +12,6 @@ import io.bluewallet.blueberry.storage.StoredTx
 import io.bluewallet.blueberry.wallet.outputScriptFromAddress
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class TxDetailFieldsTest {
     private fun row(note: String? = "coffee") =
@@ -183,36 +181,5 @@ class TxDetailFieldsTest {
             ),
             fields.take(2),
         )
-    }
-
-    /** A signed PSBT is stored before its broadcast starts, and stays stored if the start is refused. */
-    @Test
-    fun a_signed_payment_is_said_to_be_with_nodes_only_once_a_broadcast_is_recorded() {
-        val waiting = openSendExplainer(signed = true, published = false)
-        assertFalse("was given to Bitcoin nodes" in waiting, waiting)
-        assertTrue("not be published yet" in waiting, waiting)
-        assertTrue("was given to Bitcoin nodes" in openSendExplainer(signed = true, published = true))
-    }
-
-    @Test
-    fun only_a_tor_record_or_a_sent_job_counts_as_published() {
-        val job = { phase: String -> BroadcastSnapshot(id = "1", phase = phase) }
-        assertTrue(openSendPublished(viaRecorded = true, snap = null))
-        assertTrue(openSendPublished(viaRecorded = false, snap = job("success")))
-        assertFalse(openSendPublished(viaRecorded = false, snap = null))
-        assertFalse(openSendPublished(viaRecorded = false, snap = job("error")), "a job that reached no node")
-        assertFalse(openSendPublished(viaRecorded = false, snap = job("attempt")), "a job still running")
-        assertFalse(openSendPublished(viaRecorded = false, snap = job("success").copy(refusedByAll = true)))
-    }
-
-    /**
-     * Broadcast again with the details open: their Tor read predates the first run's note, but the new job started
-     * held on that run, so the payment still reads as given to nodes whatever this run hears.
-     */
-    @Test
-    fun a_job_started_held_on_an_earlier_run_counts_as_published() {
-        val again = BroadcastSnapshot(id = "2", phase = "starting", handedOff = true, heldBefore = true)
-        assertTrue(openSendPublished(viaRecorded = false, snap = again))
-        assertTrue(openSendPublished(viaRecorded = false, snap = again.copy(phase = "success", refusedByAll = true)))
     }
 }

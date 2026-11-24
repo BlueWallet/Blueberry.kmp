@@ -59,13 +59,3 @@ fun sendStoredAgain(
     }
     return blocked
 }
-
-/**
- * Payment details may say nodes were given it: its Tor record, a job of it that finished with a node holding it,
- * or a job that started held because an earlier run of ours gave nodes it. The last covers Broadcast again on
- * details opened before that earlier run wrote its Tor note, whose cached read still says none.
- */
-internal fun openSendPublished(
-    viaRecorded: Boolean,
-    snap: BroadcastSnapshot?,
-): Boolean = viaRecorded || snap?.heldBefore == true || (snap?.phase == "success" && !snap.refusedByAll)
