@@ -106,6 +106,12 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
     phase changes, so a hot send's row dropped just after its failure is shown on the screen already open.
   - `broadcastSignedPsbt` remembers that the signed row committed, so a later throw whose status read also fails
     still says the payment was saved (`SIGNED_PSBT_NOT_STARTED`, `stored = true`).
+- **Review round 5 decisions (GLaDOS and CodeRabbit, 2026-11-24).**
+  - `DueTorNotes` holds one lock across its due set and the SQL that writes or deletes a note. Broadcast hooks and
+    wallet refreshes run on different threads, so a refresh writing a due note can no longer upsert it after a
+    refused first run's drop deleted it.
+  - A dropped note whose delete fails is kept as a pending deletion and deleted again on every wallet refresh, the
+    same way a failed write stays due. A later run a node holds makes the note due again and cancels that deletion.
 
 ## Units
 
