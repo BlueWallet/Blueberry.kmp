@@ -55,8 +55,10 @@ fun BroadcastScreen(
     val receipt = SendReceipt(SendRecipient(stored.destination, stored.label), stored.paidSats, stored.feeSats, stored.txid)
     val status = ownedBroadcastStatus(snap, snap.txHex ?: stored.txid)
     val retryable = status.tone == BroadcastTone.Failed || status.resend
-    var forgettable by remember(id) { mutableStateOf(false) }
-    LaunchedEffect(id, snap.phase, holdsSeen) { forgettable = broadcastJobForgettable(runtime, id) }
+    // Asked off the UI thread; until the answer for this phase lands, a job that left "error" shows no Forget.
+    var forgettableAsked by remember(id) { mutableStateOf(false) }
+    LaunchedEffect(id, snap.phase, holdsSeen) { forgettableAsked = broadcastJobForgettable(runtime, id) }
+    val forgettable = forgettableAsked && broadcastCanBeForgotten(snap.phase)
     val shown = if (retryNote != null && retryable) status.copy(line = retryNote!!) else status
     SendBroadcastStep(
         receipt = receipt,
