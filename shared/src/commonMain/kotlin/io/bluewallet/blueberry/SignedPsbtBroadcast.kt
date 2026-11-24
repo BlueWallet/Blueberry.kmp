@@ -30,13 +30,15 @@ sealed class SignedPsbtSent {
  * Replaces the stored unsigned send [storedTxid] with its signed transaction, keeping its coins held.
  * Segwit-only spends keep their txid. Legacy and nested-segwit signatures change it, so the row and its
  * note move to the signed txid. False when the payment is gone (forgotten or confirmed), including when the
- * signed transaction turns out to be in a block already. Runs off the UI thread.
+ * signed transaction turns out to be in a block already. [onStored] runs once the signed row has committed, before
+ * hydrating. Runs off the UI thread.
  */
 fun storeSignedPsbt(
     db: Database,
     runtime: PeersRuntime,
     storedTxid: String,
     signed: SignedPsbt,
+    onStored: () -> Unit = {},
 ): Boolean {
     val row = openSend(db, storedTxid) ?: openSend(db, signed.txid) ?: return false
     if (storedTxid == signed.txid) {
@@ -52,6 +54,7 @@ fun storeSignedPsbt(
             }
         }
     }
+    onStored()
     runtime.storedHolds.clear()
     hydrateWallet(db, runtime.walletTxsStore, runtime.wallet, nowMillis())
     // Hydrating settles the row when the signed txid is already in a block, so it's no longer waiting.
@@ -96,8 +99,9 @@ suspend fun broadcastSignedPsbt(
     receipt: BroadcastReceipt,
 ): SignedPsbtSent =
     withContext(NonCancellable) {
+        var committed = false
         runCatching {
-            val stored = withContext(Dispatchers.Default) { storeSignedPsbt(db, runtime, storedTxid, signed) }
+            val stored = withContext(Dispatchers.Default) { storeSignedPsbt(db, runtime, storedTxid, signed) { committed = true } }
             when {
                 // Hydrating may have found the stored row confirmed: it holds the signed payment, so Back leaves to it.
                 !stored -> SignedPsbtSent.Refused(SIGNED_PSBT_GONE, signedRowStored(db, signed))
@@ -110,7 +114,8 @@ suspend fun broadcastSignedPsbt(
         }.getOrElse { e ->
             if (e is CancellationException) throw e
             // The row commits before hydrating and starting, so a later throw leaves it stored: say so, and Back leaves.
-            val stored = runCatching { signedRowStored(db, signed) }.getOrDefault(false)
+            // A read that fails after the commit is not a rollback, so the commit alone says it was stored.
+            val stored = committed || runCatching { signedRowStored(db, signed) }.getOrDefault(false)
             SignedPsbtSent.Refused(if (stored) SIGNED_PSBT_NOT_STARTED else SIGNED_PSBT_NOT_STORED, stored)
         }
     }

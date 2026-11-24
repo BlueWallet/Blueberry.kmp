@@ -494,6 +494,32 @@ class SignedPsbtBroadcastTest {
             assertEquals(signed.txHex, db.sends.get(signed.txid)?.txHex)
         }
 
+    /** The row committed, then every read fails: a failed read is not a rollback, so it still says it was saved. */
+    @Test
+    fun a_throw_after_the_row_commits_says_saved_even_when_its_status_read_fails() =
+        runFlow { db, runtime, _ ->
+            storeUnsignedSend(db, runtime, unsignedRow).join()
+            val signed = signedPsbt(unsignedTxid)
+            val receipt = BroadcastReceipt(unsignedTxid, ADDRESS, "Rent", 50_000, 141)
+            var committed = false
+            val failingReads =
+                object : Database by db {
+                    override val sends =
+                        object : SendsRepository by db.sends {
+                            override fun upsert(row: SendRow) {
+                                db.sends.upsert(row)
+                                committed = true
+                            }
+
+                            override fun get(txid: String): SendRow? = if (committed) error("disk I/O error") else db.sends.get(txid)
+                        }
+                }
+            val refused = assertIs<SignedPsbtSent.Refused>(broadcastSignedPsbt(failingReads, runtime, unsignedTxid, signed, receipt))
+            assertEquals(SIGNED_PSBT_NOT_STARTED, refused.reason)
+            assertTrue(refused.stored)
+            assertEquals(signed.txHex, db.sends.get(signed.txid)?.txHex)
+        }
+
     /** Nothing was stored, so the review keeps the unsaved text and Back stays in the flow. */
     @Test
     fun a_store_that_throws_before_the_row_commits_says_it_was_not_saved() =
