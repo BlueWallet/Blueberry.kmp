@@ -41,16 +41,27 @@ internal fun writeStoredSendTorNote(
  * so its Tor note is written here, as a hot-wallet send's is: the app can die while a node holds the transaction.
  */
 internal fun PeersRuntime.broadcastHandedOff(id: String) {
-    persistArmedBroadcast(id, handedOff = true)
+    try {
+        persistArmedBroadcast(id, handedOff = true)
+    } finally {
+        noteHandedOff(id)
+    }
+}
+
+/** Makes job [id]'s Tor note due once a node was given its transaction; written while its payment is stored. */
+private fun PeersRuntime.noteHandedOff(id: String) {
     val session = broadcastStore.sessions().find { it.snapshot.id == id } ?: return
     val txid = session.receipt?.txid ?: return
     if (session.snapshot.handedOff) dueTorNotes.add(txid)
 }
 
-/** The runtime's hook for job [id] finishing. */
+/** The runtime's hook for job [id] finishing. The Tor note is settled even when persisting the send throws. */
 internal fun PeersRuntime.broadcastDone(id: String) {
-    persistArmedBroadcast(id)
-    noteStoredSendBroadcast(id)
+    try {
+        persistArmedBroadcast(id)
+    } finally {
+        noteStoredSendBroadcast(id)
+    }
 }
 
 /**

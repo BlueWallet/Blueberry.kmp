@@ -368,6 +368,45 @@ class SignedPsbtBroadcastTest {
             }
         }
 
+    /**
+     * Persisting a hot-wallet send can throw after its row is written (here its own Tor write fails). The done hook
+     * still makes the note due, so the next wallet refresh writes it.
+     */
+    @Test
+    fun the_done_hook_keeps_the_tor_note_due_when_persisting_the_send_throws() =
+        runFlow { db, _, _ ->
+            var broken = true
+            val flaky =
+                object : Database by db {
+                    override val broadcastVia =
+                        object : BroadcastViaRepository by db.broadcastVia {
+                            override fun upsert(
+                                txid: String,
+                                via: String,
+                            ) {
+                                if (broken) error("database is locked")
+                                db.broadcastVia.upsert(txid, via)
+                            }
+                        }
+                }
+            val runtime = PeersRuntime(flaky)
+            try {
+                val txid = "ef".repeat(32)
+                val hex = spending(signed = true)
+                runtime.armSendPersist("hot", SendRow(txid, hex, ADDRESS, listOf(PrivateSendCoin(c.txid, c.vout, c.valueSats))))
+                runtime.broadcastStore.start("hot", hex, receipt = BroadcastReceipt(txid, ADDRESS, "Rent", 50_000, 141))
+                runtime.broadcastStore.markHandedOff("hot")
+                runtime.broadcastStore.applyDone(BroadcastDonePayload.Ok("hot", "1.1.1.1:8333", acknowledged = true))
+                assertTrue(runCatching { runtime.broadcastDone("hot") }.isFailure)
+                assertEquals(hex, db.sends.get(txid)?.txHex)
+                broken = false
+                runtime.bus.emit(Event.WalletTxs, WalletTxsPayload(at = 1))
+                assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(txid))
+            } finally {
+                runtime.stop()
+            }
+        }
+
     /** Stores a legacy spend (its row moves to the signed txid) and starts its broadcast. */
     private suspend fun startMoved(
         db: Database,
