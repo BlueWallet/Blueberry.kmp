@@ -267,3 +267,14 @@ Spec: "Review round 5 decisions". Test first, watch it fail, minimal fix, watch 
 - [x] `DueTorNotesTest`: a refresh already writing a due note when a drop arrives on another thread doesn't leave the note written.
 - [x] `DueTorNotesTest`: a note made due again after a failed delete stays written.
 - [x] Review loop, full checks, push, reply to and resolve threads, re-request review.
+
+### Task 12: GLaDOS review round 6 (2026-11-24)
+
+Spec: "Review round 6 decisions". Test first, watch it fail, minimal fix, watch it pass.
+
+- [ ] `SignedPsbtTest`: a two-input PSBT with both inputs signed finalizes and spends both coins (red by swapping signatures in `finalTx`).
+- [ ] `DueTorNotesTest`: a pending drop reads as no Tor record; it survives a new `DueTorNotes` until a delete lands; a held run's `add` cancels it durably.
+- [ ] `SignedPsbtBroadcastTest`: a refused first run whose note delete fails lets Broadcast again start as a first run.
+- [ ] `SignedPsbtBroadcastTest`: `broadcastSignedPsbt` reads no SQLite on the caller's dispatcher.
+- [ ] `SendHoldsTest`: `broadcastJobForgettable` fills the holds cache off the caller's dispatcher; the broadcast screen uses it from a `LaunchedEffect`.
+- [ ] Review loop, full checks, push, reply to and resolve threads, re-request review.

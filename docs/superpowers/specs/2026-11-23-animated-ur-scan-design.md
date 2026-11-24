@@ -113,6 +113,22 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
   - A dropped note whose delete fails is kept as a pending deletion and deleted again on every wallet refresh, the
     same way a failed write stays due. A later run a node holds makes the note due again and cancels that deletion.
 
+- **Review round 6 decisions (GLaDOS, 2026-11-24).**
+  - A pending Tor-note deletion counts as no Tor record. `priorRun` and the details' `openSendPublished` input ask
+    `DueTorNotes.recorded(txid)` (a `broadcast_via` row and no pending drop), so Broadcast again after a refused first
+    run whose delete failed starts as a first run, and a run that then reaches no node is not sent.
+  - The pending deletion is durable: `drop` writes the txid into the `stored_send_tor_drops` key-value entry before
+    deleting the row, and the entry is rewritten once deletes land or a later held run cancels them. A new
+    `DueTorNotes` (a restart) loads the entry, so the row still reads as no record and is deleted on the next refresh.
+    If the entry itself can't be written, the in-memory set still holds the drop and the write is tried again on each
+    settle.
+  - The broadcast screen asks `broadcastJobForgettable` (a suspend wrapper on `Dispatchers.Default`) from a
+    `LaunchedEffect`, so filling the stored-holds cache never reads SQLite during composition. `broadcastSignedPsbt`
+    runs both the store and the start on `Dispatchers.Default`, so `sendStoredAgain`'s reads and decoding leave the
+    caller's (UI) dispatcher.
+  - `SignedPsbtTest` finalizes a two-input PSBT with both inputs signed for every script type and checks the
+    extracted transaction spends both coins; a signature put on the wrong input fails it.
+
 ## Units
 
 - `wallet/UrDecoder.kt`: `UrDecoder`, `UrReceive`, `PSBT_UR_TYPES`, `psbtFromUrMessage`.
@@ -132,4 +148,5 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
 - `SignedPsbtBroadcastTest`: a segwit spend keeps its row key with the signed hex; a legacy spend moves to the new txid with its note; a missing row is refused; a signed txid already in a block (segwit and legacy) is refused after storing; the broadcast job starts as a first run (not held) and `storedSendCanGoAgain` becomes true; a start that throws after the row is stored says it was saved but couldn't start; a Tor note that keeps failing to write is written on the next wallet refresh; a hand-off writes the Tor note (kept due if the write fails), a first run every node then refuses deletes it and the next run starts as a first run, while an earlier held run's note stays; the done hook keeps the note due when persisting the send throws; a throw after the row commits whose status read also fails still says it was saved.
 - `SendHoldsTest`: the broadcast screen's Forget watcher asks again on the wallet refresh that follows a refused send's dropped row, and then offers Forget.
 - `DueTorNotesTest`: a dropped note whose delete throws is deleted on the next refresh; a refresh already writing a due note when a drop arrives on another thread doesn't leave it written; a note made due again after a failed delete stays written.
+- Round 6: `DueTorNotesTest` — a pending drop reads as no Tor record, survives a restart until deleted, and a later held run cancels it durably; `SignedPsbtBroadcastTest` — a refused first run whose note delete fails still lets Broadcast again start as a first run, and the store and the start never read SQLite on the caller's dispatcher; `SendHoldsTest` — `broadcastJobForgettable` fills the holds cache off the caller's dispatcher; `SignedPsbtTest` — a two-input PSBT with both inputs signed finalizes and spends both.
 - Compose screens are not unit tested (repo convention); they are thin over the units above.
