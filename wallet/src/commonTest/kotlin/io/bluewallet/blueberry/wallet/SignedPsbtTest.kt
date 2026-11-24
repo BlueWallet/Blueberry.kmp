@@ -6,7 +6,9 @@ import fr.acinq.bitcoin.KeyPath
 import fr.acinq.bitcoin.MnemonicCode
 import fr.acinq.bitcoin.OP_PUSHDATA
 import fr.acinq.bitcoin.Script
+import fr.acinq.bitcoin.ScriptFlags
 import fr.acinq.bitcoin.ScriptWitness
+import fr.acinq.bitcoin.Transaction
 import fr.acinq.bitcoin.psbt.Input
 import fr.acinq.bitcoin.psbt.Psbt
 import kotlin.io.encoding.Base64
@@ -218,31 +220,61 @@ class SignedPsbtTest {
         assertEquals(SignedPsbtCheck.Failed(PSBT_NOT_SIGNED), finalizeSignedPsbt(built.psbtHex, hexToBytes(built.psbtHex)))
     }
 
+    /** A two-input send from coins at receive indexes 0 and 1, with the funding txid of each index. */
+    private fun buildTwoInputs(case: Case): Pair<PsbtSendResult, Map<String, Int>> {
+        val wallet = deriveWatchWallet(case.secret, WatchGaps(2, 2))
+        val fundings = (0..1).map { index -> testFundingTx(wallet.hd(case.type, index).scriptPubKey, 100_000L, salt = index + 1) }
+        val utxos =
+            fundings.mapIndexed { index, funding ->
+                SendInputUtxo(funding.txid, 0, 100_000L, wallet.hd(case.type, index).scriptPubKey, funding.bytes)
+            }
+        val built =
+            buildSend(
+                BuildSendTxParams(
+                    secret = case.secret,
+                    wallet = wallet,
+                    utxos = utxos,
+                    toAddress = DEST_LEGACY,
+                    amountSats = SendAmount.Exact(150_000L),
+                    feeRateSatPerVb = 2.0,
+                    changeAddress = wallet.hd(case.type, 0, change = true).address,
+                ),
+            ) as PsbtSendResult
+        return built to fundings.mapIndexed { index, funding -> funding.txid to index }.toMap()
+    }
+
     @Test
     fun rejects_a_psbt_with_only_some_inputs_signed() {
         for (case in listOf(p2pkh, p2wpkh, p2tr)) {
-            val wallet = deriveWatchWallet(case.secret, WatchGaps(2, 2))
-            val utxos =
-                (0..1).map { index ->
-                    val coin = wallet.hd(case.type, index)
-                    val funding = testFundingTx(coin.scriptPubKey, 100_000L, salt = index + 1)
-                    SendInputUtxo(funding.txid, 0, 100_000L, coin.scriptPubKey, funding.bytes)
-                }
-            val built =
-                buildSend(
-                    BuildSendTxParams(
-                        secret = case.secret,
-                        wallet = wallet,
-                        utxos = utxos,
-                        toAddress = DEST_LEGACY,
-                        amountSats = SendAmount.Exact(150_000L),
-                        feeRateSatPerVb = 2.0,
-                        changeAddress = wallet.hd(case.type, 0, change = true).address,
-                    ),
-                ) as PsbtSendResult
+            val (built, _) = buildTwoInputs(case)
             val half = signed(case, built.psbtHex)
             assertEquals(2, half.inputs.size, case.type.name)
             assertEquals(SignedPsbtCheck.Failed(PSBT_NOT_SIGNED), finalizeSignedPsbt(built.psbtHex, half.bytes()), case.type.name)
+        }
+    }
+
+    /** Each input gets its own signature: one put on the other input would fail the script check, not pass. */
+    @Test
+    fun finalizes_a_two_input_psbt_with_both_inputs_signed() {
+        for (case in listOf(p2pkh, p2shP2wpkh, p2wpkh, p2tr)) {
+            val (built, keyOf) = buildTwoInputs(case)
+            var psbt = Psbt.read(hexToBytes(built.psbtHex)).right!!
+            psbt.global.tx.txIn.forEachIndexed { input, txIn ->
+                val keyIndex = keyOf.getValue(txIn.outPoint.txid.toString())
+                val priv = master.derivePrivateKey(KeyPath("m/${case.purpose}'/0'/0'/0/$keyIndex")).privateKey
+                psbt = psbt.sign(priv, input).right!!.psbt
+            }
+            val ok = assertIs<SignedPsbtCheck.Ok>(finalizeSignedPsbt(built.psbtHex, psbt.bytes()), case.type.name)
+            val tx = Transaction.read(ok.signed.txHex)
+            assertEquals(keyOf.keys, tx.txIn.map { it.outPoint.txid.toString() }.toSet(), case.type.name)
+            assertTrue(tx.txIn.all { it.outPoint.index == 0L }, case.type.name)
+            val spent =
+                psbt.global.tx.txIn.zip(psbt.inputs).associate { (txIn, input) ->
+                    txIn.outPoint to (input.witnessUtxo ?: input.nonWitnessUtxo!!.txOut[0])
+                }
+            Transaction.correctlySpends(tx, spent, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
+            assertEquals(built.feeSats, ok.signed.feeSats, case.type.name)
+            assertEquals(150_000L, ok.signed.paidTo(DEST_LEGACY), case.type.name)
         }
     }
 
