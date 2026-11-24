@@ -8,8 +8,6 @@ import io.bluewallet.blueberry.bus.BroadcastStopPayload
 import io.bluewallet.blueberry.bus.Event
 import io.bluewallet.blueberry.wallet.outpointKey
 import io.bluewallet.blueberry.wallet.prevoutTxidDisplay
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * Drops a job a node confirmed, once its screen closes. A send no node confirmed stays, so its transaction
@@ -38,15 +36,6 @@ fun broadcastJobCanBeForgotten(
     val txid = session.receipt?.txid
     return broadcastCanBeForgotten(session.snapshot.phase) && (txid == null || runtime.storedHolds.get().none { it.first == txid })
 }
-
-/**
- * [broadcastJobCanBeForgotten] off the caller's dispatcher: a cleared stored-holds cache is filled from SQLite, which
- * the broadcast screen must not do during composition.
- */
-suspend fun broadcastJobForgettable(
-    runtime: PeersRuntime,
-    id: String,
-): Boolean = withContext(Dispatchers.Default) { broadcastJobCanBeForgotten(runtime, id) }
 
 fun liveBroadcastIds(store: BroadcastStore): Set<String> =
     store

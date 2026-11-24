@@ -11,7 +11,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.backhandler.BackHandler
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** The broadcast screen opened from the transaction list, with no send wizard under it. */
 @Composable
@@ -84,6 +86,15 @@ fun BroadcastScreen(
             ),
     )
 }
+
+/**
+ * [broadcastJobCanBeForgotten] off the caller's dispatcher: a cleared stored-holds cache is filled from SQLite, which
+ * the broadcast screen must not do during composition.
+ */
+suspend fun broadcastJobForgettable(
+    runtime: PeersRuntime,
+    id: String,
+): Boolean = withContext(Dispatchers.Default) { broadcastJobCanBeForgotten(runtime, id) }
 
 /**
  * Calls [onChange] whenever [broadcastJobCanBeForgotten] for job [id] may have changed: the job changed, or the wallet
