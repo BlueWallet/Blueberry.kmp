@@ -103,6 +103,13 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
   - Decoding stays on the thread that feeds the scan (the UI thread). With the caps above one frame's work is
     bounded, and moving it would need Start over and the signature-check rejection serialised with a background
     feed; not worth the race risk here.
+- **Review round 9 decisions (GLaDOS, 2026-11-24).**
+  - A UR part's size is checked on its text before any bytewords or CBOR decoding, two minimal-bytewords
+    characters per byte. A fountain body must fit in one 2,148-byte fragment plus the largest fountain CBOR
+    header (24 bytes) and the 4-byte CRC; a single-part body must fit in the 2,148,000-byte message cap plus the
+    CRC. A bigger part is ignored with "This QR code is too large." and nothing of it is decoded, so a pasted UR
+    can't make the decoder allocate past the cap, and single-part `crypto-psbt`/`psbt` URs are held to the
+    same message cap as animations.
 
 ## Units
 
@@ -117,7 +124,7 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
 
 ## Testing
 
-- `UrDecoderTest`: BlueWallet's 2-part `crypto-psbt` vector in order, reversed, with duplicates; a fountain-only vector generated with `@ngraveio/bc-ur` (parts 7..19 of a 6-fragment animation) decodes without any simple part; uppercase QR alphanumeric form; single-part; `ur:psbt`; foreign type, mixed type, other animation, corrupt frame are ignored without losing progress; progress grows and hits 100; reset; a fragment longer than a QR holds is ignored; a decoder throw fails the scan instead of escaping; round trips with our encoder at several capacities in shuffled order.
+- `UrDecoderTest`: BlueWallet's 2-part `crypto-psbt` vector in order, reversed, with duplicates; a fountain-only vector generated with `@ngraveio/bc-ur` (parts 7..19 of a 6-fragment animation) decodes without any simple part; uppercase QR alphanumeric form; single-part; `ur:psbt`; foreign type, mixed type, other animation, corrupt frame are ignored without losing progress; progress grows and hits 100; reset; a fragment longer than a QR holds is ignored; a part too long to hold a capped fragment (fountain) or message (single-part) is ignored as too large before it is decoded; a decoder throw fails the scan instead of escaping; round trips with our encoder at several capacities in shuffled order.
 - `SignedPsbtTest`: watch-only PSBTs for the `abandon … about` xpub (P2PKH), ypub (P2SH-P2WPKH), zpub (P2WPKH) and BIP86 tr (P2TR) are signed with the matching private keys through bitcoin-kmp (`Psbt.sign`, partial signatures), round-tripped through UR, finalized and extracted; a signer-finalized PSBT (P2TR key path included) also passes; different transaction, unsigned, half-signed, wrong-key and non-`SIGHASH_ALL` (partial or signer-finalized) cases give the errors above; base64 (padded or not) and hex text parse; non-PSBT text is rejected.
 - `SignedPsbtScanTest`: UR frames reach 100 and yield the PSBT; base64 text completes at once; ignored text keeps progress; reset.
 - `SignedPsbtBroadcastTest`: a segwit spend keeps its row key with the signed hex and gets its Tor record; a legacy spend moves to the new txid with its note and its Tor record is on the signed txid; a missing row is refused; a signed txid already in a block (segwit and legacy) is refused after storing and says it was stored; the broadcast job starts held, as Broadcast again does for a hot send, and stays held when it reaches no node; storing and starting finish when the caller is cancelled and read no SQLite on its dispatcher; a start or store that throws says whether the payment was saved.

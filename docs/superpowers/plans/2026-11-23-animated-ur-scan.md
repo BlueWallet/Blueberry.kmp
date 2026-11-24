@@ -311,3 +311,11 @@ Spec: "Review round 8 decisions". Test first, watch it fail, minimal fix, watch 
 - [x] `UrDecoderTest`: a fountain part whose fragment is longer than a QR holds is ignored; the message is capped at 1,000 such fragments.
 - [x] `UrDecoderTest`: a throw from the fountain decoder fails the scan instead of escaping `receive`.
 - [x] Review loop, full checks, push, reply to and resolve threads, re-request review.
+
+### Task 16: GLaDOS review round 9 (2026-11-24)
+
+Spec: "Review round 9 decisions". Test first, watch it fail, minimal fix, watch it pass.
+
+- [ ] `UrDecoderTest`: a fountain part whose text is longer than a capped fragment's is ignored as too large without being decoded (an undecodable oversize body says too large, not corrupt); the largest capped part still decodes.
+- [ ] `UrDecoderTest`: a single-part UR whose message is past the cap is ignored as too large; one at the cap completes.
+- [ ] Review loop, full checks, push, reply to and resolve threads, re-request review.
