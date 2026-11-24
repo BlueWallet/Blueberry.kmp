@@ -14,6 +14,11 @@ const val UR_CHECKSUM_FAILED = "The scanned parts don't fit together. Start over
 // 175 KB at our own 175-byte fragments, far past any single-sig PSBT. Each mixed frame shuffles this many
 // indexes on the camera thread, so it stays small.
 private const val MAX_FRAGMENT_COUNT = 1_000
+
+// What one QR can carry: a version 40 QR holds 4,296 alphanumeric characters, two per byte in minimal bytewords.
+// A pasted UR isn't held to that, so bigger fragments are refused; with the count cap the message stays small.
+private const val MAX_FRAGMENT_LENGTH = 2_148
+private const val MAX_MESSAGE_LENGTH = MAX_FRAGMENT_COUNT * MAX_FRAGMENT_LENGTH
 private const val PERCENT = 100
 private const val MAX_ESTIMATE = 0.99
 private const val FOUNTAIN_OVERHEAD = 1.75
@@ -46,9 +51,12 @@ sealed class UrReceive {
  * repeats, as a camera reads an animated QR. The first accepted part locks the type and the animation;
  * anything else is ignored so a stray QR can't spoil a scan in progress.
  */
-class UrDecoder(
+class UrDecoder internal constructor(
     private val acceptedTypes: Set<String>,
+    private val newFountain: () -> FountainDecoder,
 ) {
+    constructor(acceptedTypes: Set<String>) : this(acceptedTypes, ::FountainDecoder)
+
     private var type: String? = null
     private var fountain: FountainDecoder? = null
     private val seen = HashSet<Long>()
@@ -114,21 +122,29 @@ class UrDecoder(
             runCatching { cborDecodeFountainPart(bytewordsDecodeMinimal(part.body)) }
                 .getOrNull()
                 ?.takeIf { it.isSane(seqNum, part.seqCount) }
-        val decoder = fountain ?: FountainDecoder()
+        val decoder = fountain ?: newFountain()
+        // A throw may leave the decoder half-updated, so it ends the scan like a checksum failure: only reset recovers.
         val accepted =
-            decoded != null &&
-                decoder.receivePart(
-                    seqNum = seqNum,
-                    seqLength = decoded.seqLength.toInt(),
-                    messageLength = decoded.messageLength.toInt(),
-                    checksum = decoded.checksum,
-                    fragment = decoded.fragment,
-                )
+            decoded == null ||
+                runCatching {
+                    decoder.receivePart(
+                        seqNum = seqNum,
+                        seqLength = decoded.seqLength.toInt(),
+                        messageLength = decoded.messageLength.toInt(),
+                        checksum = decoded.checksum,
+                        fragment = decoded.fragment,
+                    )
+                }.getOrElse { return fail() }
         return when {
             decoded == null -> UrReceive.Ignored(UR_CORRUPT)
             !accepted -> UrReceive.Ignored(UR_OTHER_ANIMATION)
             else -> accept(decoder, part.type, seqNum)
         }
+    }
+
+    private fun fail(): UrReceive {
+        failed = true
+        return UrReceive.Failed(UR_CHECKSUM_FAILED)
     }
 
     private fun accept(
@@ -140,10 +156,7 @@ class UrDecoder(
         type = partType
         seen += seqNum
         return when {
-            decoder.hasFailed -> {
-                failed = true
-                UrReceive.Failed(UR_CHECKSUM_FAILED)
-            }
+            decoder.hasFailed -> fail()
             decoder.isSuccess() -> UrReceive.Complete(decoder.resultMessage().also { message = it })
             else -> UrReceive.Progress(percent ?: 0)
         }
@@ -152,7 +165,8 @@ class UrDecoder(
 
 /**
  * The fountain header agrees with the `/seq-count/` path and is small enough to decode. Sequence numbers start
- * at 1: a 0 would be filed as fragment -1 and block completion for good. The message must fit a ByteArray.
+ * at 1: a 0 would be filed as fragment -1 and block completion for good. Fragments are no longer than one QR
+ * carries, so the reassembled message (at most [MAX_MESSAGE_LENGTH]) can't overflow or exhaust memory.
  */
 private fun DecodedFountainPart.isSane(
     seqNum: Long,
@@ -162,8 +176,8 @@ private fun DecodedFountainPart.isSane(
         seqNum == this.seqNum &&
         seqCount?.toLong() == seqLength &&
         seqLength in 1..MAX_FRAGMENT_COUNT &&
-        fragment.isNotEmpty() &&
-        messageLength in 1..minOf(seqLength * fragment.size, Int.MAX_VALUE.toLong())
+        fragment.size in 1..MAX_FRAGMENT_LENGTH &&
+        messageLength in 1..minOf(seqLength * fragment.size, MAX_MESSAGE_LENGTH.toLong())
 
 /** The PSBT inside a `crypto-psbt` / `psbt` UR message (a CBOR byte string). */
 fun psbtFromUrMessage(message: ByteArray): ByteArray = cborDecodeByteString(message)

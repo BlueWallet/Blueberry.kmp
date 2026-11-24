@@ -148,15 +148,54 @@ class UrDecoderTest {
         assertTrue(seq > 22L, "at least one frame reduced to nothing before the missing fragment arrived")
     }
 
-    /** One mixed part (sequence past the count) of a message claiming [seqLength] 10-byte fragments. */
-    private fun claimed(seqLength: Long): String {
+    /**
+     * A pasted UR isn't limited to what a camera can read: fragments longer than one QR holds would let a few
+     * pastes make the decoder allocate without bound, so they are ignored. The largest animation still decodes.
+     */
+    @Test
+    fun a_fragment_longer_than_a_qr_holds_is_ignored() {
+        assertIs<UrReceive.Progress>(psbtDecoder().receive(claimed(seqLength = 2, fragmentLength = 2_148)))
+        assertIs<UrReceive.Progress>(psbtDecoder().receive(claimed(seqLength = 1_000, fragmentLength = 2_148)))
+        assertEquals(UrReceive.Ignored(UR_CORRUPT), psbtDecoder().receive(claimed(seqLength = 2, fragmentLength = 2_149)))
+        assertEquals(UrReceive.Ignored(UR_CORRUPT), psbtDecoder().receive(claimed(seqLength = 1, fragmentLength = 100_000)))
+    }
+
+    /** The scan runs on the UI thread: whatever the fountain decoder throws must not escape [UrDecoder.receive]. */
+    @Test
+    fun a_throw_from_the_fountain_decoder_fails_the_scan_instead_of_escaping() {
+        val decoder =
+            UrDecoder(PSBT_UR_TYPES) {
+                object : FountainDecoder() {
+                    override fun receivePart(
+                        seqNum: Long,
+                        seqLength: Int,
+                        messageLength: Int,
+                        checksum: Long,
+                        fragment: ByteArray,
+                    ): Boolean = throw IllegalStateException("array size overflow")
+                }
+            }
+        assertEquals(UrReceive.Failed(UR_CHECKSUM_FAILED), decoder.receive(BW_PARTS[0]))
+        assertEquals(UrReceive.Failed(UR_CHECKSUM_FAILED), decoder.receive(BW_PARTS[1]))
+        decoder.reset()
+        assertNull(decoder.percent)
+    }
+
+    /** One mixed part (sequence past the count) of a message claiming [seqLength] fragments of [fragmentLength] bytes. */
+    private fun claimed(
+        seqLength: Long,
+        fragmentLength: Int = 10,
+    ): String {
         val seq = seqLength + 1
-        val fragment = ByteArray(10) { it.toByte() }
+        val fragment = ByteArray(fragmentLength) { it.toByte() }
         val cbor =
             byteArrayOf(0x85.toByte()) + cborUInt(seq) + cborUInt(seqLength) + cborUInt(seqLength * fragment.size) + cborUInt(1) +
-                byteArrayOf(0x4a) + fragment
+                cborBytesHeader(fragment.size) + fragment
         return "ur:crypto-psbt/$seq-$seqLength/${bytewordsEncodeMinimal(cbor)}"
     }
+
+    /** CBOR major type 2 (byte string) header for [size] bytes. */
+    private fun cborBytesHeader(size: Int): ByteArray = cborUInt(size.toLong()).also { it[0] = (it[0].toInt() or 0x40).toByte() }
 
     /** The same part with one fragment byte flipped and a valid bytewords checksum, so only the message CRC catches it. */
     private fun tamperedFragment(part: String): String = reframed(part, flip = true)

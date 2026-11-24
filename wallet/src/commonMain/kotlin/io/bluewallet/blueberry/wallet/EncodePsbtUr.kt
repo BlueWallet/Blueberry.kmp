@@ -210,7 +210,7 @@ internal class FountainDecoderPart(
     fun isSimple(): Boolean = indexes.size == 1
 }
 
-internal class FountainDecoder {
+internal open class FountainDecoder {
     private var result: ByteArray? = null
     private var failed = false
     private var expectedMessageLength = 0
@@ -240,7 +240,7 @@ internal class FountainDecoder {
 
     fun resultMessage(): ByteArray = if (isSuccess()) result!! else ByteArray(0)
 
-    fun receivePart(
+    open fun receivePart(
         seqNum: Long,
         seqLength: Int,
         messageLength: Int,
