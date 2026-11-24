@@ -204,4 +204,15 @@ class TxDetailFieldsTest {
         assertFalse(openSendPublished(viaRecorded = false, snap = job("attempt")), "a job still running")
         assertFalse(openSendPublished(viaRecorded = false, snap = job("success").copy(refusedByAll = true)))
     }
+
+    /**
+     * Broadcast again with the details open: their Tor read predates the first run's note, but the new job started
+     * held on that run, so the payment still reads as given to nodes whatever this run hears.
+     */
+    @Test
+    fun a_job_started_held_on_an_earlier_run_counts_as_published() {
+        val again = BroadcastSnapshot(id = "2", phase = "starting", handedOff = true, heldBefore = true)
+        assertTrue(openSendPublished(viaRecorded = false, snap = again))
+        assertTrue(openSendPublished(viaRecorded = false, snap = again.copy(phase = "success", refusedByAll = true)))
+    }
 }
