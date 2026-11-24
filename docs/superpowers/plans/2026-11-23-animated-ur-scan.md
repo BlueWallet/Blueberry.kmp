@@ -272,9 +272,9 @@ Spec: "Review round 5 decisions". Test first, watch it fail, minimal fix, watch 
 
 Spec: "Review round 6 decisions". Test first, watch it fail, minimal fix, watch it pass.
 
-- [ ] `SignedPsbtTest`: a two-input PSBT with both inputs signed finalizes and spends both coins (red by swapping signatures in `finalTx`).
-- [ ] `DueTorNotesTest`: a pending drop reads as no Tor record; it survives a new `DueTorNotes` until a delete lands; a held run's `add` cancels it durably.
-- [ ] `SignedPsbtBroadcastTest`: a refused first run whose note delete fails lets Broadcast again start as a first run.
-- [ ] `SignedPsbtBroadcastTest`: `broadcastSignedPsbt` reads no SQLite on the caller's dispatcher.
-- [ ] `SendHoldsTest`: `broadcastJobForgettable` fills the holds cache off the caller's dispatcher; the broadcast screen uses it from a `LaunchedEffect`.
-- [ ] Review loop, full checks, push, reply to and resolve threads, re-request review.
+- [x] `SignedPsbtTest`: a two-input PSBT with both inputs signed finalizes and spends both coins (red by swapping signatures in `finalTx`).
+- [x] `DueTorNotesTest`: a pending drop reads as no Tor record; it survives a new `DueTorNotes` until a delete lands; a held run's `add` cancels it durably.
+- [x] `SignedPsbtBroadcastTest`: a refused first run whose note delete fails lets Broadcast again start as a first run.
+- [x] `SignedPsbtBroadcastTest`: `broadcastSignedPsbt` reads no SQLite on the caller's dispatcher.
+- [x] `SendHoldsTest`: `broadcastJobForgettable` fills the holds cache off the caller's dispatcher; the broadcast screen uses it from a `LaunchedEffect`.
+- [x] Review loop, full checks, push, reply to and resolve threads, re-request review.

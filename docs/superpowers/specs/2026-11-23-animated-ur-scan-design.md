@@ -112,7 +112,6 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
     refused first run's drop deleted it.
   - A dropped note whose delete fails is kept as a pending deletion and deleted again on every wallet refresh, the
     same way a failed write stays due. A later run a node holds makes the note due again and cancels that deletion.
-
 - **Review round 6 decisions (GLaDOS, 2026-11-24).**
   - A pending Tor-note deletion counts as no Tor record. `priorRun` and the details' `openSendPublished` input ask
     `DueTorNotes.recorded(txid)` (a `broadcast_via` row and no pending drop), so Broadcast again after a refused first
@@ -123,7 +122,8 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
     If the entry itself can't be written, the in-memory set still holds the drop and the write is tried again on each
     settle.
   - The broadcast screen asks `broadcastJobForgettable` (a suspend wrapper on `Dispatchers.Default`) from a
-    `LaunchedEffect`, so filling the stored-holds cache never reads SQLite during composition. `broadcastSignedPsbt`
+    `LaunchedEffect`, so filling the stored-holds cache never reads SQLite during composition; Forget also needs the
+    current phase to be `error`, so a stale answer can't offer it on a job that went again. `broadcastSignedPsbt`
     runs both the store and the start on `Dispatchers.Default`, so `sendStoredAgain`'s reads and decoding leave the
     caller's (UI) dispatcher.
   - `SignedPsbtTest` finalizes a two-input PSBT with both inputs signed for every script type and checks the
