@@ -115,15 +115,18 @@ fun dropUnsentSend(
 
 /**
  * Drops a send no node holds: its unconfirmed rows and the Tor note its hand-off wrote, so no later run of [txid]
- * starts held on it. Forgetting goes through [dropUnsentSend] and keeps the note, since nodes may hold that one.
+ * starts held on it. The note goes through [notes] first, under the lock a wallet refresh writes due notes with, so
+ * a refresh can't write it back. Forgetting goes through [dropUnsentSend] and keeps the note, since nodes may hold it.
  */
-fun dropRefusedSend(
+internal fun dropRefusedSend(
     db: Database,
+    notes: DueTorNotes,
     store: WalletTxsStore,
     wallet: Wallet?,
     txid: String,
 ) {
-    if (unconfirmedSendOpen(db, txid)) db.broadcastVia.delete(txid)
+    if (!unconfirmedSendOpen(db, txid)) return
+    notes.drop(txid)
     dropUnsentSend(db, store, wallet, txid)
 }
 

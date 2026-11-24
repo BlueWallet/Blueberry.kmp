@@ -171,6 +171,37 @@ class DueTorNotesTest {
             assertNull(db.keyValue.get(TOR_NOTE_DUE_KEY), "a landed write leaves no stored due note behind")
         }
 
+    /** Forget removes the send but keeps the note: a pending drop must still delete it, not count the send as done. */
+    @Test
+    fun a_pending_drop_still_deletes_the_note_after_the_send_is_forgotten() =
+        withOpenSend { db, flaky ->
+            val notes = DueTorNotes(flaky.store)
+            notes.add(txid)
+            flaky.deleteBroken = true
+            notes.drop(txid)
+            db.sends.delete(txid)
+            notes.write()
+            assertFalse(DueTorNotes(flaky.store).recorded(txid), "the drop stays pending, also after a restart")
+            flaky.deleteBroken = false
+            notes.write()
+            assertNull(db.broadcastVia.get(txid))
+        }
+
+    /** A node holds the payment whether or not its send is still open, so a due note is written after it closed. */
+    @Test
+    fun a_due_note_is_still_written_after_the_send_closed() =
+        withOpenSend { db, flaky ->
+            val notes = DueTorNotes(flaky.store)
+            flaky.upsertBroken = true
+            notes.add(txid)
+            db.sends.delete(txid)
+            notes.write()
+            assertTrue(DueTorNotes(flaky.store).recorded(txid), "the note stays due, also after a restart")
+            flaky.upsertBroken = false
+            notes.write()
+            assertEquals(BROADCAST_VIA_TOR, db.broadcastVia.get(txid))
+        }
+
     private companion object {
         const val ADDRESS = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
         const val RACE_WAIT_MS = 300L

@@ -29,12 +29,15 @@ internal fun storedSendHeldTxid(
     return session.receipt?.txid?.takeIf { sent }
 }
 
-/** Writes the Tor note of stored payment [txid] while it is still unconfirmed; the last failed attempt rethrows. */
+/**
+ * Writes the Tor note of stored payment [txid]; the last failed attempt rethrows. A node holds it whether or not its
+ * send is still open (Forget or a confirmation may have closed it), so only a landed write finishes it.
+ */
 internal fun writeStoredSendTorNote(
     db: Database,
     txid: String,
 ) {
-    if (unconfirmedSendOpen(db, txid)) retryWrite { db.broadcastVia.upsert(txid, BROADCAST_VIA_TOR) }
+    retryWrite { db.broadcastVia.upsert(txid, BROADCAST_VIA_TOR) }
 }
 
 /**
@@ -113,7 +116,7 @@ internal class DueTorNotes(
     fun write() = locked { settle() }
 
     /**
-     * No node holds [txid] after all: its note is no longer due, and the one written is deleted while it's open.
+     * No node holds [txid] after all: its note is no longer due, and the one written is deleted.
      * The drop is stored first, so a delete that fails still holds after a restart.
      */
     fun drop(txid: String) =
@@ -181,12 +184,15 @@ private class StoredTxids(
     }
 }
 
-/** Deletes the Tor note of stored payment [txid] while it is still unconfirmed. */
+/**
+ * Deletes the Tor note of stored payment [txid], also once its send is gone: Forget keeps the note, so a closed send
+ * is no sign the delete is done.
+ */
 private fun deleteStoredSendTorNote(
     db: Database,
     txid: String,
 ) {
-    if (unconfirmedSendOpen(db, txid)) db.broadcastVia.delete(txid)
+    db.broadcastVia.delete(txid)
 }
 
 private const val ROUTE_WRITE_ATTEMPTS = 3

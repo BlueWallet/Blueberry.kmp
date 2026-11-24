@@ -163,7 +163,7 @@ class PeersRuntime(
         val priv = pendingPrivateSends.load()[id]
         storedHolds.clear()
         if (snap.phase == "error" && !snap.handedOff) {
-            (send?.txid ?: priv?.txid)?.let { dropRefusedSend(db, walletTxsStore, wallet, it) }
+            (send?.txid ?: priv?.txid)?.let { dropRefusedSend(db, dueTorNotes, walletTxsStore, wallet, it) }
         } else {
             val sent = if (handedOff || snap.phase == "error") snap.copy(phase = "success") else snap
             val wroteSend = send != null && persistSendAndRefresh(db, walletTxsStore, wallet, send, sent)

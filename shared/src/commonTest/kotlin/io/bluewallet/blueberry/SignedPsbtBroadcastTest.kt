@@ -213,6 +213,56 @@ class SignedPsbtBroadcastTest {
             assertFalse(runtime.broadcastStore.get(id)!!.heldBefore)
         }
 
+    /**
+     * A hot send handed off but its Tor note didn't land, so the note is due; then every node refused this first run.
+     * A wallet refresh landing while the refused send is dropped must not write the note back after it was deleted.
+     */
+    @Test
+    fun a_refresh_while_a_refused_send_is_dropped_does_not_leave_its_tor_note() =
+        runFlow { db, _, _ ->
+            var upsertBroken = true
+            var onSendDelete: () -> Unit = {}
+            val hooked =
+                object : Database by db {
+                    override val broadcastVia =
+                        object : BroadcastViaRepository by db.broadcastVia {
+                            override fun upsert(
+                                txid: String,
+                                via: String,
+                            ) {
+                                if (upsertBroken) error("database is locked")
+                                db.broadcastVia.upsert(txid, via)
+                            }
+                        }
+                    override val sends =
+                        object : SendsRepository by db.sends {
+                            override fun delete(txid: String) {
+                                onSendDelete()
+                                db.sends.delete(txid)
+                            }
+                        }
+                }
+            val runtime = PeersRuntime(hooked)
+            try {
+                val txid = "ef".repeat(32)
+                val hex = spending(signed = true)
+                runtime.armSendPersist("hot", SendRow(txid, hex, ADDRESS, listOf(PrivateSendCoin(c.txid, c.vout, c.valueSats))))
+                runtime.broadcastStore.start("hot", hex, receipt = BroadcastReceipt(txid, ADDRESS, "Rent", 50_000, 141))
+                runtime.broadcastStore.markHandedOff("hot")
+                runCatching { runtime.broadcastHandedOff("hot") }
+                assertNull(db.broadcastVia.get(txid))
+                upsertBroken = false
+                onSendDelete = { runtime.dueTorNotes.write() }
+                runtime.broadcastStore.applyDone(BroadcastDonePayload.Error("hot", BROADCAST_REFUSED, refused = true))
+                runtime.broadcastDone("hot")
+                assertNull(db.sends.get(txid))
+                assertNull(db.broadcastVia.get(txid), "the refused send keeps no Tor note")
+                assertFalse(runtime.dueTorNotes.recorded(txid))
+            } finally {
+                runtime.stop()
+            }
+        }
+
     /** The Tor note is the only durable proof a node holds it, so a write that fails once is tried again. */
     @Test
     fun a_tor_note_that_fails_to_write_once_is_written_on_retry() =
