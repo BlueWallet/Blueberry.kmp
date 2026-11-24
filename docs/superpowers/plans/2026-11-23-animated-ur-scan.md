@@ -235,6 +235,7 @@ Spec: "Device QA decisions". Test first, watch it fail, minimal fix, watch it pa
 - [ ] `SendHoldsTest`: a stored send with a Tor record goes again held; one with neither a record nor a sent job starts as a first run; a job that finished as sent makes the next run held.
 - [ ] `TxDetailFieldsTest`: `openSendPublished` is true for a Tor record or a finished sent job, false for a running or failed one.
 - [ ] Wire `recordStoredSendBroadcast` into the runtime's broadcast done hook; drop the start-time Tor write.
+- [ ] `SignedPsbtBroadcastTest`/`SendHoldsTest`: `broadcastJobCanBeForgotten` is false for a failed run of a stored payment, true once a hot send's row is dropped.
 - [ ] Review Back leaves to the PSBT QR (Compose wiring; compile check).
 - [ ] Review loop, full checks (`check`, `ktlintCheck`, `detekt`, Android compile), push, threads, QA reply, re-request review.
 

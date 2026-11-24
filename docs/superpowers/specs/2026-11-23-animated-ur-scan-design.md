@@ -89,6 +89,8 @@ The app checks that it is the same transaction it asked to sign, finalizes it, s
     replaces the round-2 decision above.
   - Details say a signed payment "was given to Bitcoin nodes" on its Tor record or a job of it that finished as
     sent; a running or failed job no longer counts.
+  - The broadcast screen offers no "Forget this transaction" for a failed run of a payment that is still stored:
+    forgetting the job would leave the row and its coin hold behind. Forget this payment in details drops it.
   - Back on the review leaves the flow to the PSBT QR (decision 11), instead of returning to the scanner.
   - Not changed here: after a restart Home showed a pending self-send as −0.00010000 while details said
     −0.00000423. That row comes from `pendingWalletRows`/`inferPendingSendNetDelta` on master, not from this change.

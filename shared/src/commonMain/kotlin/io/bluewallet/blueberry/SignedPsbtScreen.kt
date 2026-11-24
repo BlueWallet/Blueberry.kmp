@@ -50,7 +50,8 @@ internal class SignedPsbtTarget(
 )
 
 /**
- * Scan the signed PSBT, review it, then broadcast it. Back goes one step back; [onBack] leaves from the scan.
+ * Scan the signed PSBT, review it, then broadcast it. Back on the scan or the review calls [onBack], which
+ * returns to the PSBT QR.
  * [onDone] gets the broadcast txid, which differs from [SignedPsbtTarget.storedTxid] for legacy and nested inputs.
  */
 @Composable
@@ -84,7 +85,7 @@ internal fun SignedPsbtFlow(
                 target,
                 review,
                 onStarted = { broadcastId = it },
-                onBack = { signed = null },
+                onBack = onBack,
                 onExit = { onDone(review.txid) },
             )
         else ->
