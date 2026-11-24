@@ -247,8 +247,7 @@ internal open class FountainDecoder {
         checksum: Long,
         fragment: ByteArray,
     ): Boolean {
-        if (isComplete()) return false
-        if (!validatePart(seqLength, messageLength, checksum, fragment.size)) return false
+        if (isComplete() || !validatePart(seqLength, messageLength, checksum, fragment.size)) return false
 
         val indexes = chooseFragments(seqNum, seqLength, checksum)
         queuedParts.addLast(FountainDecoderPart(indexes, fragment))

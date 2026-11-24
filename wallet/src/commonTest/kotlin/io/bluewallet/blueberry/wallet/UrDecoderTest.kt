@@ -172,7 +172,7 @@ class UrDecoderTest {
                         messageLength: Int,
                         checksum: Long,
                         fragment: ByteArray,
-                    ): Boolean = throw IllegalStateException("array size overflow")
+                    ): Boolean = error("array size overflow")
                 }
             }
         assertEquals(UrReceive.Failed(UR_CHECKSUM_FAILED), decoder.receive(BW_PARTS[0]))

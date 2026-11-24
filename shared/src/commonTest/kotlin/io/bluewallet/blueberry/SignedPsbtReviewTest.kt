@@ -18,7 +18,11 @@ class SignedPsbtReviewTest {
             val one = OneBroadcast()
             val release = CompletableDeferred<Unit>()
             var runs = 0
-            val first = one.launchIn(this) { runs++; release.await() }
+            val first =
+                one.launchIn(this) {
+                    runs++
+                    release.await()
+                }
             val second = one.launchIn(this) { runs++ }
             yield()
             assertNotNull(first)
