@@ -601,7 +601,7 @@ internal fun bytewordsDecodeMinimal(input: String): ByteArray {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Minimal CBOR: byte strings, unsigned ints, and the fixed-shape 5-element fountain-part array.
+// Minimal CBOR: byte strings, unsigned ints, the 5-element fountain-part array, and any item for the registry types.
 // ---------------------------------------------------------------------------------------------
 
 private fun cborHeader(
@@ -636,12 +636,23 @@ private fun cborEncodeFountainPart(part: FountainEncoderPart): ByteArray =
         cborEncodeUInt(part.checksum) +
         cborEncodeByteString(part.fragment)
 
-private class CborReader(
+/** A CBOR tag (major type 6) and the item it wraps. */
+internal class CborTag(
+    val tag: Long,
+    val item: Any?,
+)
+
+private const val MAX_CBOR_DEPTH = 16
+
+internal class CborReader(
     private val data: ByteArray,
 ) {
     private var pos = 0
 
-    private fun readByte(): Int = data[pos++].toInt() and 0xFF
+    private fun readByte(): Int {
+        require(pos < data.size) { "CBOR ends early" }
+        return data[pos++].toInt() and 0xFF
+    }
 
     fun readHeader(): Pair<Int, Int> {
         val b = readByte()
@@ -658,10 +669,11 @@ private class CborReader(
                 repeat(4) { v = (v shl 8) or readByte().toLong() }
                 v
             }
-            else -> error("unsupported CBOR additional info: $additionalInfo")
+            else -> throw IllegalArgumentException("unsupported CBOR additional info: $additionalInfo")
         }
 
     fun readBytes(length: Int): ByteArray {
+        require(length in 0..data.size - pos) { "CBOR ends early" }
         val out = data.copyOfRange(pos, pos + length)
         pos += length
         return out
@@ -678,6 +690,36 @@ private class CborReader(
         require(majorType == 2) { "expected CBOR byte string, got major type $majorType" }
         return readBytes(readLength(info).toInt())
     }
+
+    /**
+     * Any one item: Long (unsigned or negative int), ByteArray, String, List, Map, [CborTag], Boolean or null.
+     * Definite lengths only, nested at most [MAX_CBOR_DEPTH] deep.
+     */
+    fun readItem(depth: Int = 0): Any? {
+        require(depth <= MAX_CBOR_DEPTH) { "CBOR nested too deep" }
+        val (majorType, info) = readHeader()
+        if (majorType == 7) return simpleValue(info)
+        val length = readLength(info)
+        // Every element takes at least one byte, so a count past the remaining bytes is malformed.
+        require(majorType == 0 || majorType == 1 || majorType == 6 || length <= data.size - pos) { "CBOR ends early" }
+        return when (majorType) {
+            0 -> length
+            1 -> -1 - length
+            2 -> readBytes(length.toInt())
+            3 -> readBytes(length.toInt()).decodeToString()
+            4 -> List(length.toInt()) { readItem(depth + 1) }
+            5 -> buildMap { repeat(length.toInt()) { put(readItem(depth + 1), readItem(depth + 1)) } }
+            else -> CborTag(length, readItem(depth + 1))
+        }
+    }
+
+    private fun simpleValue(info: Int): Boolean? =
+        when (info) {
+            20 -> false
+            21 -> true
+            22 -> null
+            else -> throw IllegalArgumentException("unsupported CBOR simple value: $info")
+        }
 }
 
 internal fun cborDecodeByteString(bytes: ByteArray): ByteArray = CborReader(bytes).readByteString()
