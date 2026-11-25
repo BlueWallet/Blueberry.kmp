@@ -51,7 +51,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import io.bluewallet.blueberry.QrScanOverlay
 import io.bluewallet.blueberry.boot.listCheckpointYears
 import io.bluewallet.blueberry.ui.AlwaysBounceScroll
 import io.bluewallet.blueberry.ui.BlueberryLogo
@@ -454,7 +453,7 @@ private fun ImportWalletPage(
                 text = "Continue",
                 onClick = {
                     focusManager.clearFocus()
-                    dispatch(OnboardingEvent.SubmitImport)
+                    dispatch(preselectedAccount(state.accounts)?.let { OnboardingEvent.PickAccount(it) } ?: OnboardingEvent.SubmitImport)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !state.busy,
@@ -474,14 +473,27 @@ private fun ImportEntry(
     modifier: Modifier = Modifier,
 ) {
     val error = if (state.busy) null else state.error
+    val picked = preselectedAccount(state.accounts)
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        if (scanning) {
-            QrScanOverlay(
+        if (picked != null) {
+            AccountPicker(
+                accounts = state.accounts,
+                picked = picked,
+                enabled = !state.busy,
+                onPick = { dispatch(OnboardingEvent.PickAccount(it)) },
                 modifier = Modifier.fillMaxSize(),
-                onResult = { payload ->
-                    dispatch(OnboardingEvent.ImportChanged(payload))
+            )
+        } else if (scanning) {
+            ImportScanner(
+                onText = { text ->
+                    dispatch(OnboardingEvent.ImportChanged(text))
                     onScanningChange(false)
                 },
+                onAccounts = { accounts ->
+                    onScanningChange(false)
+                    dispatch(OnboardingEvent.ScannedAccounts(accounts))
+                },
+                modifier = Modifier.fillMaxSize(),
             )
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
