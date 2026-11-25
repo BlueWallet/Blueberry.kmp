@@ -53,7 +53,8 @@ internal class AccountsScan {
         state =
             when {
                 trimmed.startsWith("ur:", ignoreCase = true) -> fromUr(decoder.receive(trimmed))
-                decoder.percent == null -> AccountsScanState.Text(text)
+                // A failure reset the decoder, but the account scan is still on: stray text mustn't end it.
+                decoder.percent == null && failure == null -> AccountsScanState.Text(text)
                 else -> scanning(UR_NOT_UR)
             }
         return state

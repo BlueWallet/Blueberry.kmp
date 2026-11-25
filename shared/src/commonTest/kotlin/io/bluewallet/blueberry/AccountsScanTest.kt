@@ -35,6 +35,13 @@ class AccountsScanTest {
     }
 
     @Test
+    fun text_after_a_failed_export_is_ignored_and_keeps_the_reason() {
+        val scan = AccountsScan()
+        scan.accept(ETH_HDKEY_UR)
+        assertEquals(AccountsScanState.Scanning(null, NO_ACCOUNTS), scan.accept(ZPUB))
+    }
+
+    @Test
     fun a_psbt_qr_is_not_an_account_export() {
         val psbt = encodeCryptoPsbtUrFragments(byteArrayOf(0x70, 0x73, 0x62, 0x74)).single()
         assertEquals(AccountsScanState.Scanning(null, UR_NOT_ACCOUNT), AccountsScan().accept(psbt))
