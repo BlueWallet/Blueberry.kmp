@@ -68,6 +68,28 @@ class UrAccountsTest {
     }
 
     @Test
+    fun a_private_key_rejects_the_whole_account() {
+        val private = KEYSTONE_WPKH.replaceFirst("02f4", "02f5")
+        assertEquals(emptyList(), descriptors("crypto-account", "a2011a73c5da0a0282" + private + KEYSTONE_TR))
+    }
+
+    @Test
+    fun keys_off_the_mainnet_account_path_are_skipped_one_by_one() {
+        val testnet = KEYSTONE_WPKH.replaceFirst("01861854f500f500f5", "01861854f501f500f5")
+        val depth4 = KEYSTONE_WPKH.replaceFirst("021a73c5da0a0303", "021a73c5da0a0304")
+        val wrongPurpose = KEYSTONE_WPKH.replaceFirst("1854f5", "182cf5")
+        for (output in listOf(testnet, depth4, wrongPurpose)) {
+            assertEquals(listOf(KEYSTONE_TR_DESCRIPTOR), descriptors("crypto-account", "a2011a73c5da0a0282" + output + KEYSTONE_TR))
+        }
+    }
+
+    @Test
+    fun indefinite_lengths_and_deep_nesting_throw() {
+        assertFailsWith<IllegalArgumentException> { descriptors("crypto-account", "bf01ff") }
+        assertFailsWith<IllegalArgumentException> { descriptors("crypto-account", "81".repeat(20) + "00") }
+    }
+
+    @Test
     fun every_account_imports_as_its_descriptor() {
         val accounts =
             parseUrAccounts("crypto-account", hexToBytes(KEYSTONE_ACCOUNT_HEAD + KEYSTONE_TR + KEYSTONE_WPKH + KEYSTONE_PKH + KEYSTONE_SH_WPKH)) +
