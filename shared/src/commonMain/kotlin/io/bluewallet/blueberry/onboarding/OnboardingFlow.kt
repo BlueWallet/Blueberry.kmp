@@ -2,6 +2,8 @@ package io.bluewallet.blueberry.onboarding
 
 import io.bluewallet.blueberry.boot.DEFAULT_CHECKPOINT_YEAR
 import io.bluewallet.blueberry.boot.listCheckpointYears
+import io.bluewallet.blueberry.wallet.AddressScriptType
+import io.bluewallet.blueberry.wallet.UrAccount
 import io.bluewallet.blueberry.wallet.generateMnemonic12
 import io.bluewallet.blueberry.wallet.parseWalletSecret
 
@@ -19,9 +21,14 @@ data class OnboardingState(
     val mnemonic: String? = null,
     val selectedYear: Int = DEFAULT_CHECKPOINT_YEAR,
     val busy: Boolean = false,
+    /** Accounts of a scanned export to pick from; empty when there is nothing to pick. */
+    val accounts: List<UrAccount> = emptyList(),
 ) {
-    override fun toString(): String = "OnboardingState(step=$step, importValue=[redacted], error=$error, mnemonic=[redacted], selectedYear=$selectedYear, busy=$busy)"
+    override fun toString(): String = "OnboardingState(step=$step, importValue=[redacted], error=$error, mnemonic=[redacted], selectedYear=$selectedYear, busy=$busy, accounts=${accounts.size})"
 }
+
+/** The picker's starting row: the first Native SegWit account, else the first. */
+fun preselectedAccount(accounts: List<UrAccount>): UrAccount? = accounts.firstOrNull { it.scriptType == AddressScriptType.P2WPKH } ?: accounts.firstOrNull()
 
 sealed class OnboardingEvent {
     data object ChooseCreate : OnboardingEvent()
@@ -37,6 +44,17 @@ sealed class OnboardingEvent {
     }
 
     data object SubmitImport : OnboardingEvent()
+
+    /** A scanned account export with at least one account. */
+    data class ScannedAccounts(
+        val accounts: List<UrAccount>,
+    ) : OnboardingEvent() {
+        override fun toString(): String = "ScannedAccounts(${accounts.size})"
+    }
+
+    data class PickAccount(
+        val account: UrAccount,
+    ) : OnboardingEvent()
 
     data object ConfirmCreate : OnboardingEvent()
 
@@ -126,7 +144,12 @@ fun reduceOnboarding(
         OnboardingEvent.Back -> {
             when (state.step) {
                 OnboardingStep.Create, OnboardingStep.Import ->
-                    OnboardingReduction(OnboardingState(step = OnboardingStep.Choose))
+                    if (state.accounts.isNotEmpty()) {
+                        // Back from the account picker returns to the import field.
+                        OnboardingReduction(state.copy(accounts = emptyList()))
+                    } else {
+                        OnboardingReduction(OnboardingState(step = OnboardingStep.Choose))
+                    }
                 OnboardingStep.Year ->
                     if (state.importValue.isEmpty()) {
                         OnboardingReduction(state)
@@ -142,8 +165,17 @@ fun reduceOnboarding(
             }
         }
         is OnboardingEvent.ImportChanged -> {
-            if (state.step != OnboardingStep.Import) return OnboardingReduction(state)
+            if (state.step != OnboardingStep.Import || state.accounts.isNotEmpty()) return OnboardingReduction(state)
             OnboardingReduction(state.copy(importValue = event.value, error = null))
+        }
+        is OnboardingEvent.ScannedAccounts -> {
+            if (state.step != OnboardingStep.Import || event.accounts.isEmpty()) return OnboardingReduction(state)
+            event.accounts.singleOrNull()?.let { return importAccount(state, it) }
+            OnboardingReduction(state.copy(accounts = event.accounts, error = null))
+        }
+        is OnboardingEvent.PickAccount -> {
+            if (state.step != OnboardingStep.Import || event.account !in state.accounts) return OnboardingReduction(state)
+            importAccount(state, event.account)
         }
         OnboardingEvent.SubmitImport -> {
             if (state.step != OnboardingStep.Import) return OnboardingReduction(state)
@@ -203,3 +235,13 @@ fun reduceOnboarding(
         }
     }
 }
+
+/** Imports [account] as its descriptor, as Continue does for a typed secret. */
+private fun importAccount(
+    state: OnboardingState,
+    account: UrAccount,
+): OnboardingReduction =
+    OnboardingReduction(
+        state.copy(importValue = account.descriptor, accounts = emptyList(), busy = true, error = null),
+        OnboardingEffect.PersistImportedSecret(account.descriptor),
+    )

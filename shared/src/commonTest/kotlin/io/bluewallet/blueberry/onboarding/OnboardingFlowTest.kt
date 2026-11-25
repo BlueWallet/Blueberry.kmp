@@ -1,6 +1,9 @@
 package io.bluewallet.blueberry.onboarding
 
+import fr.acinq.bitcoin.KeyPath
 import io.bluewallet.blueberry.boot.DEFAULT_CHECKPOINT_YEAR
+import io.bluewallet.blueberry.wallet.AddressScriptType
+import io.bluewallet.blueberry.wallet.UrAccount
 import io.bluewallet.blueberry.wallet.parseWalletSecret
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -12,6 +15,22 @@ import kotlin.test.assertTrue
 class OnboardingFlowTest {
     private val abandon =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+
+    // Keystone's abandon account keys (spec appendix A), as the scanner hands them over.
+    private val scannedTaproot =
+        UrAccount(
+            AddressScriptType.P2TR,
+            0x73c5da0aL,
+            KeyPath("m/86'/0'/0'"),
+            "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ",
+        )
+    private val scannedNativeSegwit =
+        UrAccount(
+            AddressScriptType.P2WPKH,
+            0x73c5da0aL,
+            KeyPath("m/84'/0'/0'"),
+            "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V",
+        )
 
     @Test
     fun choose_create_stores_twelve_words() {
@@ -212,5 +231,43 @@ class OnboardingFlowTest {
             assertFalse(value.toString().contains("abandon"))
             assertTrue(value.toString().contains("[redacted]"))
         }
+    }
+
+    @Test
+    fun one_scanned_account_is_imported_without_a_picker() {
+        val import = reduceOnboarding(initialOnboardingState(false), OnboardingEvent.ChooseImport).state
+        val result = reduceOnboarding(import, OnboardingEvent.ScannedAccounts(listOf(scannedTaproot)))
+        assertEquals(OnboardingEffect.PersistImportedSecret(scannedTaproot.descriptor), result.effect)
+        assertEquals(scannedTaproot.descriptor, result.state.importValue)
+        assertTrue(result.state.accounts.isEmpty())
+        assertTrue(result.state.busy)
+        val year = reduceOnboarding(result.state, OnboardingEvent.PersistImportOk).state
+        assertEquals(OnboardingStep.Year, year.step)
+    }
+
+    @Test
+    fun several_scanned_accounts_show_the_picker_and_import_the_picked_one() {
+        val import = reduceOnboarding(initialOnboardingState(false), OnboardingEvent.ChooseImport).state
+        val accounts = listOf(scannedTaproot, scannedNativeSegwit)
+        val picking = reduceOnboarding(import, OnboardingEvent.ScannedAccounts(accounts))
+        assertNull(picking.effect)
+        assertEquals(accounts, picking.state.accounts)
+        assertEquals(scannedNativeSegwit, preselectedAccount(picking.state.accounts))
+        assertEquals(picking.state, reduceOnboarding(picking.state, OnboardingEvent.ImportChanged("typed")).state)
+
+        val picked = reduceOnboarding(picking.state, OnboardingEvent.PickAccount(scannedTaproot))
+        assertEquals(OnboardingEffect.PersistImportedSecret(scannedTaproot.descriptor), picked.effect)
+        assertTrue(picked.state.accounts.isEmpty())
+        assertEquals(scannedTaproot.descriptor, picked.state.importValue)
+    }
+
+    @Test
+    fun back_from_the_picker_returns_to_the_import_field() {
+        val import = reduceOnboarding(initialOnboardingState(false), OnboardingEvent.ChooseImport).state
+        val picking = reduceOnboarding(import, OnboardingEvent.ScannedAccounts(listOf(scannedTaproot, scannedNativeSegwit))).state
+        val back = reduceOnboarding(picking, OnboardingEvent.Back)
+        assertEquals(OnboardingStep.Import, back.state.step)
+        assertTrue(back.state.accounts.isEmpty())
+        assertNull(back.effect)
     }
 }
