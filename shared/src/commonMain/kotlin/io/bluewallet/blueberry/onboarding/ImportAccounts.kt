@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.bluewallet.blueberry.AccountsScan
 import io.bluewallet.blueberry.AccountsScanState
+import io.bluewallet.blueberry.HelperText
 import io.bluewallet.blueberry.QrFrameScanner
 import io.bluewallet.blueberry.ui.BwColors
 import io.bluewallet.blueberry.ui.BwFontFamily
@@ -38,16 +39,14 @@ internal fun ImportScanner(
     Column(modifier = modifier.background(BwColors.Paper)) {
         Text(
             text =
-                when {
-                    scanning?.percent != null -> "Scanning animated QR… ${scanning.percent}%"
-                    scanning?.note != null -> scanning.note
-                    else -> "Point the camera at a QR code"
-                },
+                scanning?.percent?.let { "Scanning animated QR… $it%" } ?: "Point the camera at a QR code",
             color = BwColors.InkMuted,
             fontFamily = BwFontFamily,
             fontSize = BwType.CaptionSize,
             fontWeight = BwType.Caption,
         )
+        // An animated QR restarts after a failure, so its reason stays up beside the progress.
+        scanning?.note?.let { HelperText(it, error = true) }
         QrFrameScanner(
             onText = { text ->
                 val next = scan.accept(text)

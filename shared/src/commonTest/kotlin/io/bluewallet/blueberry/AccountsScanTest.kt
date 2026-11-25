@@ -45,7 +45,7 @@ class AccountsScanTest {
         val scan = AccountsScan()
         assertEquals(AccountsScanState.Scanning(null, NO_ACCOUNTS), scan.accept(ETH_HDKEY_UR))
         assertEquals(AccountsScanState.Scanning(null, NO_ACCOUNTS), scan.accept(ETH_HDKEY_UR))
-        assertIs<AccountsScanState.Scanning>(scan.accept(ABANDON_ACCOUNT_PARTS[0]))
+        assertEquals(NO_ACCOUNTS, assertIs<AccountsScanState.Scanning>(scan.accept(ABANDON_ACCOUNT_PARTS[0])).note)
         assertIs<AccountsScanState.Accounts>(ABANDON_ACCOUNT_PARTS.drop(1).map { scan.accept(it) }.last())
     }
 
