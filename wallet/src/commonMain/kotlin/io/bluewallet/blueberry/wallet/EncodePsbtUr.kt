@@ -46,7 +46,7 @@ internal fun decodeCryptoPsbtUrFragments(parts: List<String>): ByteArray {
 // UR encode (ports urEncoder.ts)
 // ---------------------------------------------------------------------------------------------
 
-private class UrEncoder(
+internal class UrEncoder(
     private val message: ByteArray,
     private val urType: String,
     maxFragmentLength: Int,

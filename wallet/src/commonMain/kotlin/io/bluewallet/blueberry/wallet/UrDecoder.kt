@@ -63,11 +63,15 @@ sealed class UrReceive {
  */
 class UrDecoder internal constructor(
     private val acceptedTypes: Set<String>,
+    private val wrongTypeReason: String = UR_WRONG_TYPE,
     private val newFountain: () -> FountainDecoder,
 ) {
-    constructor(acceptedTypes: Set<String>) : this(acceptedTypes, ::FountainDecoder)
+    /** [wrongTypeReason] is the [UrReceive.Ignored] reason for a UR of a type not in [acceptedTypes]. */
+    constructor(acceptedTypes: Set<String>, wrongTypeReason: String = UR_WRONG_TYPE) : this(acceptedTypes, wrongTypeReason, ::FountainDecoder)
 
-    private var type: String? = null
+    /** The UR type locked in by the first accepted part; null before it. */
+    var type: String? = null
+        private set
     private var fountain: FountainDecoder? = null
     private val seen = HashSet<Long>()
     private var message: ByteArray? = null
@@ -105,7 +109,7 @@ class UrDecoder internal constructor(
         val seqNum = part?.seqNum
         return when {
             part == null -> UrReceive.Ignored(UR_NOT_UR)
-            part.type !in acceptedTypes || (type != null && part.type != type) -> UrReceive.Ignored(UR_WRONG_TYPE)
+            part.type !in acceptedTypes || (type != null && part.type != type) -> UrReceive.Ignored(wrongTypeReason)
             part.body.length > (if (seqNum == null) MAX_SINGLE_BODY else MAX_FOUNTAIN_BODY) -> UrReceive.Ignored(UR_TOO_LARGE)
             seqNum == null -> receiveSingle(part)
             else -> receiveFountain(part, seqNum)

@@ -1,5 +1,6 @@
 package io.bluewallet.blueberry.wallet
 
+import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -79,5 +80,15 @@ class UrAccountsTest {
             assertEquals(KeyOrigin(account.fingerprint, account.path), key.origin)
         }
         assertEquals(2, accounts.count { parseWalletSecret(it.descriptor).watchKey()!!.scriptType == AddressScriptType.P2TR })
+    }
+
+    @Test
+    fun animated_multi_accounts_round_trip_through_the_decoder() {
+        val encoder = UrEncoder(hexToBytes(KEYSTONE_MULTI_ACCOUNTS), "crypto-multi-accounts", 400)
+        val parts = List(encoder.fragmentsLength * 2) { encoder.nextPart().uppercase() }.shuffled(Random(7))
+        val decoder = UrDecoder(ACCOUNT_UR_TYPES)
+        val complete = parts.map { decoder.receive(it) }.filterIsInstance<UrReceive.Complete>().first()
+        assertEquals("crypto-multi-accounts", decoder.type)
+        assertEquals(KEYSTONE_MULTI_DESCRIPTORS, parseUrAccounts(decoder.type!!, complete.message).map { it.descriptor })
     }
 }

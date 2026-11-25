@@ -50,6 +50,13 @@ class UrDecoderTest {
     }
 
     @Test
+    fun a_foreign_type_gets_the_decoder_s_own_reason() {
+        val decoder = UrDecoder(ACCOUNT_UR_TYPES, UR_NOT_ACCOUNT)
+        assertEquals(UrReceive.Ignored(UR_NOT_ACCOUNT), decoder.receive(BW_PARTS[0]))
+        assertNull(decoder.type)
+    }
+
+    @Test
     fun foreign_type_is_ignored() {
         val decoder = psbtDecoder()
         assertEquals(UrReceive.Ignored(UR_WRONG_TYPE), decoder.receive(CRYPTO_ACCOUNT_UR))
