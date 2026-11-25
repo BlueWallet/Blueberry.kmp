@@ -1,0 +1,321 @@
+package io.bluewallet.blueberry
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.unit.dp
+import io.bluewallet.blueberry.storage.Database
+import io.bluewallet.blueberry.ui.AddressGroups
+import io.bluewallet.blueberry.ui.AmountHero
+import io.bluewallet.blueberry.ui.BtcAmountText
+import io.bluewallet.blueberry.ui.BwColors
+import io.bluewallet.blueberry.ui.BwFontFamily
+import io.bluewallet.blueberry.ui.BwSpace
+import io.bluewallet.blueberry.ui.BwType
+import io.bluewallet.blueberry.ui.OverlayBackEffects
+import io.bluewallet.blueberry.ui.TextAction
+import io.bluewallet.blueberry.ui.TintedPillButton
+import io.bluewallet.blueberry.ui.ToPill
+import io.bluewallet.blueberry.wallet.SignedPsbt
+import io.bluewallet.blueberry.wallet.SignedPsbtCheck
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/** The stored unsigned payment a signed PSBT is scanned for. [storedTxid] keys its `sends` row. */
+internal class SignedPsbtTarget(
+    val storedTxid: String,
+    val to: SendRecipient,
+    val psbtHex: String,
+)
+
+/**
+ * Scan the signed PSBT, review it, then broadcast it. Back on the scan or the review calls [onBack], which
+ * returns to the PSBT QR.
+ * [onDone] gets the broadcast txid, which differs from [SignedPsbtTarget.storedTxid] for legacy and nested inputs.
+ */
+@Composable
+internal fun SignedPsbtFlow(
+    runtime: PeersRuntime,
+    db: Database,
+    target: SignedPsbtTarget,
+    onDone: (txid: String) -> Unit,
+    onBack: () -> Unit,
+) {
+    var signed by remember(target.storedTxid) { mutableStateOf<SignedPsbt?>(null) }
+    var broadcastId by remember(target.storedTxid) { mutableStateOf<String?>(null) }
+    val id = broadcastId
+    val review = signed
+    when {
+        id != null -> {
+            val done = { onDone(review?.txid ?: target.storedTxid) }
+            // Same exit as BroadcastScreen's own Done/back: the iOS edge swipe lands here, not in its BackHandler.
+            val leave = {
+                dismissConfirmedBroadcast(runtime.broadcastStore, id)
+                done()
+            }
+            OverlayBackEffects(enabled = true, onDismiss = leave) {
+                BroadcastScreen(runtime = runtime, id = id, onClose = done)
+            }
+        }
+        review != null ->
+            SignedPsbtReview(
+                runtime,
+                db,
+                target,
+                review,
+                onStarted = { broadcastId = it },
+                onBack = onBack,
+                onExit = { onDone(review.txid) },
+            )
+        else ->
+            OverlayBackEffects(enabled = true, onDismiss = onBack) {
+                SignedPsbtScanStep(target, onSigned = { signed = it }, onBack = onBack)
+            }
+    }
+}
+
+@Composable
+private fun SignedPsbtScanStep(
+    target: SignedPsbtTarget,
+    onSigned: (SignedPsbt) -> Unit,
+    onBack: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val scan = remember(target.storedTxid) { SignedPsbtScan() }
+    var state by remember(target.storedTxid) { mutableStateOf(scan.state) }
+    var checking by remember(target.storedTxid) { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
+
+    var checkJob by remember(target.storedTxid) { mutableStateOf<Job?>(null) }
+
+    fun check(psbt: ByteArray) {
+        checking = true
+        checkJob =
+            scope.launch {
+                try {
+                    // Cancelled by Start over: withContext then throws on return, so a discarded PSBT never lands.
+                    val result =
+                        withContext(Dispatchers.Default) { checkSignedPsbt(target.psbtHex, psbt) }
+                    when (result) {
+                        is SignedPsbtCheck.Ok -> onSigned(result.signed)
+                        is SignedPsbtCheck.Failed -> {
+                            scan.reject(result.reason)
+                            state = scan.state
+                        }
+                    }
+                } finally {
+                    if (checkJob == coroutineContext[Job]) checking = false
+                }
+            }
+    }
+
+    fun startOver() {
+        checkJob?.cancel()
+        checkJob = null
+        checking = false
+        scan.reset()
+        state = scan.state
+    }
+
+    fun accept(text: String): Boolean {
+        if (checking) return false
+        val next = scan.accept(text)
+        state = next
+        if (next is SignedPsbtScanState.Done) check(next.psbt)
+        return false
+    }
+
+    SendStepFrame(
+        title = "Scan signed PSBT",
+        caption = "From the wallet that signed it",
+        onBack = onBack,
+        bottom = {},
+    ) {
+        SendCard {
+            QrFrameScanner(
+                onText = ::accept,
+                modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(BwSpace.Radius)),
+            )
+            ScanProgress(state, checking)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
+            TextAction(text = "Paste", onClick = { clipboard.getText()?.text?.let(::accept) })
+            TextAction(text = "Start over", onClick = ::startOver)
+        }
+        HelperText("Show the signed transaction as a QR code on your signing device. Animated QR codes are read frame by frame.")
+    }
+}
+
+@Composable
+private fun ScanProgress(
+    state: SignedPsbtScanState,
+    checking: Boolean,
+) {
+    val scanning = state as? SignedPsbtScanState.Scanning
+    val percent = if (checking || state is SignedPsbtScanState.Done) 100 else scanning?.percent
+    Text(
+        text =
+            when {
+                checking -> "Checking the signatures…"
+                percent != null -> "Scanning animated QR… $percent%"
+                else -> "Point the camera at the signed PSBT QR"
+            },
+        color = BwColors.Ink,
+        fontFamily = BwFontFamily,
+        fontSize = BwType.BodySize,
+    )
+    if (percent != null) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(BwColors.Section),
+        ) {
+            Box(modifier = Modifier.fillMaxWidth(percent / 100f).fillMaxHeight().background(BwColors.Accent))
+        }
+    }
+    scanning?.note?.let { HelperText(it, error = true) }
+}
+
+/**
+ * The review's broadcast run, one at a time. A second tap can land before [running] disables the button (that
+ * takes a composition), so [launchIn] checks it too. Used from the UI thread only, so no atomics are needed.
+ */
+internal class OneBroadcast {
+    var running by mutableStateOf(false)
+        private set
+
+    fun launchIn(
+        scope: CoroutineScope,
+        block: suspend () -> Unit,
+    ): Job? {
+        if (running) return null
+        running = true
+        return scope.launch {
+            try {
+                block()
+            } finally {
+                running = false
+            }
+        }
+    }
+}
+
+@Composable
+@Suppress("LongParameterList")
+private fun SignedPsbtReview(
+    runtime: PeersRuntime,
+    db: Database,
+    target: SignedPsbtTarget,
+    signed: SignedPsbt,
+    onStarted: (String) -> Unit,
+    onBack: () -> Unit,
+    onExit: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var error by remember(signed) { mutableStateOf<String?>(null) }
+    val run = remember(signed) { OneBroadcast() }
+    // Once stored, the payment no longer waits to be signed (and may have moved txid): leaving exits the flow.
+    var stored by remember(signed) { mutableStateOf(false) }
+    val paid = remember(signed) { signed.paidTo(target.to.address) }
+
+    fun leave() {
+        when {
+            run.running -> Unit
+            stored -> onExit()
+            else -> onBack()
+        }
+    }
+
+    fun broadcast() {
+        run.launchIn(scope) {
+            error = null
+            val receipt = BroadcastReceipt(signed.txid, target.to.address, target.to.label, paid, signed.feeSats)
+            when (val sent = broadcastSignedPsbt(db, runtime, target.storedTxid, signed, receipt)) {
+                is SignedPsbtSent.Started -> onStarted(sent.id)
+                is SignedPsbtSent.Refused -> {
+                    stored = stored || sent.stored
+                    error = sent.reason
+                }
+            }
+        }
+    }
+
+    // Enabled throughout so Back is swallowed, not passed to the screen below, while the broadcast is starting.
+    OverlayBackEffects(enabled = true, onDismiss = ::leave) {
+        SignedPsbtReviewBody(target, signed, paid, run.running, error, onBroadcast = ::broadcast, onBack = ::leave)
+    }
+}
+
+@Composable
+@Suppress("LongParameterList")
+private fun SignedPsbtReviewBody(
+    target: SignedPsbtTarget,
+    signed: SignedPsbt,
+    paid: Long,
+    sending: Boolean,
+    error: String?,
+    onBroadcast: () -> Unit,
+    onBack: () -> Unit,
+) {
+    SendStepFrame(
+        title = "Review",
+        caption = "Signed and ready to broadcast",
+        onBack = onBack,
+        bottom = {
+            TintedPillButton(text = if (sending) "Broadcasting…" else "Broadcast", onClick = onBroadcast, enabled = !sending, modifier = Modifier.fillMaxWidth())
+        },
+    ) {
+        if (target.to.label.isNotBlank()) ToPill(label = target.to.label, address = "")
+        AmountHero(sats = paid)
+        AddressGroups(address = target.to.address, modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp - BwSpace.Gap))
+        SendCard {
+            ReviewAmountRow("Network fee", signed.feeSats)
+            HorizontalDivider(color = BwColors.Section)
+            ReviewAmountRow("Total leaving your wallet", paid + signed.feeSats)
+        }
+        HelperText("This is the transaction you asked your signing device to sign. Broadcasting sends it over Tor.")
+        error?.let { HelperText(it, error = true) }
+    }
+}
+
+@Composable
+private fun ReviewAmountRow(
+    title: String,
+    sats: Long,
+) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            color = BwColors.InkQuiet,
+            fontFamily = BwFontFamily,
+            fontSize = BwType.BodySize,
+        )
+        BtcAmountText(sats = sats, fontSize = BwType.BodySize)
+    }
+}

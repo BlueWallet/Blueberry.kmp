@@ -10,7 +10,6 @@
     <ID>NestedBlockDepth:ReceiveAddress.kt$fun preferredWifReceiveAddress( wallet: WatchWallet, txs: List&lt;WifReceiveTxRow&gt;, ): WatchAddress</ID>
     <ID>ReturnCount:Birthday.kt$fun inspectWalletBirthday(db: Database): WalletBirthdayInspection</ID>
     <ID>ReturnCount:Birthday.kt$fun maybeFreezeWalletBirthday( db: Database, height: Int, ): Boolean</ID>
-    <ID>ReturnCount:EncodePsbtUr.kt$FountainDecoder$fun receivePart( seqNum: Long, seqLength: Int, messageLength: Int, checksum: Long, fragment: ByteArray, ): Boolean</ID>
     <ID>ReturnCount:EncodePsbtUr.kt$FountainDecoder$private fun validatePart( seqLength: Int, messageLength: Int, checksum: Long, fragmentLength: Int, ): Boolean</ID>
     <ID>ReturnCount:IsAddressValid.kt$fun isAddressValid(address: String): Boolean</ID>
     <ID>ReturnCount:IsAddressValid.kt$fun watchAddressScriptType(address: String): AddressScriptType</ID>

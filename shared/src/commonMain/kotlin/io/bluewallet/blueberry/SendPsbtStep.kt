@@ -34,18 +34,30 @@ internal fun SendPsbtStep(
     psbtHex: String,
     onDone: () -> Unit,
     onBack: () -> Unit,
+    onScanSigned: (() -> Unit)? = null,
 ) {
     SendStepFrame(
         title = "Sign elsewhere",
         caption = "Scan with the wallet that holds the keys",
         onBack = onBack,
         bottom = {
-            TintedPillButton(text = "Done", onClick = onDone, modifier = Modifier.fillMaxWidth())
+            Column(verticalArrangement = Arrangement.spacedBy(BwSpace.Gap)) {
+                if (onScanSigned != null) {
+                    TintedPillButton(text = "Scan signed PSBT", onClick = onScanSigned, modifier = Modifier.fillMaxWidth())
+                }
+                TintedPillButton(text = "Done", onClick = onDone, modifier = Modifier.fillMaxWidth())
+            }
         },
     ) {
         ToPill(label = to.label, address = to.address)
         SendCard { UrQr(psbtHex) }
-        HelperText("This wallet can't sign. Sign the PSBT on your signing device, then broadcast it from there.")
+        HelperText(
+            if (onScanSigned != null) {
+                "This wallet can't sign. Sign the PSBT on your signing device, then scan the signed PSBT here to broadcast it."
+            } else {
+                "This wallet can't sign. Sign the PSBT on your signing device, then broadcast it from there."
+            },
+        )
     }
 }
 
